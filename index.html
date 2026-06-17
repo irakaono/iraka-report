@@ -5,8 +5,13 @@
 <title>雨漏り調査報告書 ― 株式会社 甍</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#1F4E79">
-<link rel="manifest" href="iraka-report.webmanifest">
-<link rel="apple-touch-icon" href="iraka-icon.svg">
+<link rel="manifest" href="./manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="雨漏り調査">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+
 
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
@@ -1216,4 +1221,13 @@ document.addEventListener('DOMContentLoaded', function(){
 
 </script>
 
+<script>
+// PWA install support
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('./sw.js', { scope: './' })
+      .catch(function (err) { console.warn('Service Worker registration failed:', err); });
+  });
+}
+</script>
 </body></html>

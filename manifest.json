@@ -1,0 +1,17 @@
+{
+  "name": "雨漏り調査報告書 — 株式会社 甍",
+  "short_name": "雨漏り調査",
+  "description": "株式会社甍の雨漏り調査報告書作成アプリ",
+  "id": "/iraka-report/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#ffffff",
+  "theme_color": "#1F4E79",
+  "orientation": "any",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
