@@ -1230,4 +1230,22 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
-</body></html>
+<style>
+  .lb[contenteditable="true"] {
+    cursor: text;
+  }
+
+  .lb[contenteditable="true"]:focus {
+    outline: 2px solid #2E74B5;
+    outline-offset: -2px;
+    background: #D9EAF7 !important;
+  }
+</style>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll(".tbl td.lb, .rtbl th, .sec, .phdr .co").forEach(function (el) {
+    el.setAttribute("contenteditable", "true");
+  });
+});
+</script> </body></html>
