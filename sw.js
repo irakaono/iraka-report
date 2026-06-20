@@ -1,5 +1,32 @@
-const CACHE_NAME='iraka-ai-system-force-v4';
-const ASSETS=['./portal.html?v=4','./index.html','./ver2.html','./manifest.json?v=4','./icon-192-v4.png','./icon-512-v4.png'];
-self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE_NAME).then(c=>c.addAll(ASSETS)));self.skipWaiting();});
-self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(keys=>Promise.all(keys.map(k=>caches.delete(k)))));self.clients.claim();});
-self.addEventListener('fetch',e=>{if(e.request.method!=='GET')return;e.respondWith(fetch(e.request,{cache:'no-store'}).then(r=>{const copy=r.clone();caches.open(CACHE_NAME).then(c=>c.put(e.request,copy));return r;}).catch(()=>caches.match(e.request).then(c=>c||caches.match('./portal.html?v=4'))));});
+const CACHE_NAME='iraka-ai-system-final-v5';
+const ASSETS=[
+  './portal.html?v=5',
+  './index.html',
+  './ver2.html',
+  './manifest.json?v=5',
+  './icon-192.png?v=5',
+  './icon-512.png?v=5'
+];
+
+self.addEventListener('install',event=>{
+  event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(ASSETS)));
+  self.skipWaiting();
+});
+
+self.addEventListener('activate',event=>{
+  event.waitUntil(
+    caches.keys().then(keys=>Promise.all(keys.map(key=>caches.delete(key))))
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch',event=>{
+  if(event.request.method!=='GET')return;
+  event.respondWith(
+    fetch(event.request,{cache:'no-store'}).then(response=>{
+      const copy=response.clone();
+      caches.open(CACHE_NAME).then(cache=>cache.put(event.request,copy));
+      return response;
+    }).catch(()=>caches.match(event.request).then(cached=>cached||caches.match('./portal.html?v=5')))
+  );
+});

@@ -5,23 +5,28 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>甍AIシステム</title>
 <meta name="theme-color" content="#1f4e79">
-<link rel="manifest" href="./manifest.json?v=4">
-<link rel="icon" href="./icon-192-v4.png">
-<link rel="apple-touch-icon" href="./icon-192-v4.png">
+<meta name="description" content="株式会社甍の報告書ポータル">
+<link rel="manifest" href="./manifest.json?v=5">
+<link rel="icon" href="./icon-192.png?v=5">
+<link rel="apple-touch-icon" href="./icon-192.png?v=5">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="甍AI">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
-*{box-sizing:border-box}body{margin:0;background:#eef3f8;font-family:Meiryo,"Yu Gothic",sans-serif;color:#222}
+*{box-sizing:border-box}
+body{margin:0;background:#eef3f8;font-family:Meiryo,"Yu Gothic",sans-serif;color:#222}
 header{background:linear-gradient(135deg,#123a5f,#0d6efd);color:#fff;text-align:center;padding:24px 14px 26px;font-size:32px;font-weight:800;box-shadow:0 2px 12px #0003}
 .logo{width:72px;height:72px;border-radius:18px;vertical-align:middle;margin-right:10px;box-shadow:0 3px 10px #0004}
 .badge{display:inline-block;background:#fff;color:#1f4e79;border-radius:999px;padding:5px 12px;font-size:13px;margin-top:12px;font-weight:700}
-.wrap{max-width:760px;margin:24px auto;padding:0 14px 36px}.card{display:block;background:#fff;border-radius:18px;padding:28px 18px;margin:18px 0;text-decoration:none;color:#222;text-align:center;font-size:28px;font-weight:800;box-shadow:0 4px 16px #0002}
-.icon{font-size:34px;display:block;margin-bottom:8px}.disabled{opacity:.45;pointer-events:none}.note{text-align:center;color:#777;font-size:14px;margin-top:30px}
+.wrap{max-width:760px;margin:24px auto;padding:0 14px 36px}
+.card{display:block;background:#fff;border-radius:18px;padding:28px 18px;margin:18px 0;text-decoration:none;color:#222;text-align:center;font-size:28px;font-weight:800;box-shadow:0 4px 16px #0002}
+.icon{font-size:34px;display:block;margin-bottom:8px}
+.disabled{opacity:.45;pointer-events:none}
+.note{text-align:center;color:#777;font-size:14px;margin-top:30px}
 </style>
 </head>
 <body>
-<header><img class="logo" src="./icon-192-v4.png" alt="いらか">甍AIシステム<div class="badge">マスコット版 v4</div></header>
+<header><img class="logo" src="./icon-192.png?v=5" alt="いらか">甍AIシステム<div class="badge">株式会社 甍</div></header>
 <main class="wrap">
 <a class="card" href="./index.html"><span class="icon">☔</span>雨漏り調査報告書</a>
 <a class="card" href="./ver2.html"><span class="icon">🏗️</span>工事完了報告書</a>
@@ -30,6 +35,9 @@ header{background:linear-gradient(135deg,#123a5f,#0d6efd);color:#fff;text-align:
 <div class="note">株式会社甍 AI System</div>
 </main>
 <script>
-if('serviceWorker'in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=4').catch(()=>{}));}
+if('serviceWorker'in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=5').catch(()=>{}));
+}
 </script>
-</body></html>
+</body>
+</html>
