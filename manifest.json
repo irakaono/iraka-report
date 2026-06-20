@@ -1,17 +1,30 @@
 {
-  "name": "雨漏り調査報告書 — 株式会社 甍",
-  "short_name": "雨漏り調査",
-  "description": "株式会社甍の雨漏り調査報告書作成アプリ",
+  "name": "甍AIシステム",
+  "short_name": "甍AI",
+  "description": "株式会社甍の雨漏り調査報告書・工事完了報告書ポータル",
   "id": "/iraka-report/",
-  "start_url": "./",
+  "start_url": "./portal.html",
   "scope": "./",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
-  "background_color": "#ffffff",
-  "theme_color": "#1F4E79",
-  "orientation": "any",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "background_color": "#eef3f8",
+  "theme_color": "#1f4e79",
+  "orientation": "portrait",
   "icons": [
-    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }
