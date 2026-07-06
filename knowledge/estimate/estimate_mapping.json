@@ -1,0 +1,21 @@
+{
+  "schema": "estimate_mapping_v1",
+  "description": "Component(Engineが出す数量) → Estimate Item(見積の商品)の汎用マッピング。roof_products.json内で同じComponentKeyの定義があればそちらが優先される（屋根仕様依存の項目）。",
+  "mapping": {
+    "roofMaterial":   { "itemName": "ガルバリウム鋼板 立平333 葺き", "category": "新設屋根工事", "note": "立平333用", "multiplier": 1.00 },
+    "noki":           { "itemName": "ガルバリウム鋼板 軒先唐草取付", "category": "新設屋根工事", "note": "唐草", "multiplier": 1.00 },
+    "keraba":         { "itemName": "ガルバリウム鋼板 ケラバ水切取付", "category": "新設屋根工事", "note": "ケラバ水切", "multiplier": 1.00 },
+    "katamune":       { "itemName": "ガルバリウム鋼板 片棟包み取付", "category": "新設屋根工事", "note": "片棟包み", "multiplier": 1.00 },
+    "mune":           { "itemName": "ガルバリウム鋼板 棟包み取付", "category": "新設屋根工事", "note": "棟包み", "multiplier": 1.00 },
+    "amaoshi":        { "itemName": "ガルバリウム鋼板 雨押え板金取付", "category": "新設屋根工事", "note": "雨押え", "multiplier": 1.00 },
+    "mizukami":       { "itemName": "ガルバリウム鋼板 水上立ち上がり板金", "category": "新設屋根工事", "note": "水上立ち上がり", "multiplier": 1.00 },
+    "fufu":           { "itemName": "ガルバリウム鋼板 破風板金取付", "category": "新設屋根工事", "note": "鼻隠し+ケラバ+片棟 統合", "multiplier": 1.00 },
+    "yukidome":       { "itemName": "雪止め金具取付", "category": "新設屋根工事", "note": "軒先(水下)のみ", "multiplier": 1.00 },
+    "ventMune":       { "itemName": "Panasonic I-ROOF 棟換気部材", "category": "新設屋根工事", "note": "棟換気", "multiplier": 1.00 },
+    "ventKatanagare": { "itemName": "Panasonic I-ROOF 片流れ換気部材", "category": "新設屋根工事", "note": "片流れ換気", "multiplier": 1.00 },
+    "ventShimoya":    { "itemName": "Panasonic I-ROOF 雨押え換気部材", "category": "新設屋根工事", "note": "下屋雨押え換気", "multiplier": 1.00 },
+    "valley":         { "itemName": "ガルバリウム鋼板 谷板金", "category": "新設屋根工事", "note": "谷部", "multiplier": 1.00 },
+    "gutter":         { "itemName": "Panasonic 集水器 ファインスケアNF-I型", "category": "雨樋工事", "note": "集水器", "multiplier": 1.00 },
+    "tatetoi":        { "itemName": "Panasonic 竪樋 瞬水S15", "category": "雨樋工事", "note": "竪樋", "multiplier": 1.00 }
+  }
+}

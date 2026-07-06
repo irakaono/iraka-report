@@ -1,0 +1,81 @@
+{
+  "schema": "roof_products_v1",
+  "description": "屋根仕様(Product Catalog)。Estimate Mappingはこのカタログを参照して商品名・係数を決定する。Engineの数量計算(Component)には影響しない。",
+  "products": {
+    "tatehira333": {
+      "label": "立平333",
+      "maker": "アイジー工業",
+      "method": "立平葺き",
+      "width": "333mm",
+      "thickness": "0.35mm",
+      "items": {
+        "roofMaterial": { "itemName": "ガルバリウム鋼板 立平333 葺き", "note": "立平333・働き幅333mm", "multiplier": 1.08 },
+        "noki":         { "itemName": "軒先唐草(立平333用)", "note": "唐草", "multiplier": 1.00 },
+        "keraba":       { "itemName": "ケラバ水切(立平333用)", "note": "ケラバ水切", "multiplier": 1.00 },
+        "katamune":     { "itemName": "片棟包み(立平333用)", "note": "片棟包み", "multiplier": 1.00 },
+        "mune":         { "itemName": "棟包み(立平333用)", "note": "棟包み", "multiplier": 1.00 },
+        "yukidome":     { "itemName": "雪止め金具(立平333用)", "note": "雪止め", "multiplier": 1.00 }
+      }
+    },
+    "tatehira455": {
+      "label": "立平455",
+      "maker": "アイジー工業",
+      "method": "立平葺き",
+      "width": "455mm",
+      "thickness": "0.35mm",
+      "items": {
+        "roofMaterial": { "itemName": "ガルバリウム鋼板 立平455 葺き", "note": "立平455・働き幅455mm", "multiplier": 1.06 },
+        "noki":         { "itemName": "軒先唐草(立平455用)", "note": "唐草", "multiplier": 1.00 },
+        "keraba":       { "itemName": "ケラバ水切(立平455用)", "note": "ケラバ水切", "multiplier": 1.00 },
+        "katamune":     { "itemName": "片棟包み(立平455用)", "note": "片棟包み", "multiplier": 1.00 },
+        "mune":         { "itemName": "棟包み(立平455用)", "note": "棟包み", "multiplier": 1.00 },
+        "yukidome":     { "itemName": "雪止め金具(立平455用)", "note": "雪止め", "multiplier": 1.00 }
+      }
+    },
+    "yokoatsu_s": {
+      "label": "横暖ルーフS",
+      "maker": "アイジー工業",
+      "method": "横葺き",
+      "width": "製品仕様",
+      "thickness": "製品仕様",
+      "items": {
+        "roofMaterial": { "itemName": "横暖ルーフS 葺き", "note": "断熱一体型", "multiplier": 1.10 },
+        "noki":         { "itemName": "軒先唐草(横暖ルーフS用)", "note": "唐草", "multiplier": 1.00 },
+        "keraba":       { "itemName": "ケラバ水切(横暖ルーフS用)", "note": "ケラバ水切", "multiplier": 1.00 },
+        "katamune":     { "itemName": "片棟包み(横暖ルーフS用)", "note": "片棟包み", "multiplier": 1.00 },
+        "mune":         { "itemName": "棟包み(横暖ルーフS用)", "note": "棟包み", "multiplier": 1.00 },
+        "yukidome":     { "itemName": "雪止め金具(横暖ルーフS用)", "note": "雪止め", "multiplier": 1.00 }
+      }
+    },
+    "yokoatsu_alphas": {
+      "label": "横暖ルーフαS",
+      "maker": "アイジー工業",
+      "method": "横葺き",
+      "width": "製品仕様",
+      "thickness": "製品仕様",
+      "items": {
+        "roofMaterial": { "itemName": "横暖ルーフαS 葺き", "note": "断熱一体型・高耐久", "multiplier": 1.10 },
+        "noki":         { "itemName": "軒先唐草(横暖ルーフαS用)", "note": "唐草", "multiplier": 1.00 },
+        "keraba":       { "itemName": "ケラバ水切(横暖ルーフαS用)", "note": "ケラバ水切", "multiplier": 1.00 },
+        "katamune":     { "itemName": "片棟包み(横暖ルーフαS用)", "note": "片棟包み", "multiplier": 1.00 },
+        "mune":         { "itemName": "棟包み(横暖ルーフαS用)", "note": "棟包み", "multiplier": 1.00 },
+        "yukidome":     { "itemName": "雪止め金具(横暖ルーフαS用)", "note": "雪止め", "multiplier": 1.00 }
+      }
+    },
+    "setsuban88": {
+      "label": "AT式折板88型",
+      "maker": "各社共通規格",
+      "method": "折板",
+      "width": "製品仕様",
+      "thickness": "製品仕様",
+      "items": {
+        "roofMaterial": { "itemName": "折板88型 葺き", "note": "AT式折板88型", "multiplier": 1.05 },
+        "noki":         { "itemName": "軒先水切(折板用)", "note": "水切", "multiplier": 1.00 },
+        "keraba":       { "itemName": "ケラバ水切(折板用)", "note": "ケラバ水切", "multiplier": 1.00 },
+        "katamune":     { "itemName": "ハイプラナー(折板用)", "note": "棟部材", "multiplier": 1.00 },
+        "mune":         { "itemName": "ハイプラナー(折板用)", "note": "棟部材", "multiplier": 1.00 },
+        "yukidome":     { "itemName": "雪止め金具(折板用)", "note": "雪止め", "multiplier": 1.00 }
+      }
+    }
+  }
+}

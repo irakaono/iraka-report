@@ -1,0 +1,27 @@
+{
+  "schema": "estimate_templates_v1",
+  "description": "見積書Excel出力のテンプレート定義。テンプレートを追加すればコード変更なしで見積書の種類を増やせる。",
+  "templates": {
+    "iraka": {
+      "label": "甍見積（自社標準）",
+      "title": "御　見　積　書",
+      "showUnitPrice": true,
+      "fileName": "積算結果_見積書.xlsx",
+      "company": { "name": "株式会社　甍", "branch": "坂戸営業所", "zip": "〒350-0244", "address": "埼玉県坂戸市森戸1282-2", "tel": "TEL/FAX　049-277-3376" }
+    },
+    "request": {
+      "label": "見積依頼書（協力業者向け・単価非表示）",
+      "title": "見　積　依　頼　書",
+      "showUnitPrice": false,
+      "fileName": "積算結果_見積依頼書.xlsx",
+      "company": { "name": "株式会社　甍", "branch": "坂戸営業所", "zip": "〒350-0244", "address": "埼玉県坂戸市森戸1282-2", "tel": "TEL/FAX　049-277-3376" }
+    },
+    "koukyo": {
+      "label": "公共工事用内訳",
+      "title": "工　事　費　内　訳　書",
+      "showUnitPrice": true,
+      "fileName": "積算結果_工事費内訳書.xlsx",
+      "company": { "name": "株式会社　甍", "branch": "坂戸営業所", "zip": "〒350-0244", "address": "埼玉県坂戸市森戸1282-2", "tel": "TEL/FAX　049-277-3376" }
+    }
+  }
+}

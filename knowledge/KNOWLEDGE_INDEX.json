@@ -79,6 +79,21 @@
         "testcases_all.json"
       ],
       "description": "Case001〜005の期待値JSON。npm testで自動検証（RULE-601）。"
+    },
+    "Products": {
+      "path": "products/",
+      "files": [
+        "roof_products.json"
+      ],
+      "description": "Product Catalog。屋根仕様(立平333/455・横暖ルーフ等)ごとの商品名・係数(ロス率)定義。Ver.4.4で追加。"
+    },
+    "EstimateMapping": {
+      "path": "estimate/",
+      "files": [
+        "estimate_mapping.json",
+        "templates.json"
+      ],
+      "description": "Component(Engine出力の数量)→Estimate Item(見積の商品)への変換マッピング、および見積書テンプレート定義。Ver.4.4で追加。Knowledge → Engine → Assembly → Estimate Mapping → 見積書。"
     }
   },
   "knowledgeGranularity": {
