@@ -69,6 +69,18 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
   <div class="row-flags" style="grid-template-columns:1fr" id="elevationSlots"></div>
   <div style="font-size:12px;color:#1f4e79;margin:10px 0 4px">↳ Views（この立面図の中の各面。位置メモを残せます）</div>
   <div id="elevationViews" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
+  <button class="btn secondary" id="openRectEditorBtn" style="display:none" onclick="openRectEditor()">🖼️ 範囲を指定してViewを登録（画像のみ対応）</button>
+  <div id="rectEditorBox" style="display:none;margin-top:10px;background:#f7f9fc;border-radius:10px;padding:10px">
+    <div style="font-size:12px;color:#888;margin-bottom:6px">画像をドラッグして範囲を囲み、どの面かを選んで「この範囲を登録」を押してください。</div>
+    <div style="position:relative;display:inline-block;max-width:100%">
+      <canvas id="rectCanvas" style="max-width:100%;border-radius:8px;touch-action:none;cursor:crosshair"></canvas>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center">
+      <select id="rectViewSelect" style="flex:1;min-width:120px"></select>
+      <button class="btn" style="padding:8px 14px" onclick="commitRect()">この範囲を登録</button>
+      <button class="btn secondary" style="padding:8px 14px" onclick="closeRectEditor()">閉じる</button>
+    </div>
+  </div>
 
   <div style="font-size:13px;font-weight:700;color:#1f4e79;margin:14px 0 6px">平面図</div>
   <div class="row-flags" style="grid-template-columns:repeat(2,1fr)" id="planSlots"></div>
@@ -717,28 +729,125 @@ let activeSlotKey = null;
 
 /* Views: 図面内の参照領域。dim-fieldの「根拠図面」はこのViews一覧から選ぶ */
 let VIEWS = [
-  {id:'v_south', label:'南立面', drawingKey:'elevation', note:''},
-  {id:'v_north', label:'北立面', drawingKey:'elevation', note:''},
-  {id:'v_east',  label:'東立面', drawingKey:'elevation', note:''},
-  {id:'v_west',  label:'西立面', drawingKey:'elevation', note:''},
-  {id:'v_roof',  label:'屋根伏図', drawingKey:'plan_roof', note:''},
-  {id:'v_layout',label:'配置図', drawingKey:'plan_layout', note:''},
+  {id:'v_south', label:'南立面', drawingKey:'elevation', note:'', rect:null},
+  {id:'v_north', label:'北立面', drawingKey:'elevation', note:'', rect:null},
+  {id:'v_east',  label:'東立面', drawingKey:'elevation', note:'', rect:null},
+  {id:'v_west',  label:'西立面', drawingKey:'elevation', note:'', rect:null},
+  {id:'v_roof',  label:'屋根伏図', drawingKey:'plan_roof', note:'', rect:null},
+  {id:'v_layout',label:'配置図', drawingKey:'plan_layout', note:'', rect:null},
 ];
 function renderViews(){
   const box = document.getElementById('elevationViews');
   if(!box) return;
   const elevViews = VIEWS.filter(v=>v.drawingKey==='elevation');
-  box.innerHTML = elevViews.map(v=>`
-    <div style="display:flex;gap:6px;align-items:center;background:#f7f9fc;border-radius:8px;padding:6px 8px">
+  const d = drawings['elevation'];
+  box.innerHTML = elevViews.map(v=>{
+    const thumb = (v.rect && d && !d.isPdf)
+      ? `<canvas class="view-thumb" data-viewid="${v.id}" width="48" height="36" style="border-radius:4px;background:#eee"></canvas>`
+      : `<span style="font-size:16px">${v.rect?'✅':'⬜'}</span>`;
+    return `<div style="display:flex;gap:6px;align-items:center;background:#f7f9fc;border-radius:8px;padding:6px 8px">
+      ${thumb}
       <button class="btn secondary" style="padding:4px 8px;font-size:11px" onclick="referenceView('${v.id}')">参照</button>
       <b style="font-size:12px;min-width:56px">${v.label}</b>
       <input value="${v.note}" placeholder="位置メモ(例:左上・1/3ページ目)" style="flex:1;font-size:11px;padding:4px 6px" oninput="updateViewNote('${v.id}', this.value)">
-    </div>`).join('');
+    </div>`;
+  }).join('');
+  // 矩形サムネイルを描画
+  if(d && !d.isPdf){
+    box.querySelectorAll('.view-thumb').forEach(canvas=>{
+      const v = VIEWS.find(x=>x.id===canvas.dataset.viewid);
+      if(!v || !v.rect) return;
+      const img = new Image();
+      img.onload = ()=>{
+        const ctx = canvas.getContext('2d');
+        const sx = v.rect.xPct/100*img.naturalWidth, sy = v.rect.yPct/100*img.naturalHeight;
+        const sw = v.rect.wPct/100*img.naturalWidth, sh = v.rect.hPct/100*img.naturalHeight;
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      };
+      img.src = d.dataUrl;
+    });
+  }
+  // 「範囲を指定してViewを登録」ボタンは画像がある場合のみ表示
+  const btn = document.getElementById('openRectEditorBtn');
+  if(btn) btn.style.display = (d && !d.isPdf) ? 'inline-block' : 'none';
 }
 function updateViewNote(viewId, note){
   const v = VIEWS.find(v=>v.id===viewId);
   if(v) v.note = note;
 }
+
+/* ===== Ver4.6: View矩形登録（Canvas上でドラッグして範囲指定） ===== */
+let rectEditorState = null; // {img, canvas, ctx, scale, drag:{x0,y0,x1,y1}}
+function openRectEditor(){
+  const d = drawings['elevation'];
+  if(!d || d.isPdf){ alert('矩形登録は画像(JPG/PNG)のみ対応です。PDFの場合は位置メモ欄をご利用ください。'); return; }
+  document.getElementById('rectEditorBox').style.display = 'block';
+  const sel = document.getElementById('rectViewSelect');
+  sel.innerHTML = VIEWS.filter(v=>v.drawingKey==='elevation').map(v=>`<option value="${v.id}">${v.label}</option>`).join('');
+  const canvas = document.getElementById('rectCanvas');
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  img.onload = ()=>{
+    const maxW = Math.min(360, img.naturalWidth);
+    const scale = maxW / img.naturalWidth;
+    canvas.width = img.naturalWidth * scale;
+    canvas.height = img.naturalHeight * scale;
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    rectEditorState = {img, canvas, ctx, scale, drag:null};
+    setupRectCanvasEvents();
+  };
+  img.src = d.dataUrl;
+}
+function closeRectEditor(){
+  document.getElementById('rectEditorBox').style.display = 'none';
+  rectEditorState = null;
+}
+function setupRectCanvasEvents(){
+  const canvas = rectEditorState.canvas;
+  canvas.onpointerdown = e=>{
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX-rect.left) * (canvas.width/rect.width);
+    const y = (e.clientY-rect.top) * (canvas.height/rect.height);
+    rectEditorState.drag = {x0:x, y0:y, x1:x, y1:y};
+  };
+  canvas.onpointermove = e=>{
+    if(!rectEditorState.drag) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX-rect.left) * (canvas.width/rect.width);
+    const y = (e.clientY-rect.top) * (canvas.height/rect.height);
+    rectEditorState.drag.x1 = x; rectEditorState.drag.y1 = y;
+    redrawRectCanvas();
+  };
+  canvas.onpointerup = ()=>{ /* ドラッグ確定、redrawRectCanvasで枠は残る */ };
+}
+function redrawRectCanvas(){
+  const {ctx, img, canvas, drag} = rectEditorState;
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  if(!drag) return;
+  const x = Math.min(drag.x0, drag.x1), y = Math.min(drag.y0, drag.y1);
+  const w = Math.abs(drag.x1-drag.x0), h = Math.abs(drag.y1-drag.y0);
+  ctx.strokeStyle = '#e0392b'; ctx.lineWidth = 2;
+  ctx.strokeRect(x, y, w, h);
+  ctx.fillStyle = 'rgba(224,57,43,0.15)';
+  ctx.fillRect(x, y, w, h);
+}
+function commitRect(){
+  if(!rectEditorState || !rectEditorState.drag){ alert('先に画像をドラッグして範囲を囲んでください。'); return; }
+  const {canvas, drag} = rectEditorState;
+  const x = Math.min(drag.x0, drag.x1), y = Math.min(drag.y0, drag.y1);
+  const w = Math.abs(drag.x1-drag.x0), h = Math.abs(drag.y1-drag.y0);
+  if(w<5 || h<5){ alert('範囲が小さすぎます。もう一度ドラッグしてください。'); return; }
+  const viewId = document.getElementById('rectViewSelect').value;
+  const v = VIEWS.find(v=>v.id===viewId);
+  if(!v) return;
+  v.rect = {
+    xPct: x/canvas.width*100, yPct: y/canvas.height*100,
+    wPct: w/canvas.width*100, hPct: h/canvas.height*100
+  };
+  closeRectEditor();
+  renderViews();
+}
+
 function referenceView(viewId){
   const v = VIEWS.find(v=>v.id===viewId);
   if(!v) return;
@@ -752,8 +861,26 @@ function referenceView(viewId){
     document.getElementById('activeDrawingPreview').innerHTML = '';
     return;
   }
-  bar.textContent = `📌 参照中: ${v.label}${v.note?'（'+v.note+'）':''} ／ 元図面: ${d.name}`;
+  bar.textContent = `📌 参照中: ${v.label}${v.note?'（'+v.note+'）':''} ／ 元図面: ${d.name}${v.rect?' ／ 矩形登録済み':''}`;
   const prev = document.getElementById('activeDrawingPreview');
+  if(v.rect && !d.isPdf){
+    // 矩形で切り出したプレビューを表示
+    const cropCanvas = document.createElement('canvas');
+    const img = new Image();
+    img.onload = ()=>{
+      const sx = v.rect.xPct/100*img.naturalWidth, sy = v.rect.yPct/100*img.naturalHeight;
+      const sw = v.rect.wPct/100*img.naturalWidth, sh = v.rect.hPct/100*img.naturalHeight;
+      cropCanvas.width = sw; cropCanvas.height = sh;
+      cropCanvas.getContext('2d').drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      prev.innerHTML = '';
+      cropCanvas.style.maxWidth = '100%';
+      cropCanvas.style.borderRadius = '10px';
+      cropCanvas.style.boxShadow = '0 2px 10px #0002';
+      prev.appendChild(cropCanvas);
+    };
+    img.src = d.dataUrl;
+    return;
+  }
   prev.innerHTML = d.isPdf
     ? `<div style="font-size:12px;color:#666">PDF: ${d.name}（元図面をタップして開く場合はスロットの「変更」の左のアイコンを利用）</div>`
     : `<img src="${d.dataUrl}" style="max-width:100%;border-radius:10px;box-shadow:0 2px 10px #0002">`;
