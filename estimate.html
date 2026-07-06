@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>AI積算システム | 甍AIシステム</title>
+<meta name="theme-color" content="#1f4e79">
+<link rel="manifest" href="./manifest.json?v=5">
+<link rel="icon" href="./icon-192.png?v=5">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#eef3f8;font-family:Meiryo,"Yu Gothic",sans-serif;color:#222;padding-bottom:40px}
+header{background:linear-gradient(135deg,#123a5f,#0d6efd);color:#fff;padding:16px 14px;font-size:20px;font-weight:800;box-shadow:0 2px 12px #0003;display:flex;align-items:center;gap:10px}
+header a{color:#fff;text-decoration:none;font-size:22px}
+.wrap{max-width:820px;margin:16px auto;padding:0 14px}
+.section{background:#fff;border-radius:14px;padding:18px;margin-bottom:16px;box-shadow:0 2px 10px #0001}
+.section h2{font-size:16px;margin:0 0 12px;color:#1f4e79;border-left:4px solid #1f4e79;padding-left:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+label{display:block;font-size:12px;color:#555;margin-bottom:3px}
+input,select{width:100%;padding:8px;border:1px solid #ccc;border-radius:8px;font-size:14px}
+.row-flags{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
+.flagbox{background:#f4f7fb;border-radius:10px;padding:8px;text-align:center;font-size:12px}
+.flagbox b{display:block;margin-bottom:4px}
+.checkline{display:flex;align-items:center;gap:5px;font-size:12px;margin:3px 0;justify-content:center}
+.btn{display:inline-block;background:#1f4e79;color:#fff;border:none;border-radius:10px;padding:12px 20px;font-size:15px;font-weight:700;cursor:pointer;margin-right:8px}
+.btn.secondary{background:#5a7a9a}
+.btn.green{background:#1a7a4c}
+.result{display:none}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}
+th{background:#f0f4f9}
+.alert{background:#fff3cd;border-left:4px solid #e0a800;padding:8px 12px;border-radius:6px;font-size:13px;margin:6px 0}
+.alert.error{background:#fbe4e4;border-left-color:#c0392b}
+details{margin-top:6px}
+summary{cursor:pointer;font-size:12px;color:#1f4e79}
+.evidence-step{font-size:12px;color:#444;border-bottom:1px dashed #eee;padding:4px 0}
+.summarybox{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}
+.summarybox div{background:#f4f7fb;border-radius:8px;padding:8px;text-align:center}
+.summarybox b{display:block;font-size:16px;color:#1f4e79}
+.summarybox span{font-size:11px;color:#666}
+.note{font-size:12px;color:#888;margin-top:20px;text-align:center}
+</style>
+</head>
+<body>
+<header><a href="./portal.html">←</a>📐 AI積算システム <span style="font-size:12px;font-weight:400;opacity:.8">Ver.3.1</span></header>
+<div class="wrap">
+
+<div class="section">
+  <h2>① 立面図読取：屋根タイプ判定用フラグ</h2>
+  <div class="row-flags">
+    <div class="flagbox"><b>南面</b>
+      <div class="checkline"><input type="checkbox" id="south_hasRoof" checked>屋根あり</div>
+      <div class="checkline"><input type="checkbox" id="south_isGable">妻面(三角)</div>
+    </div>
+    <div class="flagbox"><b>北面</b>
+      <div class="checkline"><input type="checkbox" id="north_hasRoof" checked>屋根あり</div>
+      <div class="checkline"><input type="checkbox" id="north_isGable">妻面(三角)</div>
+    </div>
+    <div class="flagbox"><b>東面</b>
+      <div class="checkline"><input type="checkbox" id="east_hasRoof">屋根あり</div>
+      <div class="checkline"><input type="checkbox" id="east_isGable" checked>妻面(三角)</div>
+    </div>
+    <div class="flagbox"><b>西面</b>
+      <div class="checkline"><input type="checkbox" id="west_hasRoof">屋根あり</div>
+      <div class="checkline"><input type="checkbox" id="west_isGable" checked>妻面(三角)</div>
+    </div>
+  </div>
+  <div class="grid">
+    <div><label>下屋の有無</label>
+      <select id="hasShimoya"><option value="0">なし</option><option value="1">あり</option></select>
+    </div>
+    <div><label>下屋の面</label>
+      <select id="shimoyaFace"><option value="south">南</option><option value="north">北</option><option value="east">東</option><option value="west">西</option></select>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>② 主屋根寸法・勾配（平面図＝面積、立面図＝長さ）</h2>
+  <div class="grid">
+    <div><label>建物幅 W（桁行・平面図）m</label><input type="number" step="0.001" id="buildingW" value="10.0"></div>
+    <div><label>建物奥行 D（梁間・平面図）m</label><input type="number" step="0.001" id="buildingD" value="8.0"></div>
+    <div><label>軒の出：南 m</label><input type="number" step="0.001" id="noki_S" value="0.6"></div>
+    <div><label>軒の出：北 m</label><input type="number" step="0.001" id="noki_N" value="0.6"></div>
+    <div><label>軒の出：東西(けらば) m</label><input type="number" step="0.001" id="noki_EW" value="0.5"></div>
+    <div><label>主屋勾配（寸）</label><input type="number" step="0.5" id="slope_sun" value="4"></div>
+    <div><label>地域（降雨強度）</label>
+      <select id="location">
+        <option value="saitama">埼玉・東京・神奈川・千葉・栃木・群馬(140mm/h)</option>
+        <option value="mie">三重・高知・沖縄(160mm/h)</option>
+        <option value="shizuoka">北関東・静岡・愛媛・福岡等(120mm/h)</option>
+        <option value="hokkaido">北海道・山形・新潟(100mm/h)</option>
+      </select>
+    </div>
+    <div><label>2F軒高 m（たてとい用）</label><input type="number" step="0.001" id="height_2F" value="6.0"></div>
+    <div><label>1F軒高 m（たてとい用・任意）</label><input type="number" step="0.001" id="height_1F" value="0"></div>
+  </div>
+</div>
+
+<div class="section" id="shimoyaSection">
+  <h2>③ 下屋寸法・勾配（下屋ありの場合のみ入力）</h2>
+  <div class="grid">
+    <div><label>下屋幅 m</label><input type="number" step="0.001" id="shimoyaW" value="0"></div>
+    <div><label>下屋奥行 m</label><input type="number" step="0.001" id="shimoyaDepth" value="0"></div>
+    <div><label>下屋軒の出：南 m</label><input type="number" step="0.001" id="shimoyaNoki_S" value="0"></div>
+    <div><label>下屋軒の出：東西 m</label><input type="number" step="0.001" id="shimoyaNoki_EW" value="0"></div>
+    <div><label>下屋勾配（寸・主屋と同じなら空欄）</label><input type="number" step="0.5" id="shimoyaSlope_sun" value=""></div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>④ 谷板金（谷がある場合のみ）</h2>
+  <div class="grid">
+    <div><label>谷Line平面長さ 合計 m（0なら谷なし）</label><input type="number" step="0.001" id="valleyPlanLength" value="0"></div>
+  </div>
+  <div style="font-size:12px;color:#888;margin-top:6px">※谷Lineの座標・長さはAnnotationJSONから取得する運用が正式（RULE-411）。ここでは合計平面長さを直接入力する簡易版です。</div>
+</div>
+
+<button class="btn" onclick="runEstimate()">積算を実行</button>
+
+<div class="section result" id="resultBox">
+  <h2>⑤ 積算結果</h2>
+  <div id="roofTypeResult" style="font-size:15px;font-weight:700;color:#1f4e79;margin-bottom:6px"></div>
+  <div id="alerts"></div>
+  <div class="summarybox" id="summaryBox"></div>
+
+  <h2 style="margin-top:18px">数量表（見積書式.xlsx 対応）</h2>
+  <table id="qtyTable">
+    <thead><tr><th>品名</th><th>数量</th><th>単位</th><th>摘要</th></tr></thead>
+    <tbody id="qtyBody"></tbody>
+  </table>
+  <button class="btn green" onclick="exportExcel()">見積書式.xlsxに出力</button>
+  <button class="btn secondary" onclick="exportCSV()">CSVで出力</button>
+
+  <h2 style="margin-top:18px">積算根拠（Evidence）</h2>
+  <div id="evidenceBox"></div>
+</div>
+
+<div class="note">甍AI積算エンジン Ver.3.1 ／ AIは積算を行うのではなく、積算理由を構築する。</div>
+</div>
+
+<script>
+if('serviceWorker'in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js?v=5').catch(()=>{}));
+}
+
+/* ===== Knowledge（甍AI蓄積エンジン Ver.3.1 から移植） ===== */
+const SLOPE_RATE = {
+  1:1.005,1.5:1.011,2:1.020,2.5:1.031,3:1.044,3.5:1.059,4:1.077,4.5:1.098,
+  5:1.118,5.5:1.141,6:1.166,6.5:1.193,7:1.221,7.5:1.250,8:1.281,9:1.345,10:1.414
+};
+function getSlopeRate(sun){
+  const keys = Object.keys(SLOPE_RATE).map(Number).sort((a,b)=>a-b);
+  const nearest = keys.reduce((p,c)=>Math.abs(c-sun)<Math.abs(p-sun)?c:p);
+  return SLOPE_RATE[nearest];
+}
+function getValleyRate(slope_sun){
+  const s = slope_sun/10;
+  return Math.sqrt(1+(s*s)/2);
+}
+const RAINFALL_CAP = { saitama:{rain:140,cap:69}, mie:{rain:160,cap:60}, shizuoka:{rain:120,cap:80}, hokkaido:{rain:100,cap:96} };
+const VENT = {
+  '棟換気':{'1P_m2':35,'2P_m2':70},
+  '片流れ換気':{'1P_m2':17.5,'2P_m2':35},
+  '雨押え換気':{'1P_m2':18.4,'2P_m2':36.8}
+};
+
+/* ===== STEP1: 屋根タイプ判定 RULE-001 ===== */
+function detectRoofType(f){
+  const {south,north,east,west,hasShimoya,shimoyaFace} = f;
+  const bothSidesHaveRoof = south.hasRoof && north.hasRoof;
+  if((east.isGable||west.isGable) && bothSidesHaveRoof){
+    if(hasShimoya) return {type:'kirituma_with_shimoya', shimoyaFace, ruleRef:'RULE-001'};
+    return {type:'kirituma', ruleRef:'RULE-001'};
+  }
+  if(south.hasRoof && !north.hasRoof){
+    if(hasShimoya) return {type:'katanagare_south_with_shimoya', shimoyaFace, ruleRef:'RULE-001'};
+    return {type:'katanagare_south', ruleRef:'RULE-001'};
+  }
+  if(north.hasRoof && !south.hasRoof){
+    if(hasShimoya) return {type:'katanagare_north_with_shimoya', shimoyaFace, ruleRef:'RULE-001'};
+    return {type:'katanagare_north', ruleRef:'RULE-001'};
+  }
+  if(south.hasRoof&&north.hasRoof&&east.hasRoof&&west.hasRoof) return {type:'yosemune', ruleRef:'RULE-001'};
+  return {type:'unknown', ruleRef:'RULE-001',
+    alert:{level:'WARNING',ruleRef:'RULE-001',msg:'屋根タイプが自動判定できません。立面図を確認してください。'}};
+}
+const ROOFTYPE_LABEL = {
+  kirituma:'切妻', kirituma_with_shimoya:'切妻+下屋',
+  katanagare_south:'片流れ（南水下）', katanagare_south_with_shimoya:'片流れ（南水下）+下屋',
+  katanagare_north:'片流れ（北水下）', katanagare_north_with_shimoya:'片流れ（北水下）+下屋',
+  yosemune:'寄棟', unknown:'判定不可'
+};
+
+/* ===== STEP2: 屋根面積 RULE-001,100 ===== */
+function calcRoofAreas(p){
+  const slopeRate = getSlopeRate(p.slope_sun);
+  const shimoyaRate = p.shimoyaSlope_sun ? getSlopeRate(p.shimoyaSlope_sun) : slopeRate;
+  const mainW = p.buildingW + 2*p.noki_EW;
+  const mainD = p.buildingD + p.noki_S + p.noki_N;
+  const mainProj = mainW*mainD;
+  const mainArea = mainProj*slopeRate;
+  let shimoyaProj=0, shimoyaArea=0;
+  if(p.hasShimoya && p.shimoyaW>0 && p.shimoyaDepth>0){
+    shimoyaProj = p.shimoyaW*(p.shimoyaDepth+p.shimoyaNoki_S);
+    shimoyaArea = shimoyaProj*shimoyaRate;
+  }
+  const totalArea = mainArea+shimoyaArea, totalProj = mainProj+shimoyaProj;
+  return {
+    mainArea:+mainArea.toFixed(2), shimoyaArea:+shimoyaArea.toFixed(2), totalArea:+totalArea.toFixed(2),
+    mainProj:+mainProj.toFixed(2), shimoyaProj:+shimoyaProj.toFixed(2), totalProj:+totalProj.toFixed(2),
+    ceilingArea:+mainProj.toFixed(2), shimoYaCeiling:+shimoyaProj.toFixed(2),
+    slopeRate, shimoyaRate,
+    formula:`主屋根: (${p.buildingW}+2×${p.noki_EW})×(${p.buildingD}+${p.noki_S}+${p.noki_N})×${slopeRate} = ${mainArea.toFixed(2)}㎡`
+  };
+}
+
+/* ===== STEP3: 長さ RULE-002,003,007,010,900,901 ===== */
+function calcLengths(roofType,p){
+  const isKirituma = roofType.includes('kirituma');
+  const isKata = roofType.includes('katanagare');
+  const hasShimoya = roofType.includes('shimoya');
+  const mainNokiLine = p.buildingW + 2*p.noki_EW;
+  const r = {};
+  if(isKirituma){
+    r.noki = mainNokiLine*2;
+    if(hasShimoya) r.noki += (p.shimoyaW + 2*p.shimoyaNoki_EW);
+  } else if(isKata){
+    r.noki = mainNokiLine;
+    if(hasShimoya) r.noki += (p.shimoyaW + 2*p.shimoyaNoki_EW);
+  } else { r.noki = mainNokiLine; }
+  r.noki = +r.noki.toFixed(3);
+
+  if(isKirituma){
+    let keraba = (p.buildingD+p.noki_S+p.noki_N)*2*2;
+    if(hasShimoya) keraba += (p.shimoyaDepth+p.shimoyaNoki_S)*2;
+    r.keraba = +keraba.toFixed(3);
+  } else { r.keraba = 0; }
+
+  r.katamune = +mainNokiLine.toFixed(3);
+  r.mune = isKirituma ? +p.buildingW.toFixed(3) : 0;
+
+  if(hasShimoya){
+    r.amaoshi = +((p.buildingD*2)+p.buildingW).toFixed(3);
+  } else { r.amaoshi = 0; }
+
+  if(isKirituma && hasShimoya){
+    const mz_N=p.buildingW, mz_S=p.shimoyaW>0?p.shimoyaW:p.buildingW, mz_EW=(p.buildingD+(p.shimoyaDepth||0))*2;
+    r.mizukami = +(mz_N+mz_S+mz_EW).toFixed(3); r.mizukamiRule='RULE-900';
+  } else if(isKata && hasShimoya){
+    r.mizukami = +(p.buildingD+(p.shimoyaDepth||0)).toFixed(3); r.mizukamiRule='RULE-901';
+  } else if(isKata){
+    r.mizukami = r.katamune; r.mizukamiRule='RULE-007';
+  } else { r.mizukami = 0; r.mizukamiRule='RULE-007'; }
+
+  r.fufu = +(r.noki + r.keraba + r.katamune).toFixed(3);
+  r.yukidome = r.noki;
+  return r;
+}
+
+/* ===== STEP4: 換気 RULE-004,005,200,201,202 ===== */
+function calcVentilation(roofType, areas){
+  const isKirituma = roofType.includes('kirituma');
+  const isKata = roofType.includes('katanagare');
+  const isYose = roofType.includes('yosemune');
+  const hasShimoya = roofType.includes('shimoya') || areas.shimoYaCeiling>0;
+  const result = {}; const alerts=[];
+  if(isKirituma||isKata){
+    const cap = VENT['片流れ換気'];
+    result.mainVent = {type:'katanagare', count_1P:Math.ceil(areas.ceilingArea/cap['1P_m2']), count_2P:Math.ceil(areas.ceilingArea/cap['2P_m2']), ceilingArea:areas.ceilingArea, cap};
+  } else if(isYose){
+    const cap = VENT['棟換気'];
+    result.mainVent = {type:'mune', count_1P:Math.ceil(areas.ceilingArea/cap['1P_m2']), count_2P:Math.ceil(areas.ceilingArea/cap['2P_m2']), ceilingArea:areas.ceilingArea, cap};
+  }
+  if(hasShimoya && areas.shimoYaCeiling>0){
+    const cap = VENT['雨押え換気'];
+    result.shimoyaVent = {type:'amaoshi', count_1P:Math.ceil(areas.shimoYaCeiling/cap['1P_m2']), count_2P:Math.ceil(areas.shimoYaCeiling/cap['2P_m2']), shimoYaCeiling:areas.shimoYaCeiling, cap};
+  }
+  return {...result, alerts};
+}
+
+/* ===== STEP5: 排水 RULE-006,008,011,300 ===== */
+function calcDrainage(lengths, areas, location){
+  const rc = RAINFALL_CAP[location];
+  const minByCapacity = Math.ceil(areas.totalProj/rc.cap);
+  const gutterCount = Math.max(minByCapacity,2);
+  const spacing = lengths.noki/gutterCount;
+  const alerts=[];
+  if(spacing>20) alerts.push({level:'WARNING',ruleRef:'RULE-300',msg:`竪樋間隔${spacing.toFixed(1)}m > 20m超過。集水器追加を検討してください。`});
+  const tatetoi_2F = +(lengths.tatetoi_height_2F*gutterCount||0).toFixed(2);
+  return { rainfall:rc.rain, capacity_m2:rc.cap, gutterCount, spacing:+spacing.toFixed(2),
+    tatetoi_total:tatetoi_2F, pmasuCount:gutterCount, areaPerGutter:+(areas.totalProj/gutterCount).toFixed(2), alerts };
+}
+
+/* ===== STEP6: 谷板金 RULE-120 ===== */
+function calcValley(planLength, mainSlope_sun){
+  if(!planLength || planLength<=0) return null;
+  const rate = getValleyRate(mainSlope_sun);
+  return { planLength, rate:+rate.toFixed(4), actualLength:+(planLength*rate).toFixed(3) };
+}
+
+let lastResult = null;
+
+function runEstimate(){
+  const v = id => document.getElementById(id).value;
+  const c = id => document.getElementById(id).checked;
+
+  const flags = {
+    south:{hasRoof:c('south_hasRoof'), isGable:c('south_isGable')},
+    north:{hasRoof:c('north_hasRoof'), isGable:c('north_isGable')},
+    east:{hasRoof:c('east_hasRoof'), isGable:c('east_isGable')},
+    west:{hasRoof:c('west_hasRoof'), isGable:c('west_isGable')},
+    hasShimoya: v('hasShimoya')==='1',
+    shimoyaFace: v('shimoyaFace')
+  };
+  const roofDet = detectRoofType(flags);
+  const roofType = roofDet.type;
+
+  const p = {
+    buildingW:+v('buildingW'), buildingD:+v('buildingD'),
+    noki_S:+v('noki_S'), noki_N:+v('noki_N'), noki_EW:+v('noki_EW'),
+    slope_sun:+v('slope_sun'),
+    hasShimoya: flags.hasShimoya,
+    shimoyaW:+v('shimoyaW'), shimoyaDepth:+v('shimoyaDepth'),
+    shimoyaNoki_S:+v('shimoyaNoki_S'), shimoyaNoki_EW:+v('shimoyaNoki_EW'),
+    shimoyaSlope_sun: v('shimoyaSlope_sun')? +v('shimoyaSlope_sun') : null,
+    height_2F:+v('height_2F'), height_1F:+v('height_1F')
+  };
+
+  const areas = calcRoofAreas(p);
+  const lengths = calcLengths(roofType, p);
+  lengths.tatetoi_height_2F = p.height_2F;
+  const ventilation = calcVentilation(roofType, areas);
+  const drainage = calcDrainage(lengths, areas, v('location'));
+  const valley = calcValley(+v('valleyPlanLength'), p.slope_sun);
+
+  const allAlerts = [
+    ...(roofDet.alert?[roofDet.alert]:[]),
+    ...(ventilation.alerts||[]),
+    ...(drainage.alerts||[])
+  ];
+
+  lastResult = {roofDet, roofType, p, areas, lengths, ventilation, drainage, valley, allAlerts};
+  render();
+}
+
+function render(){
+  const {roofDet, roofType, areas, lengths, ventilation, drainage, valley, allAlerts} = lastResult;
+  document.getElementById('resultBox').style.display='block';
+  document.getElementById('roofTypeResult').textContent =
+    `屋根タイプ判定: ${ROOFTYPE_LABEL[roofType]||roofType}（RULE-001）`;
+
+  const alertsBox = document.getElementById('alerts');
+  alertsBox.innerHTML = allAlerts.map(a=>`<div class="alert ${a.level==='ERROR'?'error':''}">⚠ [${a.ruleRef}] ${a.msg}</div>`).join('');
+
+  const sb = document.getElementById('summaryBox');
+  sb.innerHTML = `
+    <div><b>${areas.totalArea}㎡</b><span>屋根面積合計</span></div>
+    <div><b>${lengths.noki}m</b><span>軒先</span></div>
+    <div><b>${lengths.keraba}m</b><span>ケラバ</span></div>
+    <div><b>${lengths.katamune}m</b><span>片棟</span></div>
+    <div><b>${lengths.mizukami}m</b><span>水上立ち上がり</span></div>
+    <div><b>${lengths.amaoshi}m</b><span>雨押え</span></div>
+    <div><b>${lengths.fufu}m</b><span>破風板金</span></div>
+    <div><b>${drainage.gutterCount}か所</b><span>集水器</span></div>
+    <div><b>${drainage.tatetoi_total}m</b><span>たてとい</span></div>
+    ${valley?`<div><b>${valley.actualLength}m</b><span>谷板金実長</span></div>`:''}
+  `;
+
+  const rows = [];
+  rows.push(['屋根材工事', areas.totalArea, '㎡', `勾配伸び率${areas.slopeRate}適用`]);
+  rows.push(['軒先板金(鼻隠し)', lengths.noki, 'm', '立面図実長']);
+  if(lengths.keraba>0) rows.push(['ケラバ板金', lengths.keraba, 'm', '立面図実長']);
+  rows.push(['片棟板金', lengths.katamune, 'm', '棟換気対象外']);
+  if(lengths.mune>0) rows.push(['棟板金', lengths.mune, 'm', '切妻中央']);
+  if(lengths.amaoshi>0) rows.push(['雨押え板金', lengths.amaoshi, 'm', '下屋取合']);
+  if(lengths.mizukami>0) rows.push(['水上立ち上がり', lengths.mizukami, 'm', lengths.mizukamiRule]);
+  rows.push(['破風板金', lengths.fufu, 'm', '鼻隠し+ケラバ+片棟統合(甍標準)']);
+  rows.push(['雪止め', lengths.yukidome, 'm', '軒先(水下)のみ']);
+  if(ventilation.mainVent) rows.push([`換気部材(${ventilation.mainVent.type==='mune'?'棟換気':'片流れ換気'})`, ventilation.mainVent.count_1P, '個', `天井${ventilation.mainVent.ceilingArea}㎡÷${ventilation.mainVent.cap['1P_m2']}`]);
+  if(ventilation.shimoyaVent) rows.push(['換気部材(雨押え換気)', ventilation.shimoyaVent.count_1P, '個', `下屋天井${ventilation.shimoyaVent.shimoYaCeiling}㎡÷${ventilation.shimoyaVent.cap['1P_m2']}`]);
+  rows.push(['集水器', drainage.gutterCount, '箇所', `投影${areas.totalProj}㎡÷${drainage.capacity_m2}㎡(降雨${drainage.rainfall}mm/h)`]);
+  rows.push(['たてとい', drainage.tatetoi_total, 'm', '実長・ロスなし']);
+  if(valley) rows.push(['谷板金', valley.actualLength, 'm', `平面${valley.planLength}m×伸び率${valley.rate}`]);
+
+  document.getElementById('qtyBody').innerHTML = rows.map(r=>
+    `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('');
+  lastResult.rows = rows;
+
+  const ev = [];
+  ev.push(`【屋根タイプ】${roofDet.reasoningText||''} RULE-001`);
+  ev.push(`【屋根面積】${areas.formula}`);
+  ev.push(`【換気】RULE-004: 必ず天井面積(投影)を使用。屋根実面積は使わない。`);
+  ev.push(`【排水】RULE-006: 投影面積${areas.totalProj}㎡で判定（屋根実面積は使わない）。RULE-300: 竪樋間隔${drainage.spacing}m（20m以内が基準）。`);
+  document.getElementById('evidenceBox').innerHTML =
+    ev.map(e=>`<div class="evidence-step">${e}</div>`).join('');
+}
+
+function exportCSV(){
+  if(!lastResult) return;
+  let csv = '品名,数量,単位,摘要\n';
+  lastResult.rows.forEach(r=>{ csv += r.map(x=>`"${x}"`).join(',')+'\n'; });
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '積算結果.csv';
+  a.click();
+}
+
+function exportExcel(){
+  if(!lastResult || !window.XLSX){ alert('Excel出力ライブラリの読み込みに失敗しました。CSV出力をご利用ください。'); return; }
+  // 見積書書式.xlsx のレイアウトに合わせて出力（17行目ヘッダ、18行目〜明細）
+  const wb = XLSX.utils.book_new();
+  const aoa = [];
+  for(let i=0;i<17;i++) aoa.push([]);
+  aoa[10] = ['','件名'];
+  aoa[16] = Array(15).fill('');
+  aoa[16][15]='数量'; aoa[16][18]='単位'; aoa[16][20]='単価'; aoa[16][23]='金額'; aoa[16][28]='摘要';
+  lastResult.rows.forEach((r,i)=>{
+    const row = Array(29).fill('');
+    row[0]=r[0]; row[15]=r[1]; row[18]=r[2]; row[28]=r[3];
+    aoa[17+i]=row;
+  });
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+  XLSX.writeFile(wb, '積算結果_見積書書式.xlsx');
+}
+
+document.getElementById('hasShimoya').addEventListener('change', function(){
+  document.getElementById('shimoyaSection').style.opacity = this.value==='1' ? '1':'.4';
+});
+</script>
+</body>
+</html>
