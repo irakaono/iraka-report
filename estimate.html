@@ -53,14 +53,25 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
 <div class="section">
   <h2>📎 図面管理（立面図・平面図）</h2>
   <div style="font-size:12px;color:#888;margin-bottom:10px">
-    種類ごとにアップロードしてください。図面を見ながら②③④の数値を入力します（自動読み取りは今後の拡張予定）。
+    図面を見ながら②③④の数値を入力します（自動読み取りは今後の拡張予定）。
   </div>
+
+  <div id="bulkDropZone" style="border:2px dashed #9db3c8;border-radius:12px;padding:18px;text-align:center;color:#5a7a9a;cursor:pointer;background:#f7f9fc;margin-bottom:14px">
+    <div style="font-size:26px">📥</div>
+    <div style="font-size:13px;font-weight:700">図面PDF・画像をまとめてドラッグ＆ドロップ／タップして複数選択</div>
+    <div style="font-size:11px;color:#999;margin-top:4px">ファイル名に「南」「北」「東」「西」「伏図」「配置」等が含まれていれば自動で振り分けます</div>
+    <input type="file" id="bulkFileInput" accept="image/*,.pdf" multiple style="display:none">
+  </div>
+  <div id="unassignedBox" style="margin-bottom:14px"></div>
 
   <div style="font-size:13px;font-weight:700;color:#1f4e79;margin:10px 0 6px">立面図</div>
   <div class="row-flags" id="elevationSlots"></div>
 
   <div style="font-size:13px;font-weight:700;color:#1f4e79;margin:14px 0 6px">平面図</div>
   <div class="row-flags" style="grid-template-columns:repeat(2,1fr)" id="planSlots"></div>
+
+  <div style="font-size:13px;font-weight:700;color:#1f4e79;margin:14px 0 6px">その他の図面（断面図・詳細図など）</div>
+  <div id="otherDrawingsBox" style="display:flex;flex-wrap:wrap;gap:8px"></div>
 
   <div style="margin-top:14px">
     <label>縮尺（例：1/100）</label>
@@ -752,6 +763,93 @@ document.getElementById('fileInput').addEventListener('change', e=>{
 document.getElementById('scaleInput').addEventListener('input', function(){
   document.getElementById('scaleStatus').textContent = this.value ? '✓ 縮尺設定済み' : '';
 });
+
+/* ===== バルクアップロード（複数ファイル一括投げ込み＋自動振り分け） ===== */
+let unassignedFiles = []; // {id,name,dataUrl,isPdf,guessKey}
+let otherDrawings = [];   // {id,name,dataUrl,isPdf} スロットに当てはまらない図面
+let fileIdCounter = 0;
+
+const FILENAME_GUESS = [
+  {re:/南/, key:'elev_south'}, {re:/北/, key:'elev_north'},
+  {re:/東/, key:'elev_east'},  {re:/西/, key:'elev_west'},
+  {re:/伏図|屋根伏/, key:'plan_roof'},
+  {re:/配置/, key:'plan_layout'}
+];
+function guessSlotFromFilename(name){
+  for(const g of FILENAME_GUESS){ if(g.re.test(name)) return g.key; }
+  return null;
+}
+
+const bulkDropZone = document.getElementById('bulkDropZone');
+const bulkFileInput = document.getElementById('bulkFileInput');
+bulkDropZone.addEventListener('click', ()=>bulkFileInput.click());
+bulkDropZone.addEventListener('dragover', e=>{ e.preventDefault(); bulkDropZone.style.background='#e9f0f8'; });
+bulkDropZone.addEventListener('dragleave', ()=>{ bulkDropZone.style.background='#f7f9fc'; });
+bulkDropZone.addEventListener('drop', e=>{
+  e.preventDefault(); bulkDropZone.style.background='#f7f9fc';
+  handleBulkFiles(e.dataTransfer.files);
+});
+bulkFileInput.addEventListener('change', e=>{ handleBulkFiles(e.target.files); e.target.value=''; });
+
+function handleBulkFiles(files){
+  [...files].forEach(file=>{
+    const reader = new FileReader();
+    reader.onload = ev=>{
+      const id = ++fileIdCounter;
+      const guessKey = guessSlotFromFilename(file.name);
+      const item = { id, name:file.name, dataUrl:ev.target.result, isPdf:file.type==='application/pdf', guessKey };
+      if(guessKey && !drawings[guessKey]){
+        // 自動振り分け成功、かつスロットが空いていればそのまま割当
+        drawings[guessKey] = { name:item.name, dataUrl:item.dataUrl, isPdf:item.isPdf };
+        renderSlots();
+      } else {
+        // 自動判定できない、またはスロットが既に埋まっている → 未割当リストへ
+        unassignedFiles.push(item);
+        renderUnassigned();
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function renderUnassigned(){
+  const box = document.getElementById('unassignedBox');
+  if(unassignedFiles.length===0){ box.innerHTML=''; return; }
+  box.innerHTML = `<div style="font-size:12px;color:#c0392b;margin-bottom:6px">⚠ 自動判定できなかった図面（${unassignedFiles.length}件）。種類を選んでください：</div>` +
+    unassignedFiles.map(f=>`
+    <div style="display:flex;align-items:center;gap:8px;background:#fff8ec;border-radius:8px;padding:6px 10px;margin-bottom:6px">
+      <span style="font-size:20px">${f.isPdf?'📄':'🖼️'}</span>
+      <span style="font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.name}</span>
+      <select onchange="assignUnassigned(${f.id}, this.value)" style="font-size:12px;padding:4px">
+        <option value="">種類を選択...</option>
+        ${DRAWING_SLOTS.map(s=>`<option value="${s.key}">${s.label}</option>`).join('')}
+        <option value="other">その他の図面として保存</option>
+      </select>
+    </div>`).join('');
+}
+function assignUnassigned(id, targetKey){
+  const idx = unassignedFiles.findIndex(f=>f.id===id);
+  if(idx===-1 || !targetKey) return;
+  const f = unassignedFiles[idx];
+  if(targetKey==='other'){
+    otherDrawings.push({id:f.id, name:f.name, dataUrl:f.dataUrl, isPdf:f.isPdf});
+    renderOtherDrawings();
+  } else {
+    drawings[targetKey] = { name:f.name, dataUrl:f.dataUrl, isPdf:f.isPdf };
+    renderSlots();
+  }
+  unassignedFiles.splice(idx,1);
+  renderUnassigned();
+}
+function renderOtherDrawings(){
+  const box = document.getElementById('otherDrawingsBox');
+  if(otherDrawings.length===0){ box.innerHTML = '<div style="font-size:11px;color:#999">なし</div>'; return; }
+  box.innerHTML = otherDrawings.map((d,i)=>`
+    <div style="background:#f4f7fb;border-radius:8px;padding:6px 10px;font-size:11px;display:flex;align-items:center;gap:6px">
+      ${d.isPdf?'📄':'🖼️'} ${d.name.slice(0,14)}
+      <span style="cursor:pointer;color:#c0392b" onclick="otherDrawings.splice(${i},1);renderOtherDrawings()">×</span>
+    </div>`).join('');
+}
+renderOtherDrawings();
 renderSlots();
 
 /* ===== 寸法欄ごとの根拠(Evidence)メタデータ ===== */
