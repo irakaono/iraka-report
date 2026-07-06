@@ -4,7 +4,7 @@
   "products": {
     "tatehira333": {
       "label": "立平333",
-      "maker": "アイジー工業",
+      "maker": "ビルトマテリアル",
       "method": "立平葺き",
       "width": "333mm",
       "thickness": "0.35mm",
@@ -19,7 +19,7 @@
     },
     "tatehira455": {
       "label": "立平455",
-      "maker": "アイジー工業",
+      "maker": "ビルトマテリアル",
       "method": "立平葺き",
       "width": "455mm",
       "thickness": "0.35mm",
@@ -34,7 +34,7 @@
     },
     "yokoatsu_s": {
       "label": "横暖ルーフS",
-      "maker": "アイジー工業",
+      "maker": "ニチハ",
       "method": "横葺き",
       "width": "製品仕様",
       "thickness": "製品仕様",
@@ -49,7 +49,7 @@
     },
     "yokoatsu_alphas": {
       "label": "横暖ルーフαS",
-      "maker": "アイジー工業",
+      "maker": "ニチハ",
       "method": "横葺き",
       "width": "製品仕様",
       "thickness": "製品仕様",
