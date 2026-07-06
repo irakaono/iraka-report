@@ -168,6 +168,16 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
 
   <h2 style="margin-top:18px">積算根拠（Evidence）</h2>
   <div id="evidenceBox"></div>
+
+  <h2 style="margin-top:18px">⑤ Estimate Item設定（商品マッピング）</h2>
+  <div style="font-size:12px;color:#888;margin-bottom:8px">
+    Engineが出すのは「数量」、見積が欲しいのは「商品」。ここで商品名・工種・摘要をKnowledgeとして設定できます。
+    Engine（計算ロジック）を変更せずに、屋根材や雨樋メーカーを変更できます。
+  </div>
+  <div id="mappingPanelBody"></div>
+  <button class="btn secondary" onclick="saveMappingPanel()">マッピングを保存</button>
+  <button class="btn secondary" onclick="resetMappingPanel()">初期設定に戻す</button>
+  <div id="mappingStatus" style="font-size:12px;color:#1a7a4c;margin-top:6px"></div>
 </div>
 
 <div class="section result" id="compareBox">
@@ -433,69 +443,74 @@ function render(){
 
   const rows = [];
   rows.push(['屋根材工事', areas.totalArea, '㎡', `勾配伸び率${areas.slopeRate}適用`,
-    {ruleRef:'RULE-001,RULE-100', formula:areas.formula, confidence:90,
+    {componentKey:'roofMaterial', ruleRef:'RULE-001,RULE-100', formula:areas.formula, confidence:90,
      observation:'平面図で建物幅・奥行・軒の出を確認。立面図で勾配を確認。',
      reasoning:'RULE-001(平面投影)×RULE-100(勾配伸び率)を選択。屋根実面積は平面図由来のため。'}]);
   rows.push(['軒先板金(鼻隠し)', lengths.noki, 'm', '立面図実長',
-    {ruleRef:'RULE-002', formula:`桁行(${lastResult.p.buildingW}+2×${lastResult.p.noki_EW})基準。伸び率は適用しない`, confidence:90,
+    {componentKey:'noki', ruleRef:'RULE-002', formula:`桁行(${lastResult.p.buildingW}+2×${lastResult.p.noki_EW})基準。伸び率は適用しない`, confidence:90,
      observation:'立面図で軒先の実長を確認。',
      reasoning:'RULE-002・RULE-003により軒先には勾配伸び率を適用しない（立面図実寸=実長）。'}]);
   if(lengths.keraba>0) rows.push(['ケラバ板金', lengths.keraba, 'm', '立面図実長',
-    {ruleRef:'RULE-002,RULE-003', formula:'切妻: (梁間+軒S+軒N)×2×2。伸び率禁止', confidence:85,
+    {componentKey:'keraba', ruleRef:'RULE-002,RULE-003', formula:'切妻: (梁間+軒S+軒N)×2×2。伸び率禁止', confidence:85,
      observation:'立面図（妻面）でケラバの実長を確認。',
      reasoning:'切妻と判定されたため東西2面×両斜面で計上。伸び率禁止部材のため掛けない。'}]);
   rows.push(['片棟板金', lengths.katamune, 'm', '棟換気対象外',
-    {ruleRef:'RULE-002,RULE-003,RULE-005', formula:'桁行(けらば含む)=水上端', confidence:85,
+    {componentKey:'katamune', ruleRef:'RULE-002,RULE-003,RULE-005', formula:'桁行(けらば含む)=水上端', confidence:85,
      observation:'立面図で水上端(片棟)を確認。',
      reasoning:'片棟のため棟換気は使えない(RULE-005)。長さは桁行(けらば含む)と同一。'}]);
   if(lengths.mune>0) rows.push(['棟板金', lengths.mune, 'm', '切妻中央',
-    {ruleRef:'RULE-002', formula:'建物幅W', confidence:85,
+    {componentKey:'mune', ruleRef:'RULE-002', formula:'建物幅W', confidence:85,
      observation:'平面図・立面図で棟の位置を確認。', reasoning:'切妻中央部の棟。建物幅と同一。'}]);
   if(lengths.amaoshi>0) rows.push(['雨押え板金', lengths.amaoshi, 'm', '下屋取合',
-    {ruleRef:'RULE-003', formula:'東西(梁間×2)+北(建物幅)。伸び率禁止', confidence:80,
+    {componentKey:'amaoshi', ruleRef:'RULE-003', formula:'東西(梁間×2)+北(建物幅)。伸び率禁止', confidence:80,
      observation:'立面図で下屋と2F外壁の取合を確認。',
      reasoning:'下屋ありのため2F外壁-下屋取合部に雨押えが発生。伸び率禁止部材。'}]);
   if(lengths.mizukami>0) rows.push(['水上立ち上がり', lengths.mizukami, 'm', lengths.mizukamiRule,
-    {ruleRef:'RULE-007,'+lengths.mizukamiRule, formula:'屋根タイプ×下屋パターンで判定（物件依存が最も高い部材）', confidence:lengths.mizukamiRule==='RULE-901'?60:80,
+    {componentKey:'mizukami', ruleRef:'RULE-007,'+lengths.mizukamiRule, formula:'屋根タイプ×下屋パターンで判定（物件依存が最も高い部材）', confidence:lengths.mizukamiRule==='RULE-901'?60:80,
      observation:'立面図で水上部の下屋接続パターンを確認。',
      reasoning:'屋根タイプと下屋の組み合わせパターンから該当ルールを選択。物件ごとの確認を推奨。'}]);
   rows.push(['破風板金', lengths.fufu, 'm', '鼻隠し+ケラバ+片棟統合(甍標準)',
-    {ruleRef:'RULE-010', formula:`軒先${lengths.noki}+ケラバ${lengths.keraba}+片棟${lengths.katamune}`, confidence:85,
+    {componentKey:'fufu', ruleRef:'RULE-010', formula:`軒先${lengths.noki}+ケラバ${lengths.keraba}+片棟${lengths.katamune}`, confidence:85,
      observation:'各実長の合計。', reasoning:'甍の標準運用として鼻隠し・ケラバ・片棟を破風板金として統合計上(RULE-010)。'}]);
   rows.push(['雪止め', lengths.yukidome, 'm', '軒先(水下)のみ',
-    {ruleRef:'RULE-002', formula:'軒先(水下)長さと同一', confidence:85,
+    {componentKey:'yukidome', ruleRef:'RULE-002', formula:'軒先(水下)長さと同一', confidence:85,
      observation:'軒先(水下側)の長さを参照。', reasoning:'雪止めは水下軒先にのみ設置。'}]);
   if(ventilation.mainVent) rows.push([`換気部材(${ventilation.mainVent.type==='mune'?'棟換気':'片流れ換気'})`, ventilation.mainVent.count_1P, '個', `天井${ventilation.mainVent.ceilingArea}㎡÷${ventilation.mainVent.cap['1P_m2']}`,
-    {ruleRef: ventilation.mainVent.type==='mune'?'RULE-200':'RULE-005,RULE-201', formula:`ceil(天井面積(投影)${ventilation.mainVent.ceilingArea}㎡ ÷ ${ventilation.mainVent.cap['1P_m2']}㎡) ※屋根実面積は使わない(RULE-004)`, confidence:90,
+    {componentKey: ventilation.mainVent.type==='mune'?'ventMune':'ventKatanagare', ruleRef: ventilation.mainVent.type==='mune'?'RULE-200':'RULE-005,RULE-201', formula:`ceil(天井面積(投影)${ventilation.mainVent.ceilingArea}㎡ ÷ ${ventilation.mainVent.cap['1P_m2']}㎡) ※屋根実面積は使わない(RULE-004)`, confidence:90,
      observation:'平面図から天井面積(投影)を確認。屋根実面積は使わない。',
      reasoning:'RULE-004: 換気計算は必ず天井面積(投影)基準。片棟の場合は棟換気禁止のため片流れ換気を選定(RULE-005)。'}]);
   if(ventilation.shimoyaVent) rows.push(['換気部材(雨押え換気)', ventilation.shimoyaVent.count_1P, '個', `下屋天井${ventilation.shimoyaVent.shimoYaCeiling}㎡÷${ventilation.shimoyaVent.cap['1P_m2']}`,
-    {ruleRef:'RULE-004,RULE-202', formula:`ceil(下屋天井${ventilation.shimoyaVent.shimoYaCeiling}㎡ ÷ ${ventilation.shimoyaVent.cap['1P_m2']}㎡)`, confidence:85,
+    {componentKey:'ventShimoya', ruleRef:'RULE-004,RULE-202', formula:`ceil(下屋天井${ventilation.shimoyaVent.shimoYaCeiling}㎡ ÷ ${ventilation.shimoyaVent.cap['1P_m2']}㎡)`, confidence:85,
      observation:'下屋の天井面積(投影)のみを確認。2F天井は含まない。',
      reasoning:'下屋には雨押え換気を使用(RULE-202)。'}]);
   rows.push(['集水器', drainage.gutterCount, '箇所', `投影${areas.totalProj}㎡÷${drainage.capacity_m2}㎡(降雨${drainage.rainfall}mm/h)`,
-    {ruleRef:'RULE-006,RULE-008,RULE-300', formula:`max(ceil(投影${areas.totalProj}㎡÷${drainage.capacity_m2}㎡), 角2箇所) 。竪樋間隔${drainage.spacing}m(基準20m以内)`, confidence:70,
+    {componentKey:'gutter', ruleRef:'RULE-006,RULE-008,RULE-300', formula:`max(ceil(投影${areas.totalProj}㎡÷${drainage.capacity_m2}㎡), 角2箇所) 。竪樋間隔${drainage.spacing}m(基準20m以内)`, confidence:70,
      observation:'平面図から投影面積、地域から降雨強度を確認。',
      reasoning:'RULE-006: 投影面積(屋根実面積は使わない)で最低箇所数を算出。角2箇所を基本とし大きい方を採用(RULE-008)。'}]);
   rows.push(['たてとい', drainage.tatetoi_total, 'm', '実長・ロスなし',
-    {ruleRef:'RULE-011', formula:`2F軒高×集水器数(${drainage.gutterCount}箇所)`, confidence:80,
+    {componentKey:'tatetoi', ruleRef:'RULE-011', formula:`2F軒高×集水器数(${drainage.gutterCount}箇所)`, confidence:80,
      observation:'立面図から2F軒高を確認。', reasoning:'RULE-011: たてといは実長のみでロス計上しない。'}]);
   if(valley) rows.push(['谷板金', valley.actualLength, 'm', `平面${valley.planLength}m×伸び率${valley.rate}`,
-    {ruleRef:'RULE-120', formula:`平面${valley.planLength}m × √(1+(勾配/10)²÷2) = ×${valley.rate}`, confidence:90,
+    {componentKey:'valley', ruleRef:'RULE-120', formula:`平面${valley.planLength}m × √(1+(勾配/10)²÷2) = ×${valley.rate}`, confidence:90,
      observation:'谷Line長さは本来AnnotationJSONから取得(RULE-411)。今回は簡易入力値を使用。',
      reasoning:'谷板金は隅棟・谷専用伸び率(RULE-120)を使用。屋根材の伸び率(RULE-100)とは別の式。'}]);
 
-  document.getElementById('qtyBody').innerHTML = rows.map((r,i)=>`
-    <tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td>
+  document.getElementById('qtyBody').innerHTML = rows.map((r,i)=>{
+    const est = getEstimateItem(r[4].componentKey, r[0]);
+    return `
+    <tr><td><b>${est.itemName}</b><div style="font-size:10px;color:#999">Component: ${r[0]}</div></td><td>${r[1]}</td><td>${r[2]}</td><td>${est.note||r[3]}</td>
     <td><button class="btn secondary" style="padding:4px 10px;font-size:11px" onclick="toggleEvidence(${i})">根拠▼</button></td></tr>
     <tr id="ev-row-${i}" style="display:none"><td colspan="5" style="background:#f7f9fc">
       <div class="evidence-step"><b>① Observation（観察）：</b>${r[4].observation||'-'}</div>
       <div class="evidence-step"><b>② Reasoning（判断）：</b>${r[4].reasoning||'-'} <span class="rule-badge">${r[4].ruleRef}</span></div>
       <div class="evidence-step"><b>③ Calculation（計算）：</b>${r[4].formula}</div>
       <div class="evidence-step"><b>④ Evidence（確定値・確信度）：</b>${r[1]}${r[2]} ／ 確信度${r[4].confidence}%</div>
-    </td></tr>`).join('');
+      <div class="evidence-step"><b>Estimate Item：</b>${est.itemName}（${est.category}）／ 摘要: ${est.note}</div>
+    </td></tr>`;
+  }).join('');
   lastResult.rows = rows;
   renderCompareTable();
+  renderMappingPanel();
 
   document.getElementById('evidenceBox').innerHTML = `
     <div class="evidence-step">【屋根タイプ判定】${ROOFTYPE_LABEL[roofType]||roofType}（RULE-001）</div>
@@ -512,8 +527,11 @@ function toggleEvidence(i){
 
 function exportCSV(){
   if(!lastResult) return;
-  let csv = '品名,数量,単位,摘要\n';
-  lastResult.rows.forEach(r=>{ csv += r.slice(0,4).map(x=>`"${x}"`).join(',')+'\n'; });
+  let csv = '品名(Estimate Item),Component,数量,単位,工種,摘要\n';
+  lastResult.rows.forEach(r=>{
+    const est = getEstimateItem(r[4].componentKey, r[0]);
+    csv += [est.itemName, r[0], r[1], r[2], est.category, est.note].map(x=>`"${x}"`).join(',')+'\n';
+  });
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -521,18 +539,9 @@ function exportCSV(){
   a.click();
 }
 
-/* ===== 品名 → 出力先シートのマッピング ===== */
-const SHEET_MAP = {
-  '屋根材工事':'新設屋根工事', '軒先板金(鼻隠し)':'新設屋根工事', 'ケラバ板金':'新設屋根工事',
-  '片棟板金':'新設屋根工事', '棟板金':'新設屋根工事', '雨押え板金':'新設屋根工事',
-  '水上立ち上がり':'新設屋根工事', '破風板金':'新設屋根工事', '雪止め':'新設屋根工事',
-  '谷板金':'新設屋根工事'
-  // それ以外（集水器・たてとい・換気部材等）は雨樋工事へ
-};
-function targetSheetFor(itemName){
-  if(SHEET_MAP[itemName]) return SHEET_MAP[itemName];
-  if(itemName.includes('換気')) return '新設屋根工事';
-  return '雨樋工事';
+/* ===== Excel出力先シートは Estimate Item の category を使用（SHEET_MAPは廃止） ===== */
+function targetSheetFor(componentKey, fallbackName){
+  return getEstimateItem(componentKey, fallbackName).category;
 }
 
 function exportExcel(){
@@ -542,9 +551,9 @@ function exportExcel(){
   // ── 新設屋根工事・雨樋工事：採用値を明細行として書き込む ──
   const sheetRows = { '新設屋根工事':[], '雨樋工事':[] };
   lastResult.rows.forEach((r,i)=>{
-    const target = targetSheetFor(r[0]);
+    const est = getEstimateItem(r[4].componentKey, r[0]);
     const adoptedVal = getAdoptedValue(i);
-    sheetRows[target].push([r[0], adoptedVal, r[2], r[3]]);
+    sheetRows[est.category].push([est.itemName, adoptedVal, r[2], est.note]);
   });
 
   ['新設屋根工事','雨樋工事'].forEach(sheetName=>{
@@ -760,12 +769,85 @@ function renderHumanThumbs(){
     </div>`).join('');
 }
 
-/* ===== 三者比較表（AI値 / 人積算値 / 採用値） ===== */
+/* ===== Estimate Item Mapping（Component → 商品） =====
+   Knowledge → Engine → Assembly → Estimate Mapping → 見積書
+   Engineは数量(Component)を出す。ここで初めて「商品」に変換する。 */
+const EST_MAPPING_DEFAULT = {
+  roofMaterial:   {itemName:'ガルバリウム鋼板 立平333 葺き', category:'新設屋根工事', note:'立平333用'},
+  noki:           {itemName:'ガルバリウム鋼板 軒先唐草取付', category:'新設屋根工事', note:'唐草'},
+  keraba:         {itemName:'ガルバリウム鋼板 ケラバ水切取付', category:'新設屋根工事', note:'ケラバ水切'},
+  katamune:       {itemName:'ガルバリウム鋼板 片棟包み取付', category:'新設屋根工事', note:'片棟包み'},
+  mune:           {itemName:'ガルバリウム鋼板 棟包み取付', category:'新設屋根工事', note:'棟包み'},
+  amaoshi:        {itemName:'ガルバリウム鋼板 雨押え板金取付', category:'新設屋根工事', note:'雨押え'},
+  mizukami:       {itemName:'ガルバリウム鋼板 水上立ち上がり板金', category:'新設屋根工事', note:'水上立ち上がり'},
+  fufu:           {itemName:'ガルバリウム鋼板 破風板金取付', category:'新設屋根工事', note:'鼻隠し+ケラバ+片棟 統合'},
+  yukidome:       {itemName:'雪止め金具取付', category:'新設屋根工事', note:'軒先(水下)のみ'},
+  ventMune:       {itemName:'Panasonic I-ROOF 棟換気部材', category:'新設屋根工事', note:'棟換気'},
+  ventKatanagare: {itemName:'Panasonic I-ROOF 片流れ換気部材', category:'新設屋根工事', note:'片流れ換気'},
+  ventShimoya:    {itemName:'Panasonic I-ROOF 雨押え換気部材', category:'新設屋根工事', note:'下屋雨押え換気'},
+  valley:         {itemName:'ガルバリウム鋼板 谷板金', category:'新設屋根工事', note:'谷部'},
+  gutter:         {itemName:'Panasonic 集水器 ファインスケアNF-I型', category:'雨樋工事', note:'集水器'},
+  tatetoi:        {itemName:'Panasonic 竪樋 瞬水S15', category:'雨樋工事', note:'竪樋'}
+};
+const MAPPING_KEY = 'iraka_estimate_mapping';
+function loadMappingOverrides(){
+  try{ return JSON.parse(localStorage.getItem(MAPPING_KEY) || '{}'); }catch(e){ return {}; }
+}
+function saveMappingOverrides(overrides){
+  localStorage.setItem(MAPPING_KEY, JSON.stringify(overrides));
+}
+function getEstimateItem(componentKey, fallbackName){
+  const def = EST_MAPPING_DEFAULT[componentKey] || {itemName:fallbackName, category:'雨樋工事', note:''};
+  const overrides = loadMappingOverrides();
+  const ov = overrides[componentKey] || {};
+  return {
+    itemName: ov.itemName || def.itemName,
+    category: ov.category || def.category,
+    note: ov.note !== undefined ? ov.note : def.note
+  };
+}
+function renderMappingPanel(){
+  const box = document.getElementById('mappingPanelBody');
+  if(!box || !lastResult) return;
+  const overrides = loadMappingOverrides();
+  const keysUsed = [...new Set(lastResult.rows.map(r=>r[4].componentKey))];
+  box.innerHTML = keysUsed.map(key=>{
+    const def = EST_MAPPING_DEFAULT[key] || {itemName:key, category:'雨樋工事', note:''};
+    const current = getEstimateItem(key, key);
+    return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+      <span style="font-size:11px;color:#888;min-width:90px">Component: ${key}</span>
+      <input data-map="${key}" data-role="itemName" value="${current.itemName}" style="flex:2;min-width:160px;font-size:12px;padding:4px 6px">
+      <select data-map="${key}" data-role="category" style="font-size:12px;padding:4px">
+        <option value="新設屋根工事" ${current.category==='新設屋根工事'?'selected':''}>新設屋根工事</option>
+        <option value="雨樋工事" ${current.category==='雨樋工事'?'selected':''}>雨樋工事</option>
+      </select>
+      <input data-map="${key}" data-role="note" value="${current.note}" placeholder="摘要" style="flex:1;min-width:100px;font-size:12px;padding:4px 6px">
+    </div>`;
+  }).join('');
+}
+function saveMappingPanel(){
+  const overrides = loadMappingOverrides();
+  document.querySelectorAll('#mappingPanelBody [data-map]').forEach(el=>{
+    const key = el.dataset.map, role = el.dataset.role;
+    overrides[key] = overrides[key] || {};
+    overrides[key][role] = el.value;
+  });
+  saveMappingOverrides(overrides);
+  document.getElementById('mappingStatus').textContent = '✓ 保存しました。次回の積算実行・出力から反映されます。';
+  render();
+}
+function resetMappingPanel(){
+  localStorage.removeItem(MAPPING_KEY);
+  document.getElementById('mappingStatus').textContent = '初期設定に戻しました。';
+  render();
+}
 function renderCompareTable(){
   const tbody = document.getElementById('compareBody');
-  tbody.innerHTML = lastResult.rows.map((r,i)=>`
+  tbody.innerHTML = lastResult.rows.map((r,i)=>{
+    const est = getEstimateItem(r[4].componentKey, r[0]);
+    return `
     <tr>
-      <td>${r[0]}</td>
+      <td><b>${est.itemName}</b><div style="font-size:10px;color:#999">${r[0]}</div></td>
       <td>${r[1]}${r[2]}</td>
       <td><input type="number" step="0.01" style="width:70px" id="human-${i}" oninput="updateDiff(${i})" placeholder="人"></td>
       <td><input type="number" step="0.01" style="width:70px" id="adopt-${i}" value="${r[1]}" oninput="updateDiff(${i})" placeholder="採用"></td>
@@ -776,7 +858,8 @@ function renderCompareTable(){
         <input style="flex:1;min-width:140px" id="reason-diff-${i}" placeholder="なぜ違ったか（例：谷の始点認識が違う）">
         <input style="flex:1;min-width:140px" id="reason-adopt-${i}" placeholder="採用理由（例：現場で実測し採用）">
       </div>
-    </td></tr>`).join('');
+    </td></tr>`;
+  }).join('');
 }
 function updateDiff(i){
   const aiVal = lastResult.rows[i][1];
@@ -805,8 +888,9 @@ function saveLearningLog(){
   const entries = lastResult.rows.map((r,i)=>{
     const humanVal = parseFloat(document.getElementById('human-'+i)?.value);
     const adoptVal = getAdoptedValue(i);
+    const est = getEstimateItem(r[4].componentKey, r[0]);
     return {
-      item:r[0], aiValue:r[1], unit:r[2],
+      item:r[0], estimateItem:est.itemName, aiValue:r[1], unit:r[2],
       humanValue: isNaN(humanVal)?null:humanVal,
       adoptedValue: adoptVal,
       diffReason: document.getElementById('reason-diff-'+i)?.value || '',
