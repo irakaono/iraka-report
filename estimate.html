@@ -48,6 +48,7 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
 </head>
 <body>
 <header><a href="./portal.html">←</a>📐 AI積算システム <span style="font-size:12px;font-weight:400;opacity:.8">Ver.3.1</span></header>
+<div id="projectDashboard" style="background:#fff;padding:10px 14px;display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:#1f4e79;border-bottom:1px solid #e0e6ee"></div>
 <div class="wrap">
 
 <div class="section">
@@ -64,8 +65,10 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
   </div>
   <div id="unassignedBox" style="margin-bottom:14px"></div>
 
-  <div style="font-size:13px;font-weight:700;color:#1f4e79;margin:10px 0 6px">立面図</div>
-  <div class="row-flags" id="elevationSlots"></div>
+  <div style="font-size:13px;font-weight:700;color:#1f4e79;margin:10px 0 6px">立面図（Drawing・通常1枚に4面まとまっている）</div>
+  <div class="row-flags" style="grid-template-columns:1fr" id="elevationSlots"></div>
+  <div style="font-size:12px;color:#1f4e79;margin:10px 0 4px">↳ Views（この立面図の中の各面。位置メモを残せます）</div>
+  <div id="elevationViews" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
 
   <div style="font-size:13px;font-weight:700;color:#1f4e79;margin:14px 0 6px">平面図</div>
   <div class="row-flags" style="grid-template-columns:repeat(2,1fr)" id="planSlots"></div>
@@ -225,12 +228,10 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
     人が積算した資料（Teacher Data）をアップロードし、AI値・人積算値・採用値（最終確定値）を並べて管理します。
     「なぜ違ったか」「なぜその値を採用したか」を残すことがKnowledgeの成長につながります。
   </div>
-  <div id="humanDropZone" style="border:2px dashed #9db3c8;border-radius:12px;padding:16px;text-align:center;color:#5a7a9a;cursor:pointer;background:#f7f9fc;margin-bottom:10px">
-    <div style="font-size:24px">🧑‍🔧📄</div>
-    <div style="font-size:13px">人の積算資料（Teacher Data）をアップロード（Excel/PDF/CSV/JSON対応・参照表示）</div>
-    <input type="file" id="humanFileInput" accept="image/*,.pdf,.xlsx,.xls,.csv,.json" multiple style="display:none">
-  </div>
-  <div id="humanThumbs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
+  <div style="font-size:13px;font-weight:700;color:#1f4e79;margin:10px 0 6px">積算資料（Teacher Data）</div>
+  <div class="row-flags" id="estimateDocSlots"></div>
+  <input type="file" id="estimateDocFileInput" accept="image/*,.pdf,.xlsx,.xls,.csv,.json" style="display:none">
+  <div style="font-size:11px;color:#999;margin:6px 0 12px">クリックしてExcel/PDF/CSV/JSONを選択（参照表示のみ。数値は下の表に手入力してください）</div>
 
   <table>
     <thead><tr><th>品名</th><th>AI</th><th>人</th><th>採用値</th><th>差分</th></tr></thead>
@@ -552,6 +553,7 @@ function render(){
   lastResult.rows = rows;
   renderCompareTable();
   renderMappingPanel();
+  if(typeof renderProjectDashboard==='function') renderProjectDashboard();
 
   document.getElementById('evidenceBox').innerHTML = `
     <div class="evidence-step">【屋根タイプ判定】${ROOFTYPE_LABEL[roofType]||roofType}（RULE-001）</div>
@@ -688,6 +690,8 @@ function exportExcel(){
   });
 
   XLSX.writeFile(newWb, tmplConf.fileName || '積算結果_見積書.xlsx');
+  window.__estimateExported = true;
+  if(typeof renderProjectDashboard==='function') renderProjectDashboard();
 }
 
 function updateShimoyaSectionVisibility(){
@@ -699,23 +703,70 @@ function updateShimoyaSectionVisibility(){
 });
 updateShimoyaSectionVisibility();
 
-/* ===== 図面管理（種類別スロット） ===== */
+/* ===== 図面管理（Drawing = 実ファイル、View = 図面内の参照領域） =====
+   実務では立面図は1枚のPDFに南北東西4面がまとまっていることが多いため、
+   Drawingは1つの「立面図」ファイルとして管理し、View（南立面/北立面/東立面/西立面）で
+   その中のどの領域を参照しているかをメタデータとして持つ。 */
 const DRAWING_SLOTS = [
-  {key:'elev_south', group:'elevation', label:'南立面図'},
-  {key:'elev_north', group:'elevation', label:'北立面図'},
-  {key:'elev_east',  group:'elevation', label:'東立面図'},
-  {key:'elev_west',  group:'elevation', label:'西立面図'},
+  {key:'elevation', group:'elevation', label:'立面図（4面）'},
   {key:'plan_roof',  group:'plan', label:'屋根伏図'},
   {key:'plan_layout',group:'plan', label:'配置図'},
 ];
 const drawings = {}; // key -> {name,dataUrl,isPdf}
 let activeSlotKey = null;
 
+/* Views: 図面内の参照領域。dim-fieldの「根拠図面」はこのViews一覧から選ぶ */
+let VIEWS = [
+  {id:'v_south', label:'南立面', drawingKey:'elevation', note:''},
+  {id:'v_north', label:'北立面', drawingKey:'elevation', note:''},
+  {id:'v_east',  label:'東立面', drawingKey:'elevation', note:''},
+  {id:'v_west',  label:'西立面', drawingKey:'elevation', note:''},
+  {id:'v_roof',  label:'屋根伏図', drawingKey:'plan_roof', note:''},
+  {id:'v_layout',label:'配置図', drawingKey:'plan_layout', note:''},
+];
+function renderViews(){
+  const box = document.getElementById('elevationViews');
+  if(!box) return;
+  const elevViews = VIEWS.filter(v=>v.drawingKey==='elevation');
+  box.innerHTML = elevViews.map(v=>`
+    <div style="display:flex;gap:6px;align-items:center;background:#f7f9fc;border-radius:8px;padding:6px 8px">
+      <button class="btn secondary" style="padding:4px 8px;font-size:11px" onclick="referenceView('${v.id}')">参照</button>
+      <b style="font-size:12px;min-width:56px">${v.label}</b>
+      <input value="${v.note}" placeholder="位置メモ(例:左上・1/3ページ目)" style="flex:1;font-size:11px;padding:4px 6px" oninput="updateViewNote('${v.id}', this.value)">
+    </div>`).join('');
+}
+function updateViewNote(viewId, note){
+  const v = VIEWS.find(v=>v.id===viewId);
+  if(v) v.note = note;
+}
+function referenceView(viewId){
+  const v = VIEWS.find(v=>v.id===viewId);
+  if(!v) return;
+  activeDrawingKey = v.drawingKey;
+  renderSlots();
+  const d = drawings[v.drawingKey];
+  const bar = document.getElementById('activeDrawingBar');
+  bar.style.display = 'block';
+  if(!d){
+    bar.textContent = `📌 参照中: ${v.label}（元の図面が未アップロードです）`;
+    document.getElementById('activeDrawingPreview').innerHTML = '';
+    return;
+  }
+  bar.textContent = `📌 参照中: ${v.label}${v.note?'（'+v.note+'）':''} ／ 元図面: ${d.name}`;
+  const prev = document.getElementById('activeDrawingPreview');
+  prev.innerHTML = d.isPdf
+    ? `<div style="font-size:12px;color:#666">PDF: ${d.name}（元図面をタップして開く場合はスロットの「変更」の左のアイコンを利用）</div>`
+    : `<img src="${d.dataUrl}" style="max-width:100%;border-radius:10px;box-shadow:0 2px 10px #0002">`;
+  refreshFieldEvidenceOptions();
+}
+
 function renderSlots(){
   const elevBox = document.getElementById('elevationSlots');
   const planBox = document.getElementById('planSlots');
   elevBox.innerHTML = DRAWING_SLOTS.filter(s=>s.group==='elevation').map(slotHtml).join('');
   planBox.innerHTML = DRAWING_SLOTS.filter(s=>s.group==='plan').map(slotHtml).join('');
+  renderViews();
+  if(typeof renderProjectDashboard==='function') renderProjectDashboard();
 }
 function slotHtml(s){
   const d = drawings[s.key];
@@ -770,8 +821,7 @@ let otherDrawings = [];   // {id,name,dataUrl,isPdf} スロットに当てはま
 let fileIdCounter = 0;
 
 const FILENAME_GUESS = [
-  {re:/南/, key:'elev_south'}, {re:/北/, key:'elev_north'},
-  {re:/東/, key:'elev_east'},  {re:/西/, key:'elev_west'},
+  {re:/南|北|東|西|立面/, key:'elevation'},
   {re:/伏図|屋根伏/, key:'plan_roof'},
   {re:/配置/, key:'plan_layout'}
 ];
@@ -868,7 +918,7 @@ function buildDimEvidenceUI(){
     div.innerHTML = `
       <select data-field="${id}" data-role="drawing" style="flex:1">
         <option value="">根拠図面:未指定</option>
-        ${DRAWING_SLOTS.map(s=>`<option value="${s.key}">${s.label}</option>`).join('')}
+        ${VIEWS.map(v=>`<option value="${v.id}">${v.label}</option>`).join('')}
       </select>
       <input data-field="${id}" data-role="position" placeholder="根拠位置:未指定" style="flex:1">
       <span class="rule-badge">${rule}</span>
@@ -888,34 +938,71 @@ function refreshFieldEvidenceOptions(){
     if(!sel) return;
     const current = sel.value;
     sel.innerHTML = `<option value="">根拠図面:未指定</option>` +
-      DRAWING_SLOTS.map(s=>`<option value="${s.key}" ${s.key===current?'selected':''}>${s.label}</option>`).join('');
+      VIEWS.map(v=>`<option value="${v.id}" ${v.id===current?'selected':''}>${v.label}</option>`).join('');
   });
 }
 buildDimEvidenceUI();
 
-/* ===== ⑥ 人の積算資料アップロード（参照表示のみ） ===== */
-const humanDropZone = document.getElementById('humanDropZone');
-const humanFileInput = document.getElementById('humanFileInput');
-const humanThumbs = document.getElementById('humanThumbs');
-let humanFiles = [];
-humanDropZone.addEventListener('click', ()=>humanFileInput.click());
-humanFileInput.addEventListener('change', e=>{
-  [...e.target.files].forEach(file=>{
-    const reader = new FileReader();
-    reader.onload = ev=>{
-      humanFiles.push({name:file.name, dataUrl:ev.target.result, isImg:file.type.startsWith('image/')});
-      renderHumanThumbs();
-    };
-    reader.readAsDataURL(file);
-  });
-});
-function renderHumanThumbs(){
-  humanThumbs.innerHTML = humanFiles.map((f,i)=>`
-    <div style="font-size:11px;background:#f4f7fb;border-radius:8px;padding:6px 10px">
-      ${f.isImg?'🖼️':'📄'} ${f.name.slice(0,18)}
-      <span style="cursor:pointer;color:#c0392b;margin-left:4px" onclick="humanFiles.splice(${i},1);renderHumanThumbs()">×</span>
-    </div>`).join('');
+/* ===== ⑥ 積算資料スロット（AI積算/人積算①②/採用積算・参照表示のみ） ===== */
+const ESTIMATE_DOC_SLOTS = [
+  {key:'ai',      label:'AI積算', autoNote:'このページの積算結果'},
+  {key:'human1',  label:'人積算①', autoNote:null},
+  {key:'human2',  label:'人積算②', autoNote:null},
+  {key:'adopted', label:'採用積算', autoNote:null}
+];
+const estimateDocs = {}; // key -> {name,dataUrl,isImg}
+let activeEstimateDocKey = null;
+function renderEstimateDocSlots(){
+  const box = document.getElementById('estimateDocSlots');
+  if(!box) return;
+  box.innerHTML = ESTIMATE_DOC_SLOTS.map(s=>{
+    const d = estimateDocs[s.key];
+    const isAi = s.key==='ai';
+    const thumb = isAi ? `<div style="font-size:22px">🤖</div>`
+      : (d ? (d.isImg?`<img src="${d.dataUrl}" style="width:100%;height:48px;object-fit:cover;border-radius:6px">`:`<div style="font-size:22px">📄</div>`) : `<div style="font-size:22px;color:#bbb">＋</div>`);
+    const status = isAi ? '✓ 自動連携' : (d ? '✓ '+d.name.slice(0,10) : '未アップロード');
+    return `<div class="flagbox" style="cursor:${isAi?'default':'pointer'};padding:6px" ${isAi?'':`onclick="pickEstimateDocSlot('${s.key}')"`}>
+      <b style="font-size:11px">${s.label}</b>
+      ${thumb}
+      <div style="font-size:10px;color:${(isAi||d)?'#1a7a4c':'#999'};margin-top:3px">${status}</div>
+      ${(!isAi && d)?`<div style="font-size:9px;color:#1f4e79" onclick="event.stopPropagation();pickEstimateDocSlot('${s.key}')">変更</div>`:''}
+    </div>`;
+  }).join('');
 }
+function pickEstimateDocSlot(key){
+  activeEstimateDocKey = key;
+  document.getElementById('estimateDocFileInput').click();
+}
+document.getElementById('estimateDocFileInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file || !activeEstimateDocKey) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    estimateDocs[activeEstimateDocKey] = {name:file.name, dataUrl:ev.target.result, isImg:file.type.startsWith('image/')};
+    renderEstimateDocSlots();
+    if(typeof renderProjectDashboard==='function') renderProjectDashboard();
+  };
+  reader.readAsDataURL(file);
+});
+renderEstimateDocSlots();
+
+/* ===== Project Dashboard（進捗の一覧表示） ===== */
+function renderProjectDashboard(){
+  const box = document.getElementById('projectDashboard');
+  if(!box) return;
+  const drawingCount = DRAWING_SLOTS.filter(s=>drawings[s.key]).length;
+  const estimateCount = ['human1','human2','adopted'].filter(k=>estimateDocs[k]).length;
+  const hasResult = !!lastResult;
+  const logCount = JSON.parse(localStorage.getItem('iraka_learning_log') || '[]').length;
+  box.innerHTML = `
+    <span>📁 図面 <b>${drawingCount}/${DRAWING_SLOTS.length}</b></span>
+    <span>📝 積算資料 <b>${estimateCount}件</b></span>
+    <span>📊 積算結果 <b>${hasResult?'✓ 完了':'未実行'}</b></span>
+    <span>🧾 見積書出力 <b>${window.__estimateExported?'✓ 済':'未出力'}</b></span>
+    <span>📚 Learning <b>${logCount}件</b></span>
+  `;
+}
+renderProjectDashboard();
 
 /* ===== Estimate Item Mapping（Component → 商品） =====
    Knowledge → Engine → Assembly → Estimate Mapping → 見積書
@@ -1115,6 +1202,7 @@ function saveLearningLog(){
   localStorage.setItem(key, JSON.stringify(existing));
   document.getElementById('learningStatus').textContent = `✓ 保存しました（${entries.length}件）。この端末のブラウザ内に保存されています。`;
   renderLearningLogList();
+  if(typeof renderProjectDashboard==='function') renderProjectDashboard();
 }
 function renderLearningLogList(){
   const key = 'iraka_learning_log';
