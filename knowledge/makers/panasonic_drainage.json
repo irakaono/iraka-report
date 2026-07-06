@@ -1,0 +1,57 @@
+{
+  "maker": "Panasonic",
+  "product": "ファインスケアNF-I型 + 瞬水S15",
+  "type": "サイホン型（満水時サイホン現象発生）",
+  "updated": "2022年版",
+  "capacity": [
+    {
+      "rainfall_mmh": 160,
+      "area_m2": 60,
+      "region_example": [
+        "三重",
+        "高知",
+        "沖縄"
+      ]
+    },
+    {
+      "rainfall_mmh": 140,
+      "area_m2": 69,
+      "region_example": [
+        "埼玉",
+        "東京",
+        "神奈川",
+        "千葉",
+        "栃木",
+        "群馬"
+      ]
+    },
+    {
+      "rainfall_mmh": 120,
+      "area_m2": 80,
+      "region_example": [
+        "北関東",
+        "静岡",
+        "愛媛",
+        "福岡",
+        "佐賀",
+        "長崎"
+      ]
+    },
+    {
+      "rainfall_mmh": 100,
+      "area_m2": 96,
+      "region_example": [
+        "北海道",
+        "山形",
+        "新潟"
+      ]
+    }
+  ],
+  "maxSpacing_m": 20,
+  "siphonCondition": "落し口から2m以内に合流部があるとサイホンが発生しない",
+  "notSiphon": [
+    "バルコニー",
+    "陸屋根"
+  ],
+  "ruleRef": "RULE-300"
+}

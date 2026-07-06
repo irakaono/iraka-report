@@ -1,0 +1,31 @@
+{
+  "_schema": "ComponentHistoryIndex Ver.1.0",
+  "description": "全ComponentHistoryの索引。assemblyType・productKeyで検索できる。",
+  "components": [
+    {
+      "componentId": "CH-Valley-001",
+      "assemblyType": "Valley",
+      "productKey": "Valley380",
+      "displayName": "谷板金 幅380mm",
+      "totalProjects": 1,
+      "file": "ComponentHistory_Valley380.json"
+    },
+    {
+      "componentId": "CH-Gutter-001",
+      "assemblyType": "Gutter",
+      "productKey": "NF-I",
+      "displayName": "ファインスケア NF-I型",
+      "totalProjects": 5,
+      "file": "ComponentHistory_NF-I.json"
+    },
+    {
+      "componentId": "CH-Vent-001",
+      "assemblyType": "Vent",
+      "productKey": "I-ROOF-1P",
+      "displayName": "I-ROOF 1P 換気部材",
+      "totalProjects": 5,
+      "file": "ComponentHistory_I-ROOF-1P.json"
+    }
+  ],
+  "updatedAt": "2026-07-06"
+}

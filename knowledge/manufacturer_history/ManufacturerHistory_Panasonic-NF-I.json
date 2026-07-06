@@ -1,0 +1,64 @@
+{
+  "_schema": "IrakaManufacturerHistory Ver.1.0",
+  "makerId": "MFR-Panasonic-NF-I",
+  "maker": "Panasonic",
+  "product": "ファインスケア NF-I型",
+  "category": "gutter",
+  "createdAt": "2026-07-06",
+  "currentSpec": {
+    "version": "2022年版",
+    "asOf": "2022-01-01",
+    "nominalLength_mm": 4000,
+    "overlap_mm": 50,
+    "drainageCapacity": {
+      "160mm/h": {
+        "area_m2": 60,
+        "withS15": true
+      },
+      "140mm/h": {
+        "area_m2": 69,
+        "withS15": true
+      },
+      "120mm/h": {
+        "area_m2": 80,
+        "withS15": true
+      },
+      "100mm/h": {
+        "area_m2": 96,
+        "withS15": true
+      }
+    },
+    "maxSpacing_m": 20,
+    "notes": "瞬水S15竪樋との組み合わせ前提。サイホン現象発生条件あり。"
+  },
+  "revisionHistory": [
+    {
+      "revisionId": "REV-NF-I-001",
+      "date": "2022-01-01",
+      "version": "2022年版",
+      "changeType": "spec_change",
+      "before": {
+        "description": "2019年以前の旧排水能力表"
+      },
+      "after": {
+        "140mm/h": {
+          "area_m2": 69
+        }
+      },
+      "reason": "サイホン効果の正確な計測・再評価による排水能力改訂",
+      "impact": "甍AI積算 RULE-300はこの2022年版をベースとする",
+      "affectedRules": [
+        "RULE-300"
+      ],
+      "source": "Panasonic 住宅用雨とい 積算資料 2022年版",
+      "confirmedBy": "小野"
+    }
+  ],
+  "discontinuedProducts": [],
+  "relatedRules": [
+    "RULE-300",
+    "RULE-006",
+    "RULE-008"
+  ],
+  "notes": "甍標準採用製品。2026年7月時点で廃番予定なし。"
+}

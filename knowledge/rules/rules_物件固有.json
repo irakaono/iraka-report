@@ -1,0 +1,29 @@
+{
+  "category": "物件固有",
+  "rules": [
+    {
+      "id": "RULE-900",
+      "category": "物件固有",
+      "title": "Case004依存：水上=下屋全周4面",
+      "definition": "切妻+下屋建物（天沼邸タイプ）の水上立ち上がりは下屋全周4面で計上する。南北×梁間+東西×桁行。",
+      "applicableRoofType": "kirituma",
+      "caseRefs": [
+        "Case004"
+      ],
+      "formula": "shimoya_N + shimoya_S + shimoya_E + shimoya_W",
+      "since": "Case004学習後"
+    },
+    {
+      "id": "RULE-901",
+      "category": "物件固有",
+      "title": "Case005依存：水上=東面1か所",
+      "definition": "片流れ+南面下屋建物（福堀邸タイプ）の水上立ち上がりは東面1か所のみ。梁間5.460+南突出1.440=6.9m。",
+      "applicableRoofType": "katanagare_south",
+      "caseRefs": [
+        "Case005"
+      ],
+      "formula": "east_wall = shimoya_depth + noki_S",
+      "since": "Case005学習後"
+    }
+  ]
+}

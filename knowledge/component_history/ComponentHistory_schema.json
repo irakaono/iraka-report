@@ -1,0 +1,87 @@
+{
+  "_schema": "IrakaComponentHistory Ver.1.0",
+  "_description": "部材ごとの採用履歴・統計・失敗例・HumanCorrection・Rule変更履歴を保存する。ProjectCardが案件単位なら、ComponentHistoryは部材単位。住宅板金業界のナレッジOSを構成するコアデータ。",
+  "_note": "見積書フォーマット: 品目A列/数量P列/単位S列/単価U列/金額X列/摘要AC列（RULE-402）",
+  "componentId": "CH-{TYPE}-001",
+  "assemblyType": "Valley | Ridge | Hip | Eave | Verge | Apron | Gutter | Downspout | Vent | SnowStop",
+  "productKey": "Valley380 | NF-I | I-ROOF-2P | ...",
+  "displayName": "谷板金 幅380mm",
+  "category": "roof | gutter | vent | drain",
+  "createdAt": "2026-07-06",
+  "updatedAt": "2026-07-06",
+  "stats": {
+    "totalProjects": 0,
+    "totalQuantity": 0.0,
+    "unit": "m | ヶ所 | 本 | 枚",
+    "avgQuantityPerProject": 0.0,
+    "avgSlope_sun": null,
+    "avgLaborPerUnit": null,
+    "avgProfitRate": null,
+    "claimCount": 0,
+    "lastUpdated": "2026-07-06"
+  },
+  "projectRefs": [
+    {
+      "projectId": "P2026-001",
+      "projectName": "関根 柊平様邸",
+      "date": "2026-07-06",
+      "quantity": null,
+      "slope_sun": null,
+      "profitRate": null,
+      "evidenceId": "EV-P2026-001-xxx",
+      "note": ""
+    }
+  ],
+  "humanCorrections": [
+    {
+      "correctionId": "HC-001",
+      "projectId": "P2026-005",
+      "projectName": "福堀 佑記様邸",
+      "date": "2026-07-06",
+      "aiValue": null,
+      "humanValue": null,
+      "unit": null,
+      "reason": "",
+      "correctedBy": "小野",
+      "approved": true,
+      "ruleLearned": null,
+      "evidenceId": ""
+    }
+  ],
+  "failures": [
+    {
+      "failureId": "FAIL-001",
+      "projectId": null,
+      "date": null,
+      "description": "",
+      "cause": "",
+      "resolution": "",
+      "ruleAdded": null,
+      "severity": "minor | major | critical"
+    }
+  ],
+  "ruleHistory": [
+    {
+      "ruleId": "RULE-120",
+      "action": "added | modified | deprecated",
+      "date": "2026-07-06",
+      "reason": "谷板金は隅棟谷専用伸び率で算出すると確立",
+      "projectRef": "Case002（大垣邸）で確認",
+      "changedBy": "小野"
+    }
+  ],
+  "makerHistory": [
+    {
+      "date": null,
+      "maker": null,
+      "productCode": null,
+      "nominalLength_mm": null,
+      "overlap_mm": null,
+      "unitPrice": null,
+      "reason": "廃番 | 価格改定 | 仕様変更",
+      "note": ""
+    }
+  ],
+  "photos": [],
+  "memos": []
+}

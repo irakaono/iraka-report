@@ -1,0 +1,31 @@
+{
+  "id": "EV-2026-005-001",
+  "projectId": "P2026-005",
+  "itemName": "屋根面積（2F片流れ+1F南面下屋）",
+  "category": "roof",
+  "value": 77.12,
+  "unit": "㎡",
+  "formula": "（2F）11.365×6.055×1.020 + （1F）11.065×2.043×1.020",
+  "ruleRefs": [
+    "RULE-001",
+    "RULE-100"
+  ],
+  "drawingRef": "1F・2F平面図 + 南側立面図",
+  "drawingPage": "p.3-5",
+  "slopeApplied": true,
+  "slopeRate": 1.02,
+  "calcBase": "projection_area",
+  "caseRef": "Case003",
+  "diffFromCase": -0.07,
+  "confirmedBy": "小野",
+  "confirmedAt": "2026-07-06",
+  "correctionNote": null,
+  "alerts": [
+    {
+      "level": "CAUTION",
+      "ruleRef": "RULE-500",
+      "msg": "AI算出93.25㎡ vs 手拾い77.12㎡（1F下屋計上方法の差）"
+    }
+  ],
+  "version": "Ver.3.0"
+}

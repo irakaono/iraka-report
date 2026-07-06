@@ -1,0 +1,91 @@
+{
+  "_schema": "IrakaDetailHistory Ver.1.0",
+  "detailId": "DET-APRON-001",
+  "displayName": "切妻 下屋 雨押え ALC外壁",
+  "category": "apron",
+  "createdAt": "2026-07-06",
+  "updatedAt": "2026-07-06",
+  "conditions": {
+    "roofType": "kirituma_with_shimoya",
+    "slope_sun": 5.0,
+    "eaveType": "standard",
+    "wallMaterial": "ALC",
+    "gutter": "NF-I",
+    "downspout": "phi60",
+    "kerabaWidth_mm": 300,
+    "roofMaterial": "galvalume",
+    "tags": [
+      "切妻",
+      "下屋",
+      "雨押え",
+      "ALC外壁",
+      "I-ROOF雨押え換気",
+      "全周計上"
+    ]
+  },
+  "stats": {
+    "totalProjects": 1,
+    "avgProfitRate": null,
+    "claimCount": 0,
+    "reworkCount": 0,
+    "lastUsed": "2026-07-06"
+  },
+  "projectRefs": [
+    {
+      "projectId": "P2026-004",
+      "projectName": "天沼 秀教様邸",
+      "date": "2026-07-06",
+      "note": "切妻+1F南面下屋 ALC外壁 水上全周34.55m RULE-900"
+    }
+  ],
+  "assemblySet": [
+    {
+      "assemblyType": "Apron",
+      "productKey": "standard",
+      "ruleRef": "RULE-003",
+      "note": "立面図実長。伸び率不要。ALC取り合いは防水シールが必須。"
+    },
+    {
+      "assemblyType": "Vent",
+      "productKey": "I-ROOF-2P",
+      "ruleRef": "RULE-202",
+      "note": "雨押え換気2P 下屋天井面積÷36.8で本数決定"
+    }
+  ],
+  "constructionNotes": [
+    {
+      "noteId": "NOTE-001",
+      "category": "caution",
+      "content": "ALC外壁との取り合いは防水シールを必ず施工。ALCの継ぎ目位置に注意。",
+      "addedBy": "小野",
+      "date": "2026-07-06",
+      "evidenceId": null
+    },
+    {
+      "noteId": "NOTE-002",
+      "category": "caution",
+      "content": "切妻+下屋の水上は全周4面（RULE-900）。天沼邸で確定。片流れの全周計上（RULE-901NG）と混同しないこと。",
+      "addedBy": "小野",
+      "date": "2026-07-06",
+      "evidenceId": "EV-P2026-004-mizukami"
+    }
+  ],
+  "humanCorrections": [],
+  "failures": [],
+  "media": [],
+  "relatedRules": [
+    "RULE-003",
+    "RULE-007",
+    "RULE-202",
+    "RULE-900"
+  ],
+  "ruleHistory": [
+    {
+      "ruleId": "RULE-900",
+      "action": "applied",
+      "date": "2026-07-06",
+      "reason": "切妻+下屋は水上全周4面。天沼邸（Case004）で確立。"
+    }
+  ],
+  "learningCandidates": []
+}

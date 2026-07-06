@@ -1,0 +1,128 @@
+{
+  "_schema": "IrakaKnowledgeIndex Ver.1.0",
+  "description": "甍AI積算OS — Knowledge層の全体マップ。住宅板金積算のナレッジOS。",
+  "version": "Ver.3.1",
+  "updatedAt": "2026-07-06",
+  "layers": {
+    "Rules": {
+      "path": "rules/",
+      "count": 29,
+      "files": [
+        "rules_all.json",
+        "rules_屋根積算.json",
+        "rules_換気設計.json",
+        "rules_排水設計.json",
+        "..."
+      ],
+      "description": "全積算ルール。RULE-001〜RULE-901。AIとEngineの判断基盤。"
+    },
+    "Dictionary": {
+      "path": "makers/",
+      "files": [
+        "assembly_specs.json",
+        "valley_materials.json"
+      ],
+      "description": "Assembly副資材スペック辞典。部材ごとの定尺・重ね・人工。"
+    },
+    "Makers": {
+      "path": "makers/",
+      "files": [
+        "panasonic_drainage.json",
+        "iroof_capacity.json"
+      ],
+      "description": "メーカー排水・換気能力表。Engineが参照する技術基準。"
+    },
+    "ProjectCards": {
+      "path": "cases/",
+      "files": [
+        "ProjectCard_template.json",
+        "ProjectCard_Case001_Sekine.json"
+      ],
+      "description": "案件単位の全情報。図面→Annotation→Engine→Evidence→見積→実績→Learning。"
+    },
+    "ComponentHistory": {
+      "path": "component_history/",
+      "files": [
+        "ComponentHistory_Valley380.json",
+        "ComponentHistory_NF-I.json",
+        "ComponentHistory_I-ROOF-1P.json"
+      ],
+      "description": "部材単位の採用履歴・統計・HumanCorrection・Rule変更。"
+    },
+    "DetailHistory": {
+      "path": "detail_history/",
+      "files": [
+        "DetailHistory_DET-GUTTER-001.json",
+        "DetailHistory_DET-APRON-001.json"
+      ],
+      "description": "納まり単位（部材の組み合わせ×現場条件）の知識DB。最小再利用単位。"
+    },
+    "ManufacturerHistory": {
+      "path": "manufacturer_history/",
+      "files": [
+        "ManufacturerHistory_Panasonic-NF-I.json",
+        "ManufacturerHistory_IROOF.json"
+      ],
+      "description": "メーカー仕様変更・廃番・改訂履歴。『当時の仕様』を追跡できる。"
+    },
+    "Evidence": {
+      "path": "evidence_templates/",
+      "files": [
+        "evidence_template.json",
+        "evidence_Case005_mizukami_example.json"
+      ],
+      "description": "積算根拠4層構造（Observation/Reasoning/Calculation）+ HumanCorrection。"
+    },
+    "TestCases": {
+      "path": "testcases/",
+      "files": [
+        "testcases_all.json"
+      ],
+      "description": "Case001〜005の期待値JSON。npm testで自動検証（RULE-601）。"
+    }
+  },
+  "knowledgeGranularity": {
+    "description": "知識の粒度階層",
+    "hierarchy": [
+      {
+        "level": 1,
+        "unit": "会社",
+        "example": "甍・小泉建設",
+        "storage": "会社固有ノウハウ全体"
+      },
+      {
+        "level": 2,
+        "unit": "案件",
+        "example": "関根様邸P2026-001",
+        "storage": "ProjectCard"
+      },
+      {
+        "level": 3,
+        "unit": "部材",
+        "example": "NF-I・I-ROOF-1P",
+        "storage": "ComponentHistory"
+      },
+      {
+        "level": 4,
+        "unit": "納まり",
+        "example": "片流れ軒ゼロNF-Iサイディング",
+        "storage": "DetailHistory"
+      },
+      {
+        "level": 5,
+        "unit": "ルール",
+        "example": "RULE-002 軒は立面図実長",
+        "storage": "Rules"
+      },
+      {
+        "level": 6,
+        "unit": "根拠",
+        "example": "EV-P2026-001-001",
+        "storage": "Evidence"
+      }
+    ]
+  },
+  "systemName": "甍AI積算OS（Iraka Knowledge OS）",
+  "vision": "積算はこのOSの機能の一つ。施工計画・材料選定・原価管理・品質管理・技術継承まで同じ知識基盤で動かす。",
+  "motto": "AIは積算を行うのではなく、積算理由を構築する。"
+}

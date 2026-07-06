@@ -1,0 +1,135 @@
+{
+  "category": "屋根積算",
+  "rules": [
+    {
+      "id": "RULE-010",
+      "category": "屋根積算",
+      "title": "破風板金は鼻隠し・ケラバ・片棟を統合計上する",
+      "definition": "甍さんの積算では破風板金に「軒先鼻隠し + ケラバ + 片棟端部」を統合して計上する。",
+      "rationale": "天沼邸・福堀邸の見積書で確認。軒先19.55m+ケラバ20.1m+片棟12m≈54.65m。",
+      "caseRefs": [
+        "Case004",
+        "Case005"
+      ],
+      "since": "Case004学習後"
+    },
+    {
+      "id": "RULE-100",
+      "category": "屋根積算",
+      "title": "屋根面積=平面投影面積×流れ勾配伸び率",
+      "definition": "屋根面積 = 平面投影面積 × 流れ勾配伸び率。隅棟・谷には専用伸び率を使用する。",
+      "slopeRates": {
+        "2寸": 1.02,
+        "3寸": 1.044,
+        "4寸": 1.077,
+        "5寸": 1.118,
+        "6寸": 1.166,
+        "8寸": 1.281,
+        "10寸": 1.414
+      },
+      "since": "Ver.5.0"
+    },
+    {
+      "id": "RULE-120",
+      "category": "屋根積算",
+      "title": "谷板金は谷Line長さ × 隅棟・谷専用伸び率で算出する",
+      "definition": "谷板金の実長 = 平面図（屋根伏図）上の谷Line長さ × 隅棟・谷専用伸び率。通常の流れ勾配伸び率は使わない。",
+      "formula": "隅棟・谷伸び率 = √(1 + (勾配² ÷ 2))  ※勾配は4寸=0.4、5寸=0.5として代入",
+      "examples": [
+        {
+          "slope_sun": 4,
+          "rate": 1.0392,
+          "calc": "√(1 + 0.4²÷2) = √1.080 = 1.039"
+        },
+        {
+          "slope_sun": 5,
+          "rate": 1.0607,
+          "calc": "√(1 + 0.5²÷2) = √1.125 = 1.061"
+        },
+        {
+          "slope_sun": 6,
+          "rate": 1.0863,
+          "calc": "√(1 + 0.6²÷2) = √1.180 = 1.087"
+        },
+        {
+          "slope_sun": 2,
+          "rate": 1.01,
+          "calc": "√(1 + 0.2²÷2) = √1.020 = 1.010"
+        }
+      ],
+      "multi_slope_rule": "主屋・下屋の勾配が異なる場合は大きい方の勾配を採用（安全側）。将来実装では主屋勾配・下屋勾配・谷の向きを個別に保持して専用計算を行う。",
+      "coordinate_rule": "谷LineのPDF座標はAI推定禁止。人がAnnotationJSONで拾った座標を正とする（RULE-411との整合）。",
+      "prohibited": [
+        "通常の流れ勾配伸び率（RULE-100）を谷板金に使うこと",
+        "AIが谷Lineの座標を自動推定すること",
+        "谷伸び率に流れ伸び率を代用すること"
+      ],
+      "caseRefs": [
+        "Case002"
+      ],
+      "since": "Ver.3.0（2026年7月 小野様邸判断基準より確定）"
+    },
+    {
+      "id": "RULE-121",
+      "category": "屋根積算",
+      "title": "谷板金の発注数量は実長÷有効長の切り上げ枚数で算出する",
+      "definition": "谷実長 ≠ 発注数量。実長を材料の有効長で割り切り上げて必要枚数を求め、枚数×定尺長さを発注長とする。",
+      "formula": "必要枚数 = ceil(実長 ÷ 有効長)  /  発注長 = 必要枚数 × 定尺長さ",
+      "example": {
+        "actualLength_m": 5.19,
+        "nominalLength_m": 2.0,
+        "overlap_mm": 100,
+        "effectiveLength_m": 1.9,
+        "pieces": 3,
+        "orderLength_m": 6.0,
+        "calc": "ceil(5.19 ÷ 1.9) = ceil(2.73) = 3枚  →  発注6m"
+      },
+      "since": "Ver.3.0"
+    },
+    {
+      "id": "RULE-122",
+      "category": "屋根積算",
+      "title": "谷板金の有効長はメーカー・製品・重ね寸法でKnowledgeから取得する",
+      "definition": "有効長 = 定尺長さ - 重ね寸法。メーカーごとに異なるためKnowledge(valley_materials.json)から取得する。デフォルトは定尺2000mm・重ね100mm・有効長1900mm。",
+      "knowledgeRef": "makers/valley_materials.json",
+      "defaultSpec": {
+        "nominalLength_mm": 2000,
+        "overlap_mm": 100,
+        "effectiveLength_mm": 1900
+      },
+      "since": "Ver.3.0"
+    },
+    {
+      "id": "RULE-123",
+      "category": "屋根積算",
+      "title": "谷ジョイント数は（枚数-1）。副資材はジョイント数から派生する",
+      "definition": "ジョイント数 = 枚数 - 1。シーラー・ジョイントビス・防水処理材はジョイント数から自動計算する。",
+      "formula": "ジョイント数 = pieces - 1",
+      "derivedItems": [
+        "シーラー（コーキング材）",
+        "ジョイントビス",
+        "防水テープ"
+      ],
+      "since": "Ver.3.0"
+    },
+    {
+      "id": "RULE-124",
+      "category": "屋根積算",
+      "title": "谷はValley Assemblyとして谷板金・副資材・人工を一括生成する",
+      "definition": "谷1箇所の積算はValley Assemblyとして出力する。谷板金本体だけでなく固定ビス・ジョイント・シーラー・人工をまとめて生成する。",
+      "assemblySchema": {
+        "assembly": "Valley",
+        "length_m": "実長(m)",
+        "material": "谷板金380など",
+        "pieces": "必要枚数",
+        "joint": "ジョイント数(=pieces-1)",
+        "screw_per_piece": 24,
+        "screw_total": "screw_per_piece × pieces",
+        "sealer": "ジョイント数と同数（本）",
+        "labor_unit": "人工/m（デフォルト0.07人工/m）"
+      },
+      "futureNote": "将来実装: 谷LineをFace×Faceから生成する。左右FaceのそれぞれのEdgeが交差する点が谷のラインになる。これによりLine長さではなくFace勾配から谷専用実長を計算できる。",
+      "since": "Ver.3.0"
+    }
+  ]
+}

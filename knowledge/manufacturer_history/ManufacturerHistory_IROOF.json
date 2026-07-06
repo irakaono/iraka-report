@@ -1,0 +1,67 @@
+{
+  "_schema": "IrakaManufacturerHistory Ver.1.0",
+  "makerId": "MFR-IROOF-換気",
+  "maker": "Panasonic (I-ROOF)",
+  "product": "I-ROOF 換気部材シリーズ",
+  "category": "vent",
+  "createdAt": "2026-07-06",
+  "currentSpec": {
+    "version": "Ver.2（現行）",
+    "asOf": "2020-01-01",
+    "lineup": {
+      "I-ROOF-1P": {
+        "棟換気_m2": 35,
+        "片流れ換気_m2": 17.5,
+        "雨押え換気_m2": 18.4
+      },
+      "I-ROOF-2P": {
+        "棟換気_m2": 70,
+        "片流れ換気_m2": 35.0,
+        "雨押え換気_m2": 36.8
+      }
+    },
+    "calcBase": "ceiling_area（天井面積・投影面積）",
+    "notes": "RULE-004: 換気計算は必ず天井面積（投影）で計算する。屋根実面積は不使用。"
+  },
+  "revisionHistory": [
+    {
+      "revisionId": "REV-IROOF-001",
+      "date": "2020-01-01",
+      "version": "Ver.2",
+      "changeType": "spec_change",
+      "before": {
+        "description": "Ver.1 旧I-ROOF 旧換気容量表"
+      },
+      "after": {
+        "I-ROOF-1P-棟換気": "35㎡対応",
+        "I-ROOF-2P": "70㎡対応"
+      },
+      "reason": "換気性能改善・製品リニューアル",
+      "impact": "RULE-200/201/202の容量値はVer.2をベースとする",
+      "affectedRules": [
+        "RULE-200",
+        "RULE-201",
+        "RULE-202"
+      ],
+      "source": "Panasonic I-ROOF 技術資料 2020年版",
+      "confirmedBy": "小野"
+    }
+  ],
+  "discontinuedProducts": [
+    {
+      "productId": "I-ROOF-Ver1",
+      "name": "I-ROOF Ver.1（旧製品）",
+      "discontinuedDate": "2020-01-01",
+      "replacedBy": "I-ROOF Ver.2",
+      "note": "旧品番で積算された案件は旧容量表で確認すること"
+    }
+  ],
+  "relatedRules": [
+    "RULE-004",
+    "RULE-005",
+    "RULE-200",
+    "RULE-201",
+    "RULE-202"
+  ],
+  "notes": "甍標準採用。2026年7月時点でVer.2が現行。次バージョンの情報は未確認。"
+}

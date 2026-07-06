@@ -1,0 +1,65 @@
+{
+  "id": "EV-2026-005-008",
+  "projectId": "P2026-005",
+  "itemName": "水上立ち上がり",
+  "category": "roof",
+  "value": 6.9,
+  "unit": "m",
+  "formula": "東面のみ: 梁間5.460 + 南突出1.440 = 6.900m",
+  "ruleRefs": [
+    "RULE-003",
+    "RULE-007",
+    "RULE-901"
+  ],
+  "drawingRef": "東側立面図",
+  "drawingPage": "p.5",
+  "slopeApplied": false,
+  "slopeRate": null,
+  "calcBase": "elevation_actual",
+  "caseRef": "Case005",
+  "diffFromCase": 0,
+  "confirmedBy": "小野",
+  "confirmedAt": "2026-07-06",
+  "correctionNote": "天沼邸（切妻）のRULE-900（全周）は非適用。片流れはRULE-901で東面1か所。",
+  "alerts": [],
+  "reasoningTrace": [
+    {
+      "step": 1,
+      "action": "図面読取",
+      "description": "立面図4面確認→2F片流れ+1F南面下屋",
+      "drawingRef": "立面図p.5",
+      "result": "屋根タイプ:片流れ+南面下屋"
+    },
+    {
+      "step": 2,
+      "action": "ルール適用",
+      "description": "RULE-007参照: 水上はタイプ別判定",
+      "ruleRef": "RULE-007",
+      "result": "片流れ→物件ごとに確認が必要",
+      "uncertainty": "全周か1面か自動判定できない"
+    },
+    {
+      "step": 3,
+      "action": "比較",
+      "description": "Case004（切妻→全周34.58m）を参照",
+      "caseRef": "Case004",
+      "result": "切妻と異なりRULE-900は非適用"
+    },
+    {
+      "step": 4,
+      "action": "比較",
+      "description": "手拾いメモ: 駒行6.65m≒見積6.9m",
+      "caseRef": "Case005",
+      "result": "東面1か所。梁間5.460+南突出1.440=6.9m"
+    },
+    {
+      "step": 5,
+      "action": "判断",
+      "description": "RULE-901適用: 片流れ東面1か所",
+      "ruleRef": "RULE-901",
+      "result": "6.9m（東面のみ）",
+      "uncertainty": null
+    }
+  ],
+  "version": "Ver.3.0"
+}

@@ -1,0 +1,25 @@
+{
+  "_comment": "Evidence雛形（Ver.3.0）。全フィールドを記入して使用する。",
+  "id": "EV-{YYYY}-{PROJECT_NO}-{SEQ}",
+  "projectId": "P{YYYY}-{NO}",
+  "itemName": "（例：2F屋根面積）",
+  "category": "roof | gutter | vent | drain",
+  "value": null,
+  "unit": "㎡ | m | か所 | 本 | 式",
+  "formula": "（例：11.365 × 6.055 × 1.020）",
+  "ruleRefs": [
+    "RULE-XXX"
+  ],
+  "drawingRef": "（例：2F平面図 Polygon-2）",
+  "drawingPage": "p.X",
+  "slopeApplied": null,
+  "slopeRate": null,
+  "calcBase": "projection_area | elevation_actual | ceiling_area | shimoya_ceiling",
+  "caseRef": null,
+  "diffFromCase": null,
+  "confirmedBy": null,
+  "confirmedAt": null,
+  "correctionNote": null,
+  "alerts": [],
+  "version": "Ver.3.0"
+}

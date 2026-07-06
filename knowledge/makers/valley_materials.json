@@ -1,0 +1,29 @@
+{
+  "version": "Ver.3.0",
+  "description": "谷板金材料スペック。RULE-122参照。",
+  "defaultKey": "galvalume_standard",
+  "materials": [
+    {
+      "key": "galvalume_standard",
+      "name": "ガルバリウム鋼板 谷板金 幅380mm",
+      "nominalLength_mm": 2000,
+      "overlap_mm": 100,
+      "effectiveLength_mm": 1900,
+      "width_mm": 380,
+      "screw_per_piece": 24,
+      "sealer_per_joint": 1,
+      "labor_per_m": 0.07
+    },
+    {
+      "key": "galvalume_heavy",
+      "name": "ガルバリウム鋼板 谷板金 幅450mm（重ね150）",
+      "nominalLength_mm": 2000,
+      "overlap_mm": 150,
+      "effectiveLength_mm": 1850,
+      "width_mm": 450,
+      "screw_per_piece": 28,
+      "sealer_per_joint": 1,
+      "labor_per_m": 0.07
+    }
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "_schema": "IrakaComponentHistory Ver.1.0",
+  "componentId": "CH-Valley-001",
+  "assemblyType": "Valley",
+  "productKey": "Valley380",
+  "displayName": "谷板金 ガルバリウム鋼板 幅380mm",
+  "category": "roof",
+  "createdAt": "2026-07-06",
+  "updatedAt": "2026-07-06",
+  "stats": {
+    "totalProjects": 1,
+    "totalQuantity": 30.67,
+    "unit": "m",
+    "avgQuantityPerProject": 30.67,
+    "avgSlope_sun": null,
+    "avgLaborPerUnit": 0.07,
+    "avgProfitRate": null,
+    "claimCount": 0,
+    "lastUpdated": "2026-07-06"
+  },
+  "projectRefs": [
+    {
+      "projectId": "P2026-002",
+      "projectName": "大垣 勝弘様邸",
+      "date": "2026-07-06",
+      "quantity": 30.67,
+      "slope_sun": null,
+      "profitRate": null,
+      "evidenceId": "EV-P2026-002-valley",
+      "note": "中庭あり 谷6本 内曲がり4か所"
+    }
+  ],
+  "humanCorrections": [],
+  "failures": [],
+  "ruleHistory": [
+    {
+      "ruleId": "RULE-120",
+      "action": "added",
+      "date": "2026-07-06",
+      "reason": "谷板金は隅棟谷専用伸び率√(1+(勾配²÷2))で算出すると確立。通常の流れ伸び率は不使用。",
+      "projectRef": "Case002（大垣邸）で初確認",
+      "changedBy": "小野"
+    },
+    {
+      "ruleId": "RULE-121",
+      "action": "added",
+      "date": "2026-07-06",
+      "reason": "発注数量=ceil(実長÷有効長)×定尺長。実長≠発注長を明文化。",
+      "projectRef": "Case002（大垣邸）",
+      "changedBy": "小野"
+    }
+  ],
+  "makerHistory": [
+    {
+      "date": "2026-07-06",
+      "maker": "（甍調達先）",
+      "productCode": "valley380",
+      "nominalLength_mm": 2000,
+      "overlap_mm": 100,
+      "unitPrice": null,
+      "reason": "初期設定",
+      "note": ""
+    }
+  ],
+  "photos": [],
+  "memos": [
+    "大垣邸で谷6本。立面図から直接拾えないため平面図+谷専用伸び率が必須。"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "maker": "Panasonic（I-ROOF）",
+  "product": "I-ROOF 換気部材",
+  "capacity": {
+    "棟換気": {
+      "1P_m2": 35,
+      "2P_m2": 70,
+      "calcBase": "ceiling_both_sides",
+      "ruleRef": "RULE-200"
+    },
+    "片流れ換気": {
+      "1P_m2": 17.5,
+      "2P_m2": 35,
+      "calcBase": "katanagare_ceiling_only",
+      "ruleRef": "RULE-201"
+    },
+    "雨押え換気": {
+      "1P_m2": 18.4,
+      "2P_m2": 36.8,
+      "calcBase": "shimoya_ceiling_only",
+      "ruleRef": "RULE-202"
+    }
+  },
+  "calcMethod": "math.ceil(ceiling_area / capacity)",
+  "prohibition": "換気計算に勾配伸び率込みの屋根面積を使わない（RULE-004）"
+}

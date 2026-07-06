@@ -1,0 +1,28 @@
+{
+  "category": "出力規定",
+  "rules": [
+    {
+      "id": "RULE-401",
+      "category": "出力規定",
+      "title": "見積書フォーマットを変更しない",
+      "definition": "見積書は甍標準Excel（御見積書）フォーマットを維持する。AIが勝手に変更しない。",
+      "excelSpec": {
+        "dataRows": "P18:AB30",
+        "sumRow": 31,
+        "taxRow": 32,
+        "totalRow": 33,
+        "qtyCol": "P",
+        "unitPriceCol": "U",
+        "amountCol": "X"
+      },
+      "since": "Ver.2.0"
+    },
+    {
+      "id": "RULE-402",
+      "category": "出力規定",
+      "title": "摘要欄にRuleIDを記入する",
+      "definition": "見積書の摘要欄（AC列）にRuleIDを記入することでEvidenceと連携する。",
+      "since": "Ver.3.0"
+    }
+  ]
+}

@@ -1,0 +1,207 @@
+{
+  "version": "Ver.3.0",
+  "updated": "2026-07-06",
+  "testcases": [
+    {
+      "case": "Case001",
+      "name": "関根 柊平様邸",
+      "address": "練馬区南大泉3-426-15",
+      "location": "saitama",
+      "version": "Ver.3.0",
+      "input": {
+        "roofType": "katanagare_north",
+        "slope_sun": 6.67,
+        "slopeRate": 1.01,
+        "buildingW_m": 16.6,
+        "buildingD_m": 6.37,
+        "noki_S_mm": 455,
+        "noki_N_mm": 455,
+        "noki_EW_mm": 700,
+        "hasShimoya": false,
+        "shimoyaArea_m2": 0,
+        "floors": 2,
+        "location": "saitama"
+      },
+      "expected": {
+        "roofArea_m2": 86.44,
+        "noki_m": 19.0,
+        "keraba_m": 0,
+        "katamune_m": 16.6,
+        "mizukami_m": 16.6,
+        "gutter_count": 2,
+        "tatetoi_m": 23.2,
+        "pmasu_count": 2,
+        "ventType": "katanagare_1P",
+        "ventCount": 1
+      },
+      "tolerance": 0.05,
+      "rulesCovered": [
+        "RULE-001",
+        "RULE-002",
+        "RULE-006",
+        "RULE-007",
+        "RULE-008",
+        "RULE-011"
+      ],
+      "alertExpected": [],
+      "notes": "基本片流れ。たてとい実長計上（見積23.2m）。水上=北面のみ（片流れルール）。"
+    },
+    {
+      "case": "Case002",
+      "name": "大垣 勝弘様邸",
+      "address": "春日部市薄谷267",
+      "location": "saitama",
+      "version": "Ver.3.0",
+      "input": {
+        "roofType": "yosemune_with_courtyard",
+        "buildingW_m": 17.745,
+        "buildingD_m": 13.65,
+        "floors": 1,
+        "hasCourtyard": true,
+        "hasValley": true,
+        "valleyLength_m": 30.67,
+        "location": "saitama"
+      },
+      "expected": {
+        "roofArea_m2": 225.61,
+        "noki_m": 15.4,
+        "gutter_count": 4,
+        "tatetoi_m": 14.4,
+        "uchibend_count": 4,
+        "ventCount_amaoshi": 8,
+        "valleyFlashing_m": 30.67
+      },
+      "tolerance": 0.05,
+      "rulesCovered": [
+        "RULE-001",
+        "RULE-008",
+        "RULE-202"
+      ],
+      "alertExpected": [
+        "INFO-valley_check"
+      ],
+      "notes": "中庭あり→谷30.67m。雨押え換気8か所。内曲がり4か所（コの字型）。"
+    },
+    {
+      "case": "Case003",
+      "name": "阿部 勇人・理子様邸",
+      "address": "朝霞市",
+      "location": "saitama",
+      "version": "Ver.3.0",
+      "input": {
+        "roofType": "katanagare_with_shimoya",
+        "slope_sun": 2.0,
+        "slopeRate": 1.02,
+        "buildingW_m": 8.19,
+        "buildingD_m": 8.418,
+        "floors": 2,
+        "hasShimoya": true,
+        "downspoutShape": "round_phi60",
+        "location": "saitama"
+      },
+      "expected": {
+        "roofArea_m2": 72.3,
+        "noki_m": 19.2,
+        "keraba_m": 0,
+        "gutter_count": 6,
+        "tatetoi_m": 22.4,
+        "haitoi_count": 3,
+        "ventType": "katanagare+amaoshi",
+        "downspoutShape": "round_phi60"
+      },
+      "tolerance": 0.05,
+      "rulesCovered": [
+        "RULE-001",
+        "RULE-004",
+        "RULE-011"
+      ],
+      "alertExpected": [
+        "INFO-downspout_shape_confirm"
+      ],
+      "notes": "たてとい丸形φ60（要確認）。はいとい3か所。下屋換気あり。"
+    },
+    {
+      "case": "Case004",
+      "name": "天沼 秀教・未絵様邸",
+      "address": "埼玉県桶川市大字川田谷字永久保4865番3",
+      "location": "saitama",
+      "version": "Ver.3.0",
+      "input": {
+        "roofType": "kirituma",
+        "ridgeHeight_m": 1.465,
+        "halfSpan_m": 2.73,
+        "slopeRate": 1.049,
+        "buildingW_m": 11.83,
+        "buildingD_m": 5.46,
+        "floors": 2,
+        "hasShimoya": true,
+        "shimoyaDepth_m": 2.07,
+        "noki_SN_mm": 500,
+        "noki_EW_mm": 700,
+        "location": "saitama"
+      },
+      "expected": {
+        "roofArea_m2": 117.77,
+        "noki_m": 34.55,
+        "mizukami_m": 34.55,
+        "gutter_count": 6,
+        "tatetoi_m": 32.2,
+        "fufu_m": 58.55,
+        "ventType": "katanagare_1P+amaoshi_1P",
+        "ventCount_kata": 1,
+        "ventCount_ama": 1
+      },
+      "tolerance": 0.05,
+      "rulesCovered": [
+        "RULE-003",
+        "RULE-007",
+        "RULE-010",
+        "RULE-900"
+      ],
+      "alertExpected": [],
+      "notes": "水上=下屋全周4面（RULE-900）。破風板金統合計上（RULE-010）。"
+    },
+    {
+      "case": "Case005",
+      "name": "福堀 佑記・心花様邸",
+      "address": "埼玉県春日部市南一丁目2387番4",
+      "location": "saitama",
+      "version": "Ver.3.0",
+      "input": {
+        "roofType": "katanagare_south_with_shimoya",
+        "slope_sun": 2.0,
+        "slopeRate": 1.02,
+        "buildingW_m": 10.465,
+        "buildingD_m": 5.46,
+        "floors": 2,
+        "hasShimoya": true,
+        "shimoyaDepth_m": 1.593,
+        "noki_S_mm": 450,
+        "noki_N_mm": 145,
+        "noki_EW_mm": 450,
+        "location": "saitama"
+      },
+      "expected": {
+        "roofArea_m2": 77.12,
+        "noki_m": 19.55,
+        "mizukami_m": 6.9,
+        "gutter_count": 7,
+        "tatetoi_m": 28.2,
+        "ventType": "amaoshi_1P",
+        "ventCount": 3,
+        "amaoshi_m": 6.9
+      },
+      "tolerance": 0.05,
+      "rulesCovered": [
+        "RULE-003",
+        "RULE-007",
+        "RULE-011",
+        "RULE-901"
+      ],
+      "alertExpected": [
+        "CAUTION-ai_diff_roof_area"
+      ],
+      "notes": "水上=東面1か所（RULE-901）。AI算出93.25㎡ vs 手拾い77.12㎡（1F下屋計上法の差）。"
+    }
+  ]
+}

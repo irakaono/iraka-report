@@ -1,0 +1,18 @@
+{
+  "category": "アラート",
+  "rules": [
+    {
+      "id": "RULE-500",
+      "category": "アラート",
+      "title": "アラート4段階（ERROR/WARNING/CAUTION/INFO）",
+      "definition": "AIアラートは4段階。ERROR=致命的（必ず対応）、WARNING=要確認、CAUTION=注意（15%乖離等）、INFO=情報提供のみ。",
+      "levels": {
+        "ERROR": "致命的エラー。必ず人が対応してから先に進む",
+        "WARNING": "警告。確認推奨",
+        "CAUTION": "注意。15%以上の差異等",
+        "INFO": "情報提供のみ"
+      },
+      "since": "Ver.1.2"
+    }
+  ]
+}

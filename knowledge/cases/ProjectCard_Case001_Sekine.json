@@ -1,0 +1,466 @@
+{
+  "_schema": "IrakaProjectCard Ver.1.0",
+  "_description": "甍AI積算OS — 案件単位の全情報を保存するProjectCard。積算→受注→施工→実績→反省まで一気通貫。",
+  "projectId": "P2026-001",
+  "name": "関根 柊平様邸 新築工事",
+  "address": "練馬区南大泉3-426-15",
+  "client": "関根 柊平",
+  "location": "saitama",
+  "createdAt": "2026-07-06",
+  "status": "confirmed",
+  "spec": {
+    "roofType": "katanagare_north",
+    "slope_sun": 1.5,
+    "slopeRate": 1.011,
+    "floors": 2,
+    "buildingW_m": 15.7,
+    "buildingD_m": 5.46,
+    "hasShimoya": false,
+    "roofMaterial": "ガルバリウム鋼板 デコルーフ フラットH30-455",
+    "gutterProduct": "ファインスケア NF-I型",
+    "ventProduct": "I-ROOF 1P",
+    "tags": [
+      "片流れ",
+      "北向き水下",
+      "2F",
+      "NF-I",
+      "1.5寸",
+      "練馬区"
+    ]
+  },
+  "drawings": {
+    "pdfPath": "uploads/関根柊平様邸変更合意契約時図面.pdf",
+    "pageCount": 4,
+    "elevationPage": 3,
+    "scale": 0.01,
+    "scale_pt_per_m": 30.116,
+    "confirmedBy": "小野",
+    "confirmedAt": "2026-07-06"
+  },
+  "annotationJsonPath": "outputs/関根様邸_AnnotationJSON.json",
+  "annotations": [
+    {
+      "id": "ANN-001",
+      "ann_type": "line",
+      "layer": "roof",
+      "page_no": 3,
+      "start": {
+        "x": 181,
+        "y": 493
+      },
+      "end": {
+        "x": 681,
+        "y": 493
+      },
+      "width": 3.5,
+      "rule_refs": [
+        "RULE-002"
+      ],
+      "evidence_id": "EV-P2026-001-001",
+      "label": "軒とい NF-Ⅰ型",
+      "quantity": 19.0,
+      "unit": "m",
+      "card_auto": true,
+      "created_by": "小野",
+      "confirmed": true
+    },
+    {
+      "id": "ANN-002",
+      "ann_type": "point",
+      "layer": "gutter",
+      "page_no": 3,
+      "point": {
+        "x": 190,
+        "y": 493
+      },
+      "width": 1.5,
+      "rule_refs": [
+        "RULE-006",
+        "RULE-008"
+      ],
+      "evidence_id": "EV-P2026-001-005",
+      "label": "集水器 F型（西）",
+      "quantity": 1,
+      "unit": "か所",
+      "card_auto": true,
+      "created_by": "小野",
+      "confirmed": true
+    },
+    {
+      "id": "ANN-003",
+      "ann_type": "point",
+      "layer": "gutter",
+      "page_no": 3,
+      "point": {
+        "x": 663,
+        "y": 493
+      },
+      "width": 1.5,
+      "rule_refs": [
+        "RULE-006",
+        "RULE-008"
+      ],
+      "evidence_id": "EV-P2026-001-005",
+      "label": "集水器 F型（東）",
+      "quantity": 1,
+      "unit": "か所",
+      "card_auto": true,
+      "created_by": "小野",
+      "confirmed": true
+    },
+    {
+      "id": "ANN-004",
+      "ann_type": "line",
+      "layer": "gutter",
+      "page_no": 3,
+      "start": {
+        "x": 190,
+        "y": 497
+      },
+      "end": {
+        "x": 190,
+        "y": 681
+      },
+      "width": 2.5,
+      "rule_refs": [
+        "RULE-011"
+      ],
+      "evidence_id": "EV-P2026-001-006",
+      "label": "たてとい φ60（西）",
+      "quantity": 6.475,
+      "unit": "m",
+      "card_auto": false,
+      "card_x": 102,
+      "card_y": 558,
+      "created_by": "小野",
+      "confirmed": true
+    },
+    {
+      "id": "ANN-005",
+      "ann_type": "line",
+      "layer": "gutter",
+      "page_no": 3,
+      "start": {
+        "x": 663,
+        "y": 497
+      },
+      "end": {
+        "x": 663,
+        "y": 681
+      },
+      "width": 2.5,
+      "rule_refs": [
+        "RULE-011"
+      ],
+      "evidence_id": "EV-P2026-001-006",
+      "label": "たてとい φ60（東）",
+      "quantity": 6.475,
+      "unit": "m",
+      "card_auto": true,
+      "created_by": "小野",
+      "confirmed": true
+    },
+    {
+      "id": "ANN-006",
+      "ann_type": "line",
+      "layer": "vent",
+      "page_no": 3,
+      "start": {
+        "x": 190,
+        "y": 475
+      },
+      "end": {
+        "x": 663,
+        "y": 475
+      },
+      "width": 1.8,
+      "rule_refs": [
+        "RULE-005",
+        "RULE-201"
+      ],
+      "evidence_id": "EV-P2026-001-004",
+      "label": "片流れ換気",
+      "quantity": 1,
+      "unit": "本",
+      "card_auto": true,
+      "created_by": "小野",
+      "confirmed": true
+    },
+    {
+      "id": "ANN-007",
+      "ann_type": "line",
+      "layer": "roof",
+      "page_no": 3,
+      "start": {
+        "x": 190,
+        "y": 489
+      },
+      "end": {
+        "x": 663,
+        "y": 489
+      },
+      "width": 1.0,
+      "rule_refs": [
+        "RULE-003",
+        "RULE-007"
+      ],
+      "evidence_id": "EV-P2026-001-003",
+      "label": "水上立ち上がり",
+      "quantity": 16.6,
+      "unit": "m",
+      "card_auto": true,
+      "created_by": "小野",
+      "confirmed": true
+    }
+  ],
+  "engineResult": {
+    "roofType": "katanagare_north",
+    "engineVersion": "Ver.3.1",
+    "calculatedAt": "2026-07-06",
+    "summary": {
+      "roofArea_m2": 86.44,
+      "noki_m": 19.0,
+      "katamune_m": 16.6,
+      "mizukami_m": 16.6,
+      "amaoshi_m": 0,
+      "fufu_m": 35.6,
+      "gutterCount": 2,
+      "tatetoi_m": 23.2,
+      "ventMain": 1,
+      "ventShimoya": null
+    }
+  },
+  "evidences": [
+    {
+      "_comment": "例: EV-P2026-001-001 軒先",
+      "id": "EV-{PROJECT}-001",
+      "projectId": "P{YYYY}-{000}",
+      "itemName": "軒先（桟鼻・捨唐草60）",
+      "value": null,
+      "unit": "m",
+      "observation": {
+        "drawingType": "南側立面図",
+        "drawingPage": "p.5",
+        "face": "南面 水下軒先",
+        "raw_value": null
+      },
+      "reasoning": {
+        "why": "軒は立面図実長で拾う部材。勾配伸び率は不要。",
+        "selectedRule": "RULE-002",
+        "rejectedRules": [
+          {
+            "rule": "RULE-100（伸び率）",
+            "reason": "軒は立面図実長のため"
+          }
+        ],
+        "caseRef": null,
+        "caseNote": null
+      },
+      "calculation": {
+        "formula": "立面図実長",
+        "steps": [],
+        "slopeApplied": false,
+        "slopeRate": null,
+        "calcBase": "elevation_actual",
+        "aiValue": null
+      },
+      "confidence": null,
+      "humanRequired": false,
+      "confirmedBy": null,
+      "confirmedAt": null,
+      "humanCorrection": null,
+      "alerts": [],
+      "version": "Ver.3.1"
+    }
+  ],
+  "estimate": {
+    "excelPath": "outputs/関根様邸_御見積書_Evidence連動.xlsx",
+    "formatVersion": "甍標準フォーマット Ver.1.0",
+    "sheets": {
+      "roofWork": "御見積書（屋根工事）",
+      "gutterWork": "御見積書（雨樋工事）",
+      "evidenceList": "Evidence一覧"
+    },
+    "columnMap": {
+      "itemName": "A列(col1)",
+      "qty": "P列(col16)",
+      "unit": "S列(col19)",
+      "unitPrice": "U列(col21)",
+      "amount": "X列(col24)=IF(P*U=0,'',P*U)",
+      "tekiyo": "AC列(col29)"
+    },
+    "rows": {
+      "data": "Row18〜30",
+      "subtotal": "X31",
+      "tax": "X32=X31/10",
+      "total": "X33"
+    },
+    "roofItems": [
+      [
+        "桟鼻（後付け）",
+        19.0,
+        "m",
+        750,
+        "RULE-002",
+        "EV-P2026-001-001"
+      ],
+      [
+        "捨て唐草60（軒）",
+        19.0,
+        "m",
+        1000,
+        "RULE-002",
+        "EV-P2026-001-001"
+      ],
+      [
+        "雪止め金具（シングル）",
+        19.0,
+        "m",
+        2400,
+        "RULE-002",
+        "EV-P2026-001-002"
+      ],
+      [
+        "通気部材取付施工費",
+        16.6,
+        "m",
+        400,
+        "RULE-005",
+        "EV-P2026-001-003"
+      ],
+      [
+        "換気部材 I-ROOF 2P",
+        1,
+        "ヶ所",
+        27000,
+        "RULE-201",
+        "EV-P2026-001-004"
+      ],
+      [
+        "破風板金（特注加工）",
+        null,
+        "m",
+        2800,
+        "RULE-010",
+        ""
+      ],
+      [
+        "諸経費",
+        1,
+        "式",
+        75000,
+        "",
+        ""
+      ]
+    ],
+    "gutterItems": [
+      [
+        "軒とい　ファインスケアNF-1型",
+        19.0,
+        "m",
+        3850,
+        "RULE-002",
+        "EV-P2026-001-006"
+      ],
+      [
+        "集水器　F型",
+        2,
+        "ヶ所",
+        2950,
+        "RULE-008",
+        "EV-P2026-001-005"
+      ],
+      [
+        "たてとい",
+        12.95,
+        "m",
+        2200,
+        "RULE-011",
+        "EV-P2026-001-006"
+      ],
+      [
+        "P型集水器（Pマス）",
+        2,
+        "ヶ所",
+        2000,
+        "RULE-008",
+        "EV-P2026-001-009"
+      ],
+      [
+        "諸経費",
+        1,
+        "式",
+        15000,
+        "",
+        ""
+      ]
+    ],
+    "subtotal_roof": 187490,
+    "subtotal_gutter": 126540,
+    "tax_rate": 0.1,
+    "total_taxIncl": 345254
+  },
+  "contract": {
+    "status": "none",
+    "amount": null,
+    "date": null,
+    "discount": null,
+    "discountReason": null,
+    "memo": null
+  },
+  "budget": {
+    "materialCost": null,
+    "laborCost": null,
+    "otherCost": null,
+    "totalCost": null,
+    "expectedProfit": null,
+    "expectedProfitRate": null,
+    "preparedBy": null,
+    "preparedAt": null
+  },
+  "actual": {
+    "completedAt": null,
+    "laborDays": null,
+    "materialCost": null,
+    "laborCost": null,
+    "otherCost": null,
+    "totalCost": null,
+    "profit": null,
+    "profitRate": null,
+    "vsEstimate": null,
+    "issues": [],
+    "reflection": null,
+    "confirmedBy": null,
+    "confirmedAt": null
+  },
+  "learningCandidates": [
+    {
+      "_comment": "例: Rule候補（AIが提案、人が承認）",
+      "candidateId": "CAND-{YYYY}-001",
+      "sourceEvidenceIds": [],
+      "occurrences": null,
+      "condition": null,
+      "proposedRule": {
+        "id": null,
+        "title": null,
+        "definition": null,
+        "rationale": null
+      },
+      "confidence": null,
+      "status": "pending",
+      "reviewedBy": null,
+      "reviewedAt": null,
+      "rejectionReason": null
+    }
+  ],
+  "similarProjects": [],
+  "metadata": {
+    "createdBy": "小野　哲也",
+    "createdAt": "2026-07-06",
+    "updatedAt": "2026-07-06",
+    "engineVersion": "Ver.3.1",
+    "bibleVersion": "バイブルVer.3.0追補33-36章",
+    "ruleCount": 29,
+    "version": "ProjectCard Ver.1.0"
+  }
+}

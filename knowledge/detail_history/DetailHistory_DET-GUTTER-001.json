@@ -1,0 +1,112 @@
+{
+  "_schema": "IrakaDetailHistory Ver.1.0",
+  "detailId": "DET-GUTTER-001",
+  "displayName": "片流れ 軒ゼロ NF-I サイディング外壁",
+  "category": "gutter",
+  "createdAt": "2026-07-06",
+  "updatedAt": "2026-07-06",
+  "conditions": {
+    "roofType": "katanagare",
+    "slope_sun": null,
+    "eaveType": "zero",
+    "wallMaterial": "siding",
+    "gutter": "NF-I",
+    "downspout": "phi60",
+    "kerabaWidth_mm": 150,
+    "roofMaterial": "galvalume",
+    "tags": [
+      "片流れ",
+      "軒ゼロ",
+      "NF-I",
+      "サイディング",
+      "集水器F型",
+      "60φたてとい"
+    ]
+  },
+  "stats": {
+    "totalProjects": 2,
+    "avgProfitRate": null,
+    "claimCount": 0,
+    "reworkCount": 0,
+    "lastUsed": "2026-07-06"
+  },
+  "projectRefs": [
+    {
+      "projectId": "P2026-001",
+      "projectName": "関根 柊平様邸",
+      "date": "2026-07-06",
+      "note": "片流れ北向き 軒ゼロ サイディング"
+    },
+    {
+      "projectId": "P2026-003",
+      "projectName": "阿部 勇人様邸",
+      "date": "2026-07-06",
+      "note": "片流れ 下屋付き サイディング はいとい3か所"
+    }
+  ],
+  "assemblySet": [
+    {
+      "assemblyType": "Eave",
+      "productKey": "NF-I",
+      "ruleRef": "RULE-002",
+      "note": "軒ゼロのため桟鼻は外壁直付け"
+    },
+    {
+      "assemblyType": "Gutter",
+      "productKey": "NF-I",
+      "ruleRef": "RULE-300",
+      "note": "集水器F型 建物角2か所"
+    },
+    {
+      "assemblyType": "Downspout",
+      "productKey": "phi60",
+      "ruleRef": "RULE-011",
+      "note": "実長のみ計上"
+    },
+    {
+      "assemblyType": "Vent",
+      "productKey": "I-ROOF-1P",
+      "ruleRef": "RULE-201",
+      "note": "片流れ換気 棟換気不可"
+    }
+  ],
+  "constructionNotes": [
+    {
+      "noteId": "NOTE-001",
+      "category": "caution",
+      "content": "軒ゼロ納まりではNF-Iの取り付け位置が外壁面から直接になる。サイディングとの取り合いに防水テープが必要。",
+      "addedBy": "小野",
+      "date": "2026-07-06",
+      "evidenceId": null
+    },
+    {
+      "noteId": "NOTE-002",
+      "category": "install",
+      "content": "集水器は必ず建物角に配置。サイディング柱に合わせて固定金具を選定する。",
+      "addedBy": "小野",
+      "date": "2026-07-06",
+      "evidenceId": null
+    }
+  ],
+  "humanCorrections": [],
+  "failures": [],
+  "media": [],
+  "relatedRules": [
+    "RULE-002",
+    "RULE-003",
+    "RULE-006",
+    "RULE-008",
+    "RULE-011",
+    "RULE-201",
+    "RULE-300"
+  ],
+  "ruleHistory": [
+    {
+      "ruleId": "RULE-002",
+      "action": "applied",
+      "date": "2026-07-06",
+      "reason": "軒ゼロ納まりでも軒先は立面図実長で計上。勾配伸び率不要。"
+    }
+  ],
+  "learningCandidates": []
+}

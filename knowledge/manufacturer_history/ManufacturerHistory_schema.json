@@ -1,0 +1,36 @@
+{
+  "_schema": "IrakaManufacturerHistory Ver.1.0",
+  "_description": "メーカーの製品仕様変更・廃番・新製品導入の履歴を管理する。公共工事や長期保証案件で『当時の仕様ではこうだった』を追跡できる。ComponentHistoryやDetailHistoryのmakerHistoryとも連携する。",
+  "makerId": "MFR-{maker}-{product}",
+  "maker": "Panasonic | I-ROOF | その他",
+  "product": "NF-I | S15 | I-ROOF-1P | ...",
+  "category": "gutter | vent | drain | roof",
+  "createdAt": "2026-07-06",
+  "currentSpec": {
+    "version": "current",
+    "asOf": "2026-07-06",
+    "nominalLength_mm": null,
+    "overlap_mm": null,
+    "capacity": {},
+    "unitPrice": null,
+    "notes": ""
+  },
+  "revisionHistory": [
+    {
+      "revisionId": "REV-001",
+      "date": null,
+      "version": null,
+      "changeType": "spec_change | price_change | discontinue | new_release",
+      "before": {},
+      "after": {},
+      "reason": "",
+      "impact": "",
+      "affectedRules": [],
+      "source": "",
+      "confirmedBy": null
+    }
+  ],
+  "discontinuedProducts": [],
+  "relatedRules": [],
+  "notes": ""
+}

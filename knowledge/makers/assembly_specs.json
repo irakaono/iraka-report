@@ -1,0 +1,55 @@
+{
+  "version": "Ver.3.0",
+  "description": "各Assembly副資材・人工スペック。RULE-122系列の拡張。",
+  "assemblies": {
+    "Valley": {
+      "material": "ガルバリウム鋼板 谷板金 幅380mm",
+      "nominalLength_mm": 2000, "overlap_mm": 100, "effectiveLength_mm": 1900,
+      "screw_per_piece": 24, "sealer_per_joint": 1, "labor_per_m": 0.07
+    },
+    "Ridge": {
+      "material": "棟包み板金",
+      "nominalLength_mm": 1820, "overlap_mm": 90, "effectiveLength_mm": 1730,
+      "screw_per_piece": 12, "sealer_per_joint": 1, "labor_per_m": 0.07,
+      "underlayLength_mm": 1820, "underlayOverlap_mm": 100
+    },
+    "Hip": {
+      "material": "隅棟包み板金",
+      "nominalLength_mm": 1820, "overlap_mm": 90, "effectiveLength_mm": 1730,
+      "screw_per_piece": 12, "sealer_per_joint": 1, "labor_per_m": 0.07
+    },
+    "Eave": {
+      "material": "軒唐草 60mm幅",
+      "nominalLength_mm": 1820, "overlap_mm": 50, "effectiveLength_mm": 1770,
+      "screw_per_piece": 9, "labor_per_m": 0.03
+    },
+    "Verge": {
+      "material": "捨唐草 45mm幅",
+      "nominalLength_mm": 1820, "overlap_mm": 50, "effectiveLength_mm": 1770,
+      "screw_per_piece": 9, "labor_per_m": 0.03
+    },
+    "Apron": {
+      "material": "雨押え板金",
+      "nominalLength_mm": 1820, "overlap_mm": 100, "effectiveLength_mm": 1720,
+      "screw_per_piece": 12, "sealer_per_joint": 1, "labor_per_m": 0.08
+    },
+    "Gutter": {
+      "material": "ファインスケア NF-I型",
+      "nominalLength_mm": 4000, "overlap_mm": 50, "effectiveLength_mm": 3950,
+      "bracket_per_m": 0.5, "labor_per_m": 0.05
+    },
+    "Downspout": {
+      "material": "メタリック調たてとい φ60",
+      "nominalLength_mm": 2700, "labor_per_m": 0.06,
+      "bracket_per_m": 0.8
+    },
+    "Vent": {
+      "material": "I-ROOF 換気部材",
+      "screw_per_unit": 8, "sealer_per_unit": 0.5, "labor_per_unit": 0.1
+    },
+    "SnowStop": {
+      "material": "雪止め金具（シングル）",
+      "units_per_m": 1.0, "labor_per_m": 0.02
+    }
+  }
+}

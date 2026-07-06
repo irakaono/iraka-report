@@ -1,0 +1,105 @@
+{
+  "_schema": "IrakaComponentHistory Ver.1.0",
+  "componentId": "CH-Gutter-001",
+  "assemblyType": "Gutter",
+  "productKey": "NF-I",
+  "displayName": "ファインスケア NF-I型 軒とい",
+  "category": "gutter",
+  "createdAt": "2026-07-06",
+  "updatedAt": "2026-07-06",
+  "stats": {
+    "totalProjects": 5,
+    "totalQuantity": 110.52,
+    "unit": "m",
+    "avgQuantityPerProject": 22.1,
+    "avgSlope_sun": null,
+    "avgLaborPerUnit": 0.05,
+    "avgProfitRate": null,
+    "claimCount": 0,
+    "lastUpdated": "2026-07-06"
+  },
+  "projectRefs": [
+    {
+      "projectId": "P2026-001",
+      "projectName": "関根 柊平様邸",
+      "quantity": 19.0,
+      "note": "片流れ北向き"
+    },
+    {
+      "projectId": "P2026-002",
+      "projectName": "大垣 勝弘様邸",
+      "quantity": 15.4,
+      "note": "平屋寄棟中庭"
+    },
+    {
+      "projectId": "P2026-003",
+      "projectName": "阿部 勇人様邸",
+      "quantity": 19.2,
+      "note": "片流れ+下屋"
+    },
+    {
+      "projectId": "P2026-004",
+      "projectName": "天沼 秀教様邸",
+      "quantity": 34.55,
+      "note": "切妻+下屋 全周"
+    },
+    {
+      "projectId": "P2026-005",
+      "projectName": "福堀 佑記様邸",
+      "quantity": 19.55,
+      "note": "片流れ+南面下屋"
+    }
+  ],
+  "humanCorrections": [
+    {
+      "correctionId": "HC-NF-001",
+      "projectId": "P2026-005",
+      "projectName": "福堀 佑記様邸",
+      "date": "2026-07-06",
+      "aiValue": 22.43,
+      "humanValue": 19.55,
+      "unit": "m",
+      "reason": "1F下屋軒先は2F屋根と一体で計上。AI算出は1F下屋を別加算していた。",
+      "correctedBy": "小野",
+      "approved": true,
+      "ruleLearned": null,
+      "evidenceId": "EV-P2026-005-noki"
+    }
+  ],
+  "failures": [],
+  "ruleHistory": [
+    {
+      "ruleId": "RULE-002",
+      "action": "added",
+      "date": "2026-07-06",
+      "reason": "軒は立面図実長。勾配伸び率不要。",
+      "projectRef": "Case001〜005 全件共通",
+      "changedBy": "小野"
+    },
+    {
+      "ruleId": "RULE-300",
+      "action": "added",
+      "date": "2026-07-06",
+      "reason": "NF-I+瞬水S15@140mm/h=69㎡/か所（埼玉県基準）。Panasonic排水表から確立。",
+      "projectRef": "Case001（関根邸）で初適用",
+      "changedBy": "小野"
+    }
+  ],
+  "makerHistory": [
+    {
+      "date": "2026-07-06",
+      "maker": "Panasonic",
+      "productCode": "NF-I",
+      "nominalLength_mm": 4000,
+      "overlap_mm": 50,
+      "unitPrice": null,
+      "reason": "初期設定（甍標準採用製品）",
+      "note": "瞬水S15竪樋との組み合わせ前提"
+    }
+  ],
+  "photos": [],
+  "memos": [
+    "福堀邸: AI算出22.43m vs 手拾い19.55m → 1F下屋の計上方法が違った",
+    "天沼邸: 切妻+下屋全周 → 34.55m（最大値）"
+  ]
+}

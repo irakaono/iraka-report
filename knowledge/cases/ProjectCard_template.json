@@ -1,0 +1,228 @@
+{
+  "_schema": "IrakaProjectCard Ver.1.0",
+  "_description": "甍AI積算OS — 案件単位の全情報を保存するProjectCard。積算→受注→施工→実績→反省まで一気通貫。",
+  "projectId": "P{YYYY}-{000}",
+  "name": "（施主名）様邸 新築工事",
+  "address": "（現場住所）",
+  "client": "（施主名）",
+  "location": "saitama",
+  "createdAt": "2026-07-06",
+  "status": "draft",
+  "spec": {
+    "roofType": null,
+    "slope_sun": null,
+    "slopeRate": null,
+    "floors": null,
+    "buildingW_m": null,
+    "buildingD_m": null,
+    "hasShimoya": null,
+    "roofMaterial": "ガルバリウム鋼板 デコルーフ",
+    "gutterProduct": "ファインスケア NF-I型",
+    "ventProduct": "I-ROOF",
+    "tags": []
+  },
+  "drawings": {
+    "pdfPath": null,
+    "pageCount": null,
+    "elevationPage": null,
+    "scale": null,
+    "scale_pt_per_m": null,
+    "confirmedBy": null,
+    "confirmedAt": null
+  },
+  "annotationJsonPath": null,
+  "annotations": [
+    {
+      "_comment": "例: ANN-001 軒とい",
+      "id": "ANN-001",
+      "ann_type": "line",
+      "layer": "roof",
+      "page_no": 3,
+      "start": {
+        "x": null,
+        "y": null
+      },
+      "end": {
+        "x": null,
+        "y": null
+      },
+      "width": 3.5,
+      "rule_refs": [
+        "RULE-002"
+      ],
+      "evidence_id": "EV-{YYYY}-{PROJECT}-001",
+      "label": "軒とい NF-Ⅰ型",
+      "quantity": null,
+      "unit": "m",
+      "card_auto": true,
+      "created_by": "小野",
+      "confirmed": false
+    }
+  ],
+  "engineResult": {
+    "roofType": null,
+    "engineVersion": "Ver.3.1",
+    "calculatedAt": null,
+    "summary": {
+      "roofArea_m2": null,
+      "noki_m": null,
+      "katamune_m": null,
+      "mizukami_m": null,
+      "amaoshi_m": null,
+      "fufu_m": null,
+      "gutterCount": null,
+      "tatetoi_m": null,
+      "ventMain": null,
+      "ventShimoya": null
+    },
+    "assemblies": {
+      "_comment": "全10種Assemblyの計算結果。createRoofAssembly()の出力",
+      "Eave": null,
+      "Verge": null,
+      "Ridge": null,
+      "Apron": null,
+      "SnowStop": null,
+      "Valley": null,
+      "Gutter": null,
+      "Downspout": null,
+      "Vent": null,
+      "Hip": null
+    }
+  },
+  "evidences": [
+    {
+      "_comment": "例: EV-P2026-001-001 軒先",
+      "id": "EV-{PROJECT}-001",
+      "projectId": "P{YYYY}-{000}",
+      "itemName": "軒先（桟鼻・捨唐草60）",
+      "value": null,
+      "unit": "m",
+      "observation": {
+        "drawingType": "南側立面図",
+        "drawingPage": "p.5",
+        "face": "南面 水下軒先",
+        "raw_value": null
+      },
+      "reasoning": {
+        "why": "軒は立面図実長で拾う部材。勾配伸び率は不要。",
+        "selectedRule": "RULE-002",
+        "rejectedRules": [
+          {
+            "rule": "RULE-100（伸び率）",
+            "reason": "軒は立面図実長のため"
+          }
+        ],
+        "caseRef": null,
+        "caseNote": null
+      },
+      "calculation": {
+        "formula": "立面図実長",
+        "steps": [],
+        "slopeApplied": false,
+        "slopeRate": null,
+        "calcBase": "elevation_actual",
+        "aiValue": null
+      },
+      "confidence": null,
+      "humanRequired": false,
+      "confirmedBy": null,
+      "confirmedAt": null,
+      "humanCorrection": null,
+      "alerts": [],
+      "version": "Ver.3.1"
+    }
+  ],
+  "estimate": {
+    "excelPath": null,
+    "formatVersion": "甍標準フォーマット Ver.1.0",
+    "sheets": {
+      "roofWork": "御見積書（屋根工事）",
+      "gutterWork": "御見積書（雨樋工事）",
+      "evidenceList": "Evidence一覧"
+    },
+    "columnMap": {
+      "itemName": "A列(col1)  ← A18:O18マージセル先頭",
+      "qty": "P列(col16)",
+      "unit": "S列(col19)",
+      "unitPrice": "U列(col21)",
+      "amount": "X列(col24) = IF(SUM(P*U)=0,'',SUM(P*U))",
+      "tekiyo": "AC列(col29) ← 'RULE-xxx / EV-xxx'"
+    },
+    "rows": {
+      "data": "Row18〜30（最大13行）",
+      "subtotal": "X31 = SUM(X18:AB30)",
+      "tax": "X32 = X31/10（消費税10%）",
+      "total": "X33 = X31+X32（税込合計）",
+      "taxIncludedTotal": "I15 = X31+X32（ヘッダー表示）"
+    },
+    "roofItems": [],
+    "gutterItems": [],
+    "subtotal_roof": null,
+    "subtotal_gutter": null,
+    "tax_rate": 0.1,
+    "total_taxIncl": null
+  },
+  "contract": {
+    "status": "none",
+    "amount": null,
+    "date": null,
+    "discount": null,
+    "discountReason": null,
+    "memo": null
+  },
+  "budget": {
+    "materialCost": null,
+    "laborCost": null,
+    "otherCost": null,
+    "totalCost": null,
+    "expectedProfit": null,
+    "expectedProfitRate": null,
+    "preparedBy": null,
+    "preparedAt": null
+  },
+  "actual": {
+    "completedAt": null,
+    "laborDays": null,
+    "materialCost": null,
+    "laborCost": null,
+    "otherCost": null,
+    "totalCost": null,
+    "profit": null,
+    "profitRate": null,
+    "vsEstimate": null,
+    "issues": [],
+    "reflection": null,
+    "confirmedBy": null,
+    "confirmedAt": null
+  },
+  "learningCandidates": [
+    {
+      "_comment": "例: Rule候補（AIが提案、人が承認）",
+      "candidateId": "CAND-{YYYY}-001",
+      "sourceEvidenceIds": [],
+      "occurrences": null,
+      "condition": null,
+      "proposedRule": {
+        "id": null,
+        "title": null,
+        "definition": null,
+        "rationale": null
+      },
+      "confidence": null,
+      "status": "pending",
+      "reviewedBy": null,
+      "reviewedAt": null,
+      "rejectionReason": null
+    }
+  ],
+  "similarProjects": [],
+  "metadata": {
+    "createdBy": "小野　哲也",
+    "createdAt": "2026-07-06",
+    "updatedAt": "2026-07-06",
+    "engineVersion": "Ver.3.1",
+    "bibleVersion": "バイブルVer.3.0追補33-36章",
+    "ruleCount": 29,
+    "version": "ProjectCard Ver.1.0"
+  }
+}

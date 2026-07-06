@@ -1,0 +1,54 @@
+{
+  "category": "排水設計",
+  "rules": [
+    {
+      "id": "RULE-006",
+      "category": "排水設計",
+      "title": "集水器は投影面積で負担を判定する",
+      "definition": "集水器の排水能力判定は屋根実面積ではなく投影面積（天井面積）で行う。NF-I型+瞬水S15@140mm/h=69㎡。",
+      "rationale": "排水はGL面への水量を基準とするため投影面積が正しい基準。AIエラーNo.05で確立。",
+      "errorRef": "AIError-05",
+      "makerRef": "panasonic_drainage.json",
+      "since": "Ver.5.2"
+    },
+    {
+      "id": "RULE-008",
+      "category": "排水設計",
+      "title": "集水器は建物の角に設置する",
+      "definition": "集水器の基本配置は建物の角。甍さんの施工標準。例外（中間設置等）は元請指定に従う。",
+      "rationale": "甍さんの施工実績から確立。角配置が最も効率的な排水経路を実現する。",
+      "caseRefs": [
+        "Case001",
+        "Case002",
+        "Case003",
+        "Case004",
+        "Case005"
+      ],
+      "since": "Ver.5.0"
+    },
+    {
+      "id": "RULE-011",
+      "category": "排水設計",
+      "title": "たてといは実長のみ計上する（ロスなし）",
+      "definition": "たてとい数量は「軒高 × 本数」の実長のみ。エルボ・ロス率は含めない。",
+      "rationale": "甍さんの計上方法。見積書でも実長計上を確認。阿部邸・天沼邸・福堀邸で確認。",
+      "caseRefs": [
+        "Case003",
+        "Case004",
+        "Case005"
+      ],
+      "since": "Case003学習後"
+    },
+    {
+      "id": "RULE-300",
+      "category": "排水設計",
+      "title": "NF-I型+瞬水S15@140mm/h=69㎡/か所",
+      "definition": "ファインスケアNF-I型＋瞬水S15の組み合わせで、降雨強度140mm/h時の落し口1か所当たり対応投影面積は69㎡。",
+      "makerRef": "panasonic_drainage.json",
+      "location": "saitama",
+      "rainfall_mmh": 140,
+      "capacity_m2": 69,
+      "since": "Ver.5.0"
+    }
+  ]
+}

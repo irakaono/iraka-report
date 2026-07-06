@@ -1,0 +1,105 @@
+{
+  "_schema": "IrakaComponentHistory Ver.1.0",
+  "componentId": "CH-Vent-001",
+  "assemblyType": "Vent",
+  "productKey": "I-ROOF-1P",
+  "displayName": "I-ROOF 1P 換気部材",
+  "category": "vent",
+  "createdAt": "2026-07-06",
+  "updatedAt": "2026-07-06",
+  "stats": {
+    "totalProjects": 5,
+    "totalQuantity": 12,
+    "unit": "本",
+    "avgQuantityPerProject": 2.4,
+    "claimCount": 0,
+    "lastUpdated": "2026-07-06"
+  },
+  "projectRefs": [
+    {
+      "projectId": "P2026-001",
+      "projectName": "関根 柊平様邸",
+      "quantity": 1,
+      "note": "片流れ換気1P"
+    },
+    {
+      "projectId": "P2026-002",
+      "projectName": "大垣 勝弘様邸",
+      "quantity": 8,
+      "note": "雨押え換気×8（中庭大型）"
+    },
+    {
+      "projectId": "P2026-003",
+      "projectName": "阿部 勇人様邸",
+      "quantity": 1,
+      "note": "片流れ換気"
+    },
+    {
+      "projectId": "P2026-004",
+      "projectName": "天沼 秀教様邸",
+      "quantity": 1,
+      "note": "片流れ換気+雨押え換気"
+    },
+    {
+      "projectId": "P2026-005",
+      "projectName": "福堀 佑記様邸",
+      "quantity": 3,
+      "note": "雨押え換気1P×3（現場判断）"
+    }
+  ],
+  "humanCorrections": [
+    {
+      "correctionId": "HC-VT-001",
+      "projectId": "P2026-005",
+      "projectName": "福堀 佑記様邸",
+      "date": "2026-07-06",
+      "aiValue": 1,
+      "humanValue": 3,
+      "unit": "本",
+      "reason": "天井面積計算では1本だが、窓位置・壁面の形状を見て3か所配置が必要と現場判断。ルール計算と現場判断が乖離するケース。",
+      "correctedBy": "小野",
+      "approved": true,
+      "ruleLearned": null,
+      "evidenceId": "EV-P2026-005-vent"
+    }
+  ],
+  "failures": [],
+  "ruleHistory": [
+    {
+      "ruleId": "RULE-004",
+      "action": "added",
+      "date": "2026-07-06",
+      "reason": "換気計算は天井面積（投影）で行う。屋根実面積（伸び率込み）は使わない。AIエラー07で確立。",
+      "projectRef": "複数物件で繰り返しエラー発覚",
+      "changedBy": "小野"
+    },
+    {
+      "ruleId": "RULE-005",
+      "action": "added",
+      "date": "2026-07-06",
+      "reason": "片棟は棟換気禁止。片流れ換気を使用する。ERROR級アラート対象。",
+      "projectRef": "設計理念から確立",
+      "changedBy": "小野"
+    }
+  ],
+  "makerHistory": [
+    {
+      "date": "2026-07-06",
+      "maker": "Panasonic (I-ROOF)",
+      "productCode": "I-ROOF-1P",
+      "capacity_m2": {
+        "棟換気": 35,
+        "片流れ換気": 17.5,
+        "雨押え換気": 18.4
+      },
+      "unitPrice": null,
+      "reason": "初期設定",
+      "note": "2P版は各2倍の天井面積に対応"
+    }
+  ],
+  "photos": [],
+  "memos": [
+    "福堀邸: 理論値1本 vs 現場判断3本。窓位置・壁形状による現場判断はルール化が難しい。",
+    "大垣邸: 中庭ある建物は換気数量が通常の2〜3倍になる。"
+  ]
+}

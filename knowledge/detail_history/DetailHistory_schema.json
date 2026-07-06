@@ -1,0 +1,72 @@
+{
+  "_schema": "IrakaDetailHistory Ver.1.0",
+  "_description": "納まり（Detail）は積算で最も再利用できる知識の最小単位。単体部材ではなく「部材の組み合わせ × 現場条件」で定義する。ComponentHistoryがNF-I単体なら、DetailHistoryはNF-I + 片流れ + 軒ゼロ + サイディング + ケラバ150 の組み合わせ。",
+  "detailId": "DET-{category}-{000}",
+  "displayName": "片流れ 軒ゼロ NF-I サイディング外壁",
+  "category": "eave | valley | ridge | apron | gutter | vent | fascia",
+  "createdAt": "2026-07-06",
+  "updatedAt": "2026-07-06",
+  "conditions": {
+    "roofType": null,
+    "slope_sun": null,
+    "eaveType": null,
+    "wallMaterial": null,
+    "gutter": null,
+    "downspout": null,
+    "kerabaWidth_mm": null,
+    "roofMaterial": null,
+    "tags": []
+  },
+  "stats": {
+    "totalProjects": 0,
+    "avgProfitRate": null,
+    "claimCount": 0,
+    "reworkCount": 0,
+    "lastUsed": null
+  },
+  "projectRefs": [
+    {
+      "projectId": "P2026-001",
+      "projectName": "関根 柊平様邸",
+      "date": "2026-07-06",
+      "profitRate": null,
+      "note": "",
+      "photoIds": []
+    }
+  ],
+  "assemblySet": [
+    {
+      "assemblyType": "Eave",
+      "productKey": "NF-I",
+      "quantity": null,
+      "unit": "m",
+      "ruleRef": "RULE-002",
+      "note": ""
+    }
+  ],
+  "constructionNotes": [
+    {
+      "noteId": "NOTE-001",
+      "category": "prep | install | inspection | caution",
+      "content": "",
+      "addedBy": "小野",
+      "date": "2026-07-06",
+      "evidenceId": null
+    }
+  ],
+  "humanCorrections": [],
+  "failures": [],
+  "media": [
+    {
+      "mediaId": "MEDIA-001",
+      "type": "photo | video",
+      "path": null,
+      "caption": "",
+      "projectId": null,
+      "date": null
+    }
+  ],
+  "relatedRules": [],
+  "ruleHistory": [],
+  "learningCandidates": []
+}
