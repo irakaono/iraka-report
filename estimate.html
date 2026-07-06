@@ -76,6 +76,33 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
 </div>
 
 <div class="section">
+  <h2>⓪ 屋根仕様・見積テンプレート設定（Project設定）</h2>
+  <div style="font-size:12px;color:#888;margin-bottom:10px">
+    ここで選んだ屋根仕様に応じて、屋根材・唐草・ケラバ水切・棟包み・雪止め等のEstimate Mappingが自動で切り替わります（Engineの数量計算は変わりません）。
+  </div>
+  <div class="grid">
+    <div><label>屋根仕様</label>
+      <select id="roofSpecId" onchange="onRoofSpecChange()">
+        <option value="tatehira333">立平333（アイジー工業）</option>
+        <option value="tatehira455">立平455（アイジー工業）</option>
+        <option value="yokoatsu_s">横暖ルーフS（アイジー工業）</option>
+        <option value="yokoatsu_alphas">横暖ルーフαS（アイジー工業）</option>
+        <option value="setsuban88">AT式折板 88型</option>
+      </select>
+    </div>
+    <div><label>カラー（任意・記録のみ）</label><input type="text" id="roofColor" placeholder="例：ブラック"></div>
+    <div><label>見積テンプレート</label>
+      <select id="estimateTemplate">
+        <option value="iraka">甍見積（自社標準）</option>
+        <option value="request">見積依頼書（協力業者向け・単価非表示）</option>
+        <option value="koukyo">公共工事用内訳（名称フォーマット変更）</option>
+      </select>
+    </div>
+  </div>
+  <div id="roofSpecInfo" style="font-size:12px;color:#1f4e79;margin-top:8px;background:#eaf2fb;border-radius:8px;padding:8px"></div>
+</div>
+
+<div class="section">
   <h2>① 立面図読取：屋根タイプ判定用フラグ</h2>
   <div class="row-flags">
     <div class="flagbox"><b>南面</b>
@@ -160,7 +187,7 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
 
   <h2 style="margin-top:18px">数量表（見積書式.xlsx 対応）</h2>
   <table id="qtyTable">
-    <thead><tr><th>品名</th><th>数量</th><th>単位</th><th>摘要</th><th>根拠</th></tr></thead>
+    <thead><tr><th>品名</th><th>Component数量</th><th>見積数量</th><th>単位</th><th>摘要</th><th>根拠</th></tr></thead>
     <tbody id="qtyBody"></tbody>
   </table>
   <button class="btn green" onclick="exportExcel()">見積書Excelを出力（複合フォーマット）</button>
@@ -497,15 +524,17 @@ function render(){
 
   document.getElementById('qtyBody').innerHTML = rows.map((r,i)=>{
     const est = getEstimateItem(r[4].componentKey, r[0]);
+    const estQty = getEstimateQty(r[1], r[4].componentKey, r[0]);
     return `
-    <tr><td><b>${est.itemName}</b><div style="font-size:10px;color:#999">Component: ${r[0]}</div></td><td>${r[1]}</td><td>${r[2]}</td><td>${est.note||r[3]}</td>
+    <tr><td><b>${est.itemName}</b><div style="font-size:10px;color:#999">Component: ${r[0]}</div></td>
+    <td>${r[1]}</td><td>${estQty} <span style="font-size:10px;color:#888">(×${est.multiplier})</span></td><td>${r[2]}</td><td>${est.note||r[3]}</td>
     <td><button class="btn secondary" style="padding:4px 10px;font-size:11px" onclick="toggleEvidence(${i})">根拠▼</button></td></tr>
-    <tr id="ev-row-${i}" style="display:none"><td colspan="5" style="background:#f7f9fc">
+    <tr id="ev-row-${i}" style="display:none"><td colspan="6" style="background:#f7f9fc">
       <div class="evidence-step"><b>① Observation（観察）：</b>${r[4].observation||'-'}</div>
       <div class="evidence-step"><b>② Reasoning（判断）：</b>${r[4].reasoning||'-'} <span class="rule-badge">${r[4].ruleRef}</span></div>
       <div class="evidence-step"><b>③ Calculation（計算）：</b>${r[4].formula}</div>
-      <div class="evidence-step"><b>④ Evidence（確定値・確信度）：</b>${r[1]}${r[2]} ／ 確信度${r[4].confidence}%</div>
-      <div class="evidence-step"><b>Estimate Item：</b>${est.itemName}（${est.category}）／ 摘要: ${est.note}</div>
+      <div class="evidence-step"><b>④ Evidence（確定値・確信度）：</b>Component ${r[1]}${r[2]} ／ 確信度${r[4].confidence}%</div>
+      <div class="evidence-step"><b>Estimate Item：</b>${est.itemName}（${est.category}）／ 係数×${est.multiplier} → 見積数量${estQty}${r[2]} ／ 摘要: ${est.note}</div>
     </td></tr>`;
   }).join('');
   lastResult.rows = rows;
@@ -546,6 +575,10 @@ function targetSheetFor(componentKey, fallbackName){
 
 function exportExcel(){
   if(!lastResult || !window.XLSX){ alert('Excel出力ライブラリの読み込みに失敗しました。CSV出力をご利用ください。'); return; }
+  const template = document.getElementById('estimateTemplate')?.value || 'iraka';
+  const isRequestMode = template === 'request'; // 見積依頼書：単価・金額欄は空欄で出力
+  const TEMPLATE_TITLE = { iraka:'御　見　積　書', request:'見　積　依　頼　書', koukyo:'工　事　費　内　訳　書' };
+
   const wb = XLSX.utils.book_new();
 
   // ── 新設屋根工事・雨樋工事：採用値を明細行として書き込む ──
@@ -558,23 +591,27 @@ function exportExcel(){
 
   ['新設屋根工事','雨樋工事'].forEach(sheetName=>{
     const aoa = [];
-    aoa[0] = Array(38).fill(''); aoa[0][11] = '内訳明細書';
-    aoa[4] = Array(38).fill(''); aoa[4][13]='数量'; aoa[4][16]='単位'; aoa[4][18]='単価'; aoa[4][21]='金額'; aoa[4][26]='摘要';
+    aoa[0] = Array(38).fill(''); aoa[0][11] = TEMPLATE_TITLE[template] === '御　見　積　書' ? '内訳明細書' : TEMPLATE_TITLE[template];
+    aoa[4] = Array(38).fill(''); aoa[4][13]='数量'; aoa[4][16]='単位';
+    aoa[4][18] = isRequestMode ? '' : '単価';
+    aoa[4][21] = isRequestMode ? '' : '金額';
+    aoa[4][26]='摘要';
     const items = sheetRows[sheetName];
     for(let i=0;i<23;i++){
       const row = Array(38).fill('');
       if(items[i]){
         row[0]=items[i][0]; row[13]=items[i][1]; row[16]=items[i][2]; row[26]=items[i][3];
-        row[21] = { f: `IF(SUM(N${6+i}*S${6+i})=0,"",SUM(N${6+i}*S${6+i}))` };
-      } else {
+        if(!isRequestMode) row[21] = { f: `IF(SUM(N${6+i}*S${6+i})=0,"",SUM(N${6+i}*S${6+i}))` };
+      } else if(!isRequestMode){
         row[21] = { f: `IF(SUM(N${6+i}*S${6+i})=0,"",SUM(N${6+i}*S${6+i}))` };
       }
       aoa[5+i] = row;
     }
     const subtotalRow = Array(38).fill(''); subtotalRow[0]='小　　計';
-    subtotalRow[21] = { f: 'IF(SUM(V6:Z28)=0,"",SUM(V6:Z28))' };
+    if(!isRequestMode) subtotalRow[21] = { f: 'IF(SUM(V6:Z28)=0,"",SUM(V6:Z28))' };
     aoa[28] = subtotalRow;
-    const taxRow = Array(38).fill(''); taxRow[0]='消費税等'; taxRow[21] = { f:'V29/10' }; taxRow[26]='１０％';
+    const taxRow = Array(38).fill(''); taxRow[0]='消費税等';
+    if(!isRequestMode){ taxRow[21] = { f:'V29/10' }; taxRow[26]='１０％'; }
     aoa[29] = taxRow;
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
@@ -583,7 +620,7 @@ function exportExcel(){
   // ── 表紙：各シートを参照する形（見積り_複合.xls と同じ構成） ──
   const cover = [];
   for(let i=0;i<34;i++) cover.push(Array(35).fill(''));
-  cover[0][11] = '御　見　積　書';
+  cover[0][11] = TEMPLATE_TITLE[template];
   cover[2][12]='令和'; cover[2][15]='７年'; cover[2][18]='月'; cover[2][21]='日';
   cover[4][15]='様'; cover[4][21]='株式会社　甍';
   cover[5][21]='坂戸営業所'; cover[6][21]='〒350-0244'; cover[7][21]='埼玉県坂戸市森戸1282-2';
@@ -592,8 +629,14 @@ function exportExcel(){
   cover[10][1]='工事名'; cover[10][21]='担当者　'; cover[10][25]='小野　哲也';
   cover[11][1]='有効期限'; cover[11][22]='携帯電話'; cover[11][25]='090-4946-6247';
   cover[12][21]='mail'; cover[12][25]='iraka₋ono@outlook.jp';
-  cover[14][1]='税込合計金額'; cover[14][8]={f:'X31+X32'}; cover[14][19]='（消費税込み）';
-  cover[16] = Array(35).fill(''); cover[16][15]='数量'; cover[16][18]='単位'; cover[16][20]='単価'; cover[16][23]='金額'; cover[16][28]='摘要';
+  if(!isRequestMode){
+    cover[14][1]='税込合計金額'; cover[14][8]={f:'X31+X32'}; cover[14][19]='（消費税込み）';
+  }
+  cover[16] = Array(35).fill('');
+  cover[16][15]='数量'; cover[16][18]='単位';
+  cover[16][20] = isRequestMode ? '' : '単価';
+  cover[16][23] = isRequestMode ? '' : '金額';
+  cover[16][28]='摘要';
   const categories = [
     ['仮設工事',0], ['解体工事',0], ['新設屋根工事',1], ['雨樋工事',1], ['諸経費',0]
   ];
@@ -602,15 +645,20 @@ function exportExcel(){
     row[0] = { f: `${name}!A6` };
     row[15] = 1;
     row[18] = '式';
-    row[20] = { f: `${name}!V29` };
-    row[23] = { f: `IF(SUM(P${18+idx}*U${18+idx})=0,"",SUM(P${18+idx}*U${18+idx}))` };
+    if(!isRequestMode){
+      row[20] = { f: `${name}!V29` };
+      row[23] = { f: `IF(SUM(P${18+idx}*U${18+idx})=0,"",SUM(P${18+idx}*U${18+idx}))` };
+    }
     cover[17+idx] = row;
   });
-  const cSubtotal = Array(35).fill(''); cSubtotal[0]='小　　計'; cSubtotal[23]={f:'SUM(X18:AB30)'};
+  const cSubtotal = Array(35).fill(''); cSubtotal[0]='小　　計';
+  if(!isRequestMode) cSubtotal[23]={f:'SUM(X18:AB30)'};
   cover[30] = cSubtotal;
-  const cTax = Array(35).fill(''); cTax[0]='消費税等'; cTax[23]={f:'X31/10'}; cTax[28]='１０％';
+  const cTax = Array(35).fill(''); cTax[0]='消費税等';
+  if(!isRequestMode){ cTax[23]={f:'X31/10'}; cTax[28]='１０％'; }
   cover[31] = cTax;
-  const cTotal = Array(35).fill(''); cTotal[0]='合　　計'; cTotal[23]={f:'X31+X32'};
+  const cTotal = Array(35).fill(''); cTotal[0]='合　　計';
+  if(!isRequestMode) cTotal[23]={f:'X31+X32'};
   cover[32] = cTotal;
   cover[33][0] = '備考：';
 
@@ -626,7 +674,8 @@ function exportExcel(){
     XLSX.utils.book_append_sheet(newWb, ws, name);
   });
 
-  XLSX.writeFile(newWb, '積算結果_見積書.xlsx');
+  const FILE_NAME = { iraka:'積算結果_見積書.xlsx', request:'積算結果_見積依頼書.xlsx', koukyo:'積算結果_工事費内訳書.xlsx' };
+  XLSX.writeFile(newWb, FILE_NAME[template]);
 }
 
 function updateShimoyaSectionVisibility(){
@@ -789,6 +838,68 @@ const EST_MAPPING_DEFAULT = {
   gutter:         {itemName:'Panasonic 集水器 ファインスケアNF-I型', category:'雨樋工事', note:'集水器'},
   tatetoi:        {itemName:'Panasonic 竪樋 瞬水S15', category:'雨樋工事', note:'竪樋'}
 };
+/* ===== Product Catalog（製品定義） =====
+   屋根仕様(roofSpecId) ごとに、屋根材・唐草・ケラバ水切・棟包み・雪止め等の
+   商品名・係数(multiplier/ロス率)が切り替わる。
+   Product Catalog → Estimate Mapping → 見積書 */
+const PRODUCT_CATALOG = {
+  tatehira333: { label:'立平333', maker:'アイジー工業', method:'立平葺き', width:'333mm',
+    items:{
+      roofMaterial:{itemName:'ガルバリウム鋼板 立平333 葺き', note:'立平333・働き幅333mm', multiplier:1.08},
+      noki:        {itemName:'軒先唐草(立平333用)', note:'唐草', multiplier:1.00},
+      keraba:      {itemName:'ケラバ水切(立平333用)', note:'ケラバ水切', multiplier:1.00},
+      katamune:    {itemName:'片棟包み(立平333用)', note:'片棟包み', multiplier:1.00},
+      mune:        {itemName:'棟包み(立平333用)', note:'棟包み', multiplier:1.00},
+      yukidome:    {itemName:'雪止め金具(立平333用)', note:'雪止め', multiplier:1.00},
+    }},
+  tatehira455: { label:'立平455', maker:'アイジー工業', method:'立平葺き', width:'455mm',
+    items:{
+      roofMaterial:{itemName:'ガルバリウム鋼板 立平455 葺き', note:'立平455・働き幅455mm', multiplier:1.06},
+      noki:        {itemName:'軒先唐草(立平455用)', note:'唐草', multiplier:1.00},
+      keraba:      {itemName:'ケラバ水切(立平455用)', note:'ケラバ水切', multiplier:1.00},
+      katamune:    {itemName:'片棟包み(立平455用)', note:'片棟包み', multiplier:1.00},
+      mune:        {itemName:'棟包み(立平455用)', note:'棟包み', multiplier:1.00},
+      yukidome:    {itemName:'雪止め金具(立平455用)', note:'雪止め', multiplier:1.00},
+    }},
+  yokoatsu_s: { label:'横暖ルーフS', maker:'アイジー工業', method:'横葺き', width:'製品仕様',
+    items:{
+      roofMaterial:{itemName:'横暖ルーフS 葺き', note:'断熱一体型', multiplier:1.10},
+      noki:        {itemName:'軒先唐草(横暖ルーフS用)', note:'唐草', multiplier:1.00},
+      keraba:      {itemName:'ケラバ水切(横暖ルーフS用)', note:'ケラバ水切', multiplier:1.00},
+      katamune:    {itemName:'片棟包み(横暖ルーフS用)', note:'片棟包み', multiplier:1.00},
+      mune:        {itemName:'棟包み(横暖ルーフS用)', note:'棟包み', multiplier:1.00},
+      yukidome:    {itemName:'雪止め金具(横暖ルーフS用)', note:'雪止め', multiplier:1.00},
+    }},
+  yokoatsu_alphas: { label:'横暖ルーフαS', maker:'アイジー工業', method:'横葺き', width:'製品仕様',
+    items:{
+      roofMaterial:{itemName:'横暖ルーフαS 葺き', note:'断熱一体型・高耐久', multiplier:1.10},
+      noki:        {itemName:'軒先唐草(横暖ルーフαS用)', note:'唐草', multiplier:1.00},
+      keraba:      {itemName:'ケラバ水切(横暖ルーフαS用)', note:'ケラバ水切', multiplier:1.00},
+      katamune:    {itemName:'片棟包み(横暖ルーフαS用)', note:'片棟包み', multiplier:1.00},
+      mune:        {itemName:'棟包み(横暖ルーフαS用)', note:'棟包み', multiplier:1.00},
+      yukidome:    {itemName:'雪止め金具(横暖ルーフαS用)', note:'雪止め', multiplier:1.00},
+    }},
+  setsuban88: { label:'AT式折板88型', maker:'各社共通規格', method:'折板', width:'製品仕様',
+    items:{
+      roofMaterial:{itemName:'折板88型 葺き', note:'AT式折板88型', multiplier:1.05},
+      noki:        {itemName:'軒先水切(折板用)', note:'水切', multiplier:1.00},
+      keraba:      {itemName:'ケラバ水切(折板用)', note:'ケラバ水切', multiplier:1.00},
+      katamune:    {itemName:'ハイプラナー(折板用)', note:'棟部材', multiplier:1.00},
+      mune:        {itemName:'ハイプラナー(折板用)', note:'棟部材', multiplier:1.00},
+      yukidome:    {itemName:'雪止め金具(折板用)', note:'雪止め', multiplier:1.00},
+    }}
+};
+function getCurrentRoofSpec(){
+  const id = document.getElementById('roofSpecId')?.value || 'tatehira333';
+  return { id, ...PRODUCT_CATALOG[id] };
+}
+function onRoofSpecChange(){
+  const spec = getCurrentRoofSpec();
+  document.getElementById('roofSpecInfo').innerHTML =
+    `📦 <b>${spec.label}</b>（${spec.maker} ／ ${spec.method} ／ ${spec.width}）を選択中。屋根材・唐草・ケラバ水切・棟包み・雪止めのEstimate Mappingが自動切替されます。`;
+  if(lastResult) render();
+}
+
 const MAPPING_KEY = 'iraka_estimate_mapping';
 function loadMappingOverrides(){
   try{ return JSON.parse(localStorage.getItem(MAPPING_KEY) || '{}'); }catch(e){ return {}; }
@@ -797,38 +908,52 @@ function saveMappingOverrides(overrides){
   localStorage.setItem(MAPPING_KEY, JSON.stringify(overrides));
 }
 function getEstimateItem(componentKey, fallbackName){
-  const def = EST_MAPPING_DEFAULT[componentKey] || {itemName:fallbackName, category:'雨樋工事', note:''};
+  const spec = getCurrentRoofSpec();
+  const specItem = spec.items && spec.items[componentKey];
+  const genericDef = EST_MAPPING_DEFAULT[componentKey];
+  const def = specItem
+    ? {itemName:specItem.itemName, category:'新設屋根工事', note:specItem.note, multiplier:specItem.multiplier}
+    : (genericDef ? {...genericDef, multiplier: genericDef.multiplier ?? 1.00} : {itemName:fallbackName, category:'雨樋工事', note:'', multiplier:1.00});
   const overrides = loadMappingOverrides();
-  const ov = overrides[componentKey] || {};
+  const ov = overrides[spec.id+':'+componentKey] || overrides[componentKey] || {};
   return {
     itemName: ov.itemName || def.itemName,
     category: ov.category || def.category,
-    note: ov.note !== undefined ? ov.note : def.note
+    note: ov.note !== undefined ? ov.note : def.note,
+    multiplier: ov.multiplier !== undefined ? parseFloat(ov.multiplier) : def.multiplier
   };
+}
+function getEstimateQty(componentQty, componentKey, fallbackName){
+  const est = getEstimateItem(componentKey, fallbackName);
+  // ロス込み数量は切り上げ2桁（現場の慣習：ロス分は必ず切り上げる）
+  return Math.ceil(componentQty * est.multiplier * 100) / 100;
 }
 function renderMappingPanel(){
   const box = document.getElementById('mappingPanelBody');
   if(!box || !lastResult) return;
-  const overrides = loadMappingOverrides();
+  const spec = getCurrentRoofSpec();
   const keysUsed = [...new Set(lastResult.rows.map(r=>r[4].componentKey))];
-  box.innerHTML = keysUsed.map(key=>{
-    const def = EST_MAPPING_DEFAULT[key] || {itemName:key, category:'雨樋工事', note:''};
+  box.innerHTML = `<div style="font-size:11px;color:#1f4e79;margin-bottom:6px">現在の屋根仕様: <b>${spec.label}</b>（屋根材系の商品はこの仕様専用に保存されます）</div>` +
+  keysUsed.map(key=>{
     const current = getEstimateItem(key, key);
+    const isSpecItem = !!(spec.items && spec.items[key]);
+    const saveKey = isSpecItem ? (spec.id+':'+key) : key;
     return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
-      <span style="font-size:11px;color:#888;min-width:90px">Component: ${key}</span>
-      <input data-map="${key}" data-role="itemName" value="${current.itemName}" style="flex:2;min-width:160px;font-size:12px;padding:4px 6px">
-      <select data-map="${key}" data-role="category" style="font-size:12px;padding:4px">
+      <span style="font-size:11px;color:#888;min-width:90px">Component: ${key}${isSpecItem?' 🔧仕様依存':''}</span>
+      <input data-savekey="${saveKey}" data-role="itemName" value="${current.itemName}" style="flex:2;min-width:160px;font-size:12px;padding:4px 6px">
+      <select data-savekey="${saveKey}" data-role="category" style="font-size:12px;padding:4px">
         <option value="新設屋根工事" ${current.category==='新設屋根工事'?'selected':''}>新設屋根工事</option>
         <option value="雨樋工事" ${current.category==='雨樋工事'?'selected':''}>雨樋工事</option>
       </select>
-      <input data-map="${key}" data-role="note" value="${current.note}" placeholder="摘要" style="flex:1;min-width:100px;font-size:12px;padding:4px 6px">
+      <input data-savekey="${saveKey}" data-role="note" value="${current.note}" placeholder="摘要" style="flex:1;min-width:100px;font-size:12px;padding:4px 6px">
+      <input data-savekey="${saveKey}" data-role="multiplier" type="number" step="0.01" value="${current.multiplier}" title="係数(ロス率)" style="width:64px;font-size:12px;padding:4px 6px">
     </div>`;
   }).join('');
 }
 function saveMappingPanel(){
   const overrides = loadMappingOverrides();
-  document.querySelectorAll('#mappingPanelBody [data-map]').forEach(el=>{
-    const key = el.dataset.map, role = el.dataset.role;
+  document.querySelectorAll('#mappingPanelBody [data-savekey]').forEach(el=>{
+    const key = el.dataset.savekey, role = el.dataset.role;
     overrides[key] = overrides[key] || {};
     overrides[key][role] = el.value;
   });
@@ -845,12 +970,13 @@ function renderCompareTable(){
   const tbody = document.getElementById('compareBody');
   tbody.innerHTML = lastResult.rows.map((r,i)=>{
     const est = getEstimateItem(r[4].componentKey, r[0]);
+    const estQty = getEstimateQty(r[1], r[4].componentKey, r[0]);
     return `
     <tr>
-      <td><b>${est.itemName}</b><div style="font-size:10px;color:#999">${r[0]}</div></td>
-      <td>${r[1]}${r[2]}</td>
+      <td><b>${est.itemName}</b><div style="font-size:10px;color:#999">${r[0]} (Component:${r[1]}${r[2]})</div></td>
+      <td>${estQty}${r[2]}</td>
       <td><input type="number" step="0.01" style="width:70px" id="human-${i}" oninput="updateDiff(${i})" placeholder="人"></td>
-      <td><input type="number" step="0.01" style="width:70px" id="adopt-${i}" value="${r[1]}" oninput="updateDiff(${i})" placeholder="採用"></td>
+      <td><input type="number" step="0.01" style="width:70px" id="adopt-${i}" value="${estQty}" oninput="updateDiff(${i})" placeholder="採用"></td>
       <td id="diff-${i}" style="font-weight:700"></td>
     </tr>
     <tr id="reason-row-${i}" style="display:none"><td colspan="5" style="background:#fff8ec;font-size:12px">
@@ -862,9 +988,9 @@ function renderCompareTable(){
   }).join('');
 }
 function updateDiff(i){
-  const aiVal = lastResult.rows[i][1];
+  const r = lastResult.rows[i];
+  const estQty = getEstimateQty(r[1], r[4].componentKey, r[0]);
   const humanInput = document.getElementById('human-'+i);
-  const adoptInput = document.getElementById('adopt-'+i);
   const humanVal = parseFloat(humanInput.value);
   const diffCell = document.getElementById('diff-'+i);
   const reasonRow = document.getElementById('reason-row-'+i);
@@ -873,14 +999,16 @@ function updateDiff(i){
     reasonRow.style.display='none';
     return;
   }
-  const diff = +(aiVal - humanVal).toFixed(2);
+  const diff = +(estQty - humanVal).toFixed(2);
   diffCell.textContent = diff===0 ? '✅ 一致' : (diff>0?`+${diff}`:diff);
   diffCell.style.color = diff===0 ? '#1a7a4c' : '#c0392b';
   reasonRow.style.display = diff!==0 ? 'table-row' : 'none';
 }
 function getAdoptedValue(i){
   const v = parseFloat(document.getElementById('adopt-'+i)?.value);
-  return isNaN(v) ? lastResult.rows[i][1] : v;
+  if(!isNaN(v)) return v;
+  const r = lastResult.rows[i];
+  return getEstimateQty(r[1], r[4].componentKey, r[0]);
 }
 
 /* ===== 学習ログ（AI/人/採用/差分理由・ブラウザ内保存） ===== */
@@ -923,6 +1051,7 @@ function renderLearningLogList(){
   }).join('');
 }
 renderLearningLogList();
+onRoofSpecChange();
 </script>
 </body>
 </html>
