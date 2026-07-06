@@ -47,6 +47,20 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
 <div class="wrap">
 
 <div class="section">
+  <h2>📎 図面アップロード（立面図・平面図）</h2>
+  <div id="dropZone" style="border:2px dashed #9db3c8;border-radius:12px;padding:20px;text-align:center;color:#5a7a9a;cursor:pointer;background:#f7f9fc">
+    <div style="font-size:28px">📐🖼️</div>
+    <div style="font-size:14px;margin-top:6px">ここに図面画像をドラッグ、またはタップして選択</div>
+    <div style="font-size:11px;color:#999;margin-top:4px">立面図・平面図（複数枚可）／ JPG・PNG・PDF</div>
+    <input type="file" id="fileInput" accept="image/*,.pdf" multiple style="display:none">
+  </div>
+  <div id="thumbs" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>
+  <div style="font-size:12px;color:#888;margin-top:8px">
+    ※現在は図面を「見ながら手入力する」ための参照表示です。画像から寸法を自動で読み取る機能は今後の拡張予定です（別途AI画像解析APIとの連携が必要）。
+  </div>
+</div>
+
+<div class="section">
   <h2>① 立面図読取：屋根タイプ判定用フラグ</h2>
   <div class="row-flags">
     <div class="flagbox"><b>南面</b>
@@ -430,6 +444,51 @@ function exportExcel(){
 document.getElementById('hasShimoya').addEventListener('change', function(){
   document.getElementById('shimoyaSection').style.opacity = this.value==='1' ? '1':'.4';
 });
+
+/* ===== 図面アップロード（参照表示のみ） ===== */
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const thumbs = document.getElementById('thumbs');
+let uploadedDrawings = [];
+
+dropZone.addEventListener('click', ()=>fileInput.click());
+dropZone.addEventListener('dragover', e=>{ e.preventDefault(); dropZone.style.background='#e9f0f8'; });
+dropZone.addEventListener('dragleave', ()=>{ dropZone.style.background='#f7f9fc'; });
+dropZone.addEventListener('drop', e=>{
+  e.preventDefault(); dropZone.style.background='#f7f9fc';
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', e=>handleFiles(e.target.files));
+
+function handleFiles(files){
+  [...files].forEach(file=>{
+    const reader = new FileReader();
+    reader.onload = ev=>{
+      const item = { name:file.name, dataUrl:ev.target.result, isPdf:file.type==='application/pdf' };
+      uploadedDrawings.push(item);
+      renderThumbs();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderThumbs(){
+  thumbs.innerHTML = uploadedDrawings.map((d,i)=>{
+    const inner = d.isPdf
+      ? `<div style="width:90px;height:90px;display:flex;align-items:center;justify-content:center;background:#eee;border-radius:8px;font-size:28px">📄</div>`
+      : `<img src="${d.dataUrl}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer" onclick="openPreview(${i})">`;
+    return `<div style="position:relative">${inner}
+      <div style="font-size:10px;color:#666;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.name}</div>
+      <button onclick="removeDrawing(${i})" style="position:absolute;top:-6px;right:-6px;background:#c0392b;color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer">×</button>
+    </div>`;
+  }).join('');
+}
+function removeDrawing(i){ uploadedDrawings.splice(i,1); renderThumbs(); }
+function openPreview(i){
+  const d = uploadedDrawings[i];
+  const w = window.open('');
+  w.document.write(`<title>${d.name}</title><body style="margin:0;background:#111"><img src="${d.dataUrl}" style="width:100%;display:block"></body>`);
+}
 </script>
 </body>
 </html>
