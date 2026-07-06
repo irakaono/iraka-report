@@ -163,7 +163,7 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
     <thead><tr><th>品名</th><th>数量</th><th>単位</th><th>摘要</th><th>根拠</th></tr></thead>
     <tbody id="qtyBody"></tbody>
   </table>
-  <button class="btn green" onclick="exportExcel()">見積書式.xlsxに出力</button>
+  <button class="btn green" onclick="exportExcel()">見積書Excelを出力（複合フォーマット）</button>
   <button class="btn secondary" onclick="exportCSV()">CSVで出力</button>
 
   <h2 style="margin-top:18px">積算根拠（Evidence）</h2>
@@ -171,26 +171,28 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
 </div>
 
 <div class="section result" id="compareBox">
-  <h2>⑥ 手積算・メーカー見積との比較（三者比較）</h2>
+  <h2>⑥ AI・人・採用の三者比較</h2>
   <div style="font-size:12px;color:#888;margin-bottom:10px">
-    人が積算した資料（Excel/PDF/画像）を投げ込むと、AI値と並べて比較できます。数値はまだ自動読取できないため、右側の欄に手入力してください。
+    人が積算した資料（Teacher Data）をアップロードし、AI値・人積算値・採用値（最終確定値）を並べて管理します。
+    「なぜ違ったか」「なぜその値を採用したか」を残すことがKnowledgeの成長につながります。
   </div>
   <div id="humanDropZone" style="border:2px dashed #9db3c8;border-radius:12px;padding:16px;text-align:center;color:#5a7a9a;cursor:pointer;background:#f7f9fc;margin-bottom:10px">
     <div style="font-size:24px">🧑‍🔧📄</div>
-    <div style="font-size:13px">人の積算資料をアップロード（参照表示）</div>
-    <input type="file" id="humanFileInput" accept="image/*,.pdf,.xlsx,.xls" multiple style="display:none">
+    <div style="font-size:13px">人の積算資料（Teacher Data）をアップロード（Excel/PDF/CSV/JSON対応・参照表示）</div>
+    <input type="file" id="humanFileInput" accept="image/*,.pdf,.xlsx,.xls,.csv,.json" multiple style="display:none">
   </div>
   <div id="humanThumbs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
 
   <table>
-    <thead><tr><th>品名</th><th>AI値</th><th>手積算値</th><th>差分</th></tr></thead>
+    <thead><tr><th>品名</th><th>AI</th><th>人</th><th>採用値</th><th>差分</th></tr></thead>
     <tbody id="compareBody"></tbody>
   </table>
-  <button class="btn secondary" style="margin-top:10px" onclick="saveLearningLog()">この比較結果を学習ログに保存</button>
+  <button class="btn green" onclick="exportExcel()">採用値で見積書Excelを出力</button>
+  <button class="btn secondary" onclick="saveLearningLog()">この比較結果を学習ログに保存</button>
   <div id="learningStatus" style="font-size:12px;color:#1a7a4c;margin-top:6px"></div>
 
   <details style="margin-top:14px">
-    <summary>保存済みの学習ログ一覧</summary>
+    <summary>保存済みの学習ログ一覧（差分・理由）</summary>
     <div id="learningLogList" style="font-size:12px;margin-top:8px"></div>
   </details>
 </div>
@@ -519,23 +521,103 @@ function exportCSV(){
   a.click();
 }
 
+/* ===== 品名 → 出力先シートのマッピング ===== */
+const SHEET_MAP = {
+  '屋根材工事':'新設屋根工事', '軒先板金(鼻隠し)':'新設屋根工事', 'ケラバ板金':'新設屋根工事',
+  '片棟板金':'新設屋根工事', '棟板金':'新設屋根工事', '雨押え板金':'新設屋根工事',
+  '水上立ち上がり':'新設屋根工事', '破風板金':'新設屋根工事', '雪止め':'新設屋根工事',
+  '谷板金':'新設屋根工事'
+  // それ以外（集水器・たてとい・換気部材等）は雨樋工事へ
+};
+function targetSheetFor(itemName){
+  if(SHEET_MAP[itemName]) return SHEET_MAP[itemName];
+  if(itemName.includes('換気')) return '新設屋根工事';
+  return '雨樋工事';
+}
+
 function exportExcel(){
   if(!lastResult || !window.XLSX){ alert('Excel出力ライブラリの読み込みに失敗しました。CSV出力をご利用ください。'); return; }
-  // 見積書書式.xlsx のレイアウトに合わせて出力（17行目ヘッダ、18行目〜明細）
   const wb = XLSX.utils.book_new();
-  const aoa = [];
-  for(let i=0;i<17;i++) aoa.push([]);
-  aoa[10] = ['','件名'];
-  aoa[16] = Array(15).fill('');
-  aoa[16][15]='数量'; aoa[16][18]='単位'; aoa[16][20]='単価'; aoa[16][23]='金額'; aoa[16][28]='摘要';
+
+  // ── 新設屋根工事・雨樋工事：採用値を明細行として書き込む ──
+  const sheetRows = { '新設屋根工事':[], '雨樋工事':[] };
   lastResult.rows.forEach((r,i)=>{
-    const row = Array(29).fill('');
-    row[0]=r[0]; row[15]=r[1]; row[18]=r[2]; row[28]=r[3];
-    aoa[17+i]=row;
+    const target = targetSheetFor(r[0]);
+    const adoptedVal = getAdoptedValue(i);
+    sheetRows[target].push([r[0], adoptedVal, r[2], r[3]]);
   });
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-  XLSX.writeFile(wb, '積算結果_見積書書式.xlsx');
+
+  ['新設屋根工事','雨樋工事'].forEach(sheetName=>{
+    const aoa = [];
+    aoa[0] = Array(38).fill(''); aoa[0][11] = '内訳明細書';
+    aoa[4] = Array(38).fill(''); aoa[4][13]='数量'; aoa[4][16]='単位'; aoa[4][18]='単価'; aoa[4][21]='金額'; aoa[4][26]='摘要';
+    const items = sheetRows[sheetName];
+    for(let i=0;i<23;i++){
+      const row = Array(38).fill('');
+      if(items[i]){
+        row[0]=items[i][0]; row[13]=items[i][1]; row[16]=items[i][2]; row[26]=items[i][3];
+        row[21] = { f: `IF(SUM(N${6+i}*S${6+i})=0,"",SUM(N${6+i}*S${6+i}))` };
+      } else {
+        row[21] = { f: `IF(SUM(N${6+i}*S${6+i})=0,"",SUM(N${6+i}*S${6+i}))` };
+      }
+      aoa[5+i] = row;
+    }
+    const subtotalRow = Array(38).fill(''); subtotalRow[0]='小　　計';
+    subtotalRow[21] = { f: 'IF(SUM(V6:Z28)=0,"",SUM(V6:Z28))' };
+    aoa[28] = subtotalRow;
+    const taxRow = Array(38).fill(''); taxRow[0]='消費税等'; taxRow[21] = { f:'V29/10' }; taxRow[26]='１０％';
+    aoa[29] = taxRow;
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
+  // ── 表紙：各シートを参照する形（見積り_複合.xls と同じ構成） ──
+  const cover = [];
+  for(let i=0;i<34;i++) cover.push(Array(35).fill(''));
+  cover[0][11] = '御　見　積　書';
+  cover[2][12]='令和'; cover[2][15]='７年'; cover[2][18]='月'; cover[2][21]='日';
+  cover[4][15]='様'; cover[4][21]='株式会社　甍';
+  cover[5][21]='坂戸営業所'; cover[6][21]='〒350-0244'; cover[7][21]='埼玉県坂戸市森戸1282-2';
+  cover[8][1]='　件名'; cover[8][21]='TEL/FAX　049-277-3376';
+  cover[9][1]='現場住所';
+  cover[10][1]='工事名'; cover[10][21]='担当者　'; cover[10][25]='小野　哲也';
+  cover[11][1]='有効期限'; cover[11][22]='携帯電話'; cover[11][25]='090-4946-6247';
+  cover[12][21]='mail'; cover[12][25]='iraka₋ono@outlook.jp';
+  cover[14][1]='税込合計金額'; cover[14][8]={f:'X31+X32'}; cover[14][19]='（消費税込み）';
+  cover[16] = Array(35).fill(''); cover[16][15]='数量'; cover[16][18]='単位'; cover[16][20]='単価'; cover[16][23]='金額'; cover[16][28]='摘要';
+  const categories = [
+    ['仮設工事',0], ['解体工事',0], ['新設屋根工事',1], ['雨樋工事',1], ['諸経費',0]
+  ];
+  categories.forEach(([name],idx)=>{
+    const row = Array(35).fill('');
+    row[0] = { f: `${name}!A6` };
+    row[15] = 1;
+    row[18] = '式';
+    row[20] = { f: `${name}!V29` };
+    row[23] = { f: `IF(SUM(P${18+idx}*U${18+idx})=0,"",SUM(P${18+idx}*U${18+idx}))` };
+    cover[17+idx] = row;
+  });
+  const cSubtotal = Array(35).fill(''); cSubtotal[0]='小　　計'; cSubtotal[23]={f:'SUM(X18:AB30)'};
+  cover[30] = cSubtotal;
+  const cTax = Array(35).fill(''); cTax[0]='消費税等'; cTax[23]={f:'X31/10'}; cTax[28]='１０％';
+  cover[31] = cTax;
+  const cTotal = Array(35).fill(''); cTotal[0]='合　　計'; cTotal[23]={f:'X31+X32'};
+  cover[32] = cTotal;
+  cover[33][0] = '備考：';
+
+  const coverWs = XLSX.utils.aoa_to_sheet(cover);
+  const newWb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(newWb, coverWs, '表紙');
+  wb.SheetNames.forEach(name=>{ XLSX.utils.book_append_sheet(newWb, wb.Sheets[name], name); });
+  // 仮設工事・解体工事・諸経費は空シートとして追加（今回のエンジンは屋根・雨樋のみ対応）
+  ['仮設工事','解体工事','諸経費'].forEach(name=>{
+    const emptyAoa = []; emptyAoa[0]=['','','','','','','','','','','','内訳明細書'];
+    emptyAoa[4]=Array(27).fill(''); emptyAoa[4][13]='数量'; emptyAoa[4][16]='単位'; emptyAoa[4][18]='単価'; emptyAoa[4][21]='金額'; emptyAoa[4][26]='摘要';
+    const ws = XLSX.utils.aoa_to_sheet(emptyAoa);
+    XLSX.utils.book_append_sheet(newWb, ws, name);
+  });
+
+  XLSX.writeFile(newWb, '積算結果_見積書.xlsx');
 }
 
 function updateShimoyaSectionVisibility(){
@@ -678,40 +760,67 @@ function renderHumanThumbs(){
     </div>`).join('');
 }
 
-/* ===== 三者比較表（AI値 / 手積算値） ===== */
+/* ===== 三者比較表（AI値 / 人積算値 / 採用値） ===== */
 function renderCompareTable(){
   const tbody = document.getElementById('compareBody');
   tbody.innerHTML = lastResult.rows.map((r,i)=>`
     <tr>
       <td>${r[0]}</td>
       <td>${r[1]}${r[2]}</td>
-      <td><input type="number" step="0.01" style="width:80px" id="human-${i}" oninput="updateDiff(${i})"></td>
+      <td><input type="number" step="0.01" style="width:70px" id="human-${i}" oninput="updateDiff(${i})" placeholder="人"></td>
+      <td><input type="number" step="0.01" style="width:70px" id="adopt-${i}" value="${r[1]}" oninput="updateDiff(${i})" placeholder="採用"></td>
       <td id="diff-${i}" style="font-weight:700"></td>
-    </tr>`).join('');
+    </tr>
+    <tr id="reason-row-${i}" style="display:none"><td colspan="5" style="background:#fff8ec;font-size:12px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input style="flex:1;min-width:140px" id="reason-diff-${i}" placeholder="なぜ違ったか（例：谷の始点認識が違う）">
+        <input style="flex:1;min-width:140px" id="reason-adopt-${i}" placeholder="採用理由（例：現場で実測し採用）">
+      </div>
+    </td></tr>`).join('');
 }
 function updateDiff(i){
   const aiVal = lastResult.rows[i][1];
-  const humanVal = parseFloat(document.getElementById('human-'+i).value);
+  const humanInput = document.getElementById('human-'+i);
+  const adoptInput = document.getElementById('adopt-'+i);
+  const humanVal = parseFloat(humanInput.value);
   const diffCell = document.getElementById('diff-'+i);
-  if(isNaN(humanVal)){ diffCell.textContent=''; return; }
+  const reasonRow = document.getElementById('reason-row-'+i);
+  if(isNaN(humanVal)){
+    diffCell.textContent='';
+    reasonRow.style.display='none';
+    return;
+  }
   const diff = +(aiVal - humanVal).toFixed(2);
   diffCell.textContent = diff===0 ? '✅ 一致' : (diff>0?`+${diff}`:diff);
   diffCell.style.color = diff===0 ? '#1a7a4c' : '#c0392b';
+  reasonRow.style.display = diff!==0 ? 'table-row' : 'none';
+}
+function getAdoptedValue(i){
+  const v = parseFloat(document.getElementById('adopt-'+i)?.value);
+  return isNaN(v) ? lastResult.rows[i][1] : v;
 }
 
-/* ===== 学習ログ（ブラウザ内保存・簡易版） ===== */
+/* ===== 学習ログ（AI/人/採用/差分理由・ブラウザ内保存） ===== */
 function saveLearningLog(){
   const entries = lastResult.rows.map((r,i)=>{
     const humanVal = parseFloat(document.getElementById('human-'+i)?.value);
-    return { item:r[0], aiValue:r[1], unit:r[2], humanValue: isNaN(humanVal)?null:humanVal, ruleRef:r[4].ruleRef };
+    const adoptVal = getAdoptedValue(i);
+    return {
+      item:r[0], aiValue:r[1], unit:r[2],
+      humanValue: isNaN(humanVal)?null:humanVal,
+      adoptedValue: adoptVal,
+      diffReason: document.getElementById('reason-diff-'+i)?.value || '',
+      adoptReason: document.getElementById('reason-adopt-'+i)?.value || '',
+      ruleRef:r[4].ruleRef
+    };
   }).filter(e=>e.humanValue!==null);
-  if(entries.length===0){ document.getElementById('learningStatus').textContent='手積算値が入力されていません。'; return; }
+  if(entries.length===0){ document.getElementById('learningStatus').textContent='人積算値が入力されていません。'; return; }
   const log = { timestamp:new Date().toISOString(), roofType:lastResult.roofType, entries };
   const key = 'iraka_learning_log';
   const existing = JSON.parse(localStorage.getItem(key) || '[]');
   existing.push(log);
   localStorage.setItem(key, JSON.stringify(existing));
-  document.getElementById('learningStatus').textContent = `✓ 保存しました（${entries.length}件の差分）。この端末のブラウザ内に保存されています。`;
+  document.getElementById('learningStatus').textContent = `✓ 保存しました（${entries.length}件）。この端末のブラウザ内に保存されています。`;
   renderLearningLogList();
 }
 function renderLearningLogList(){
@@ -724,7 +833,7 @@ function renderLearningLogList(){
     return `<div style="border-bottom:1px solid #eee;padding:6px 0">
       <b>${new Date(l.timestamp).toLocaleString('ja-JP')}</b>（${l.roofType}）
       ${diffs.length>0
-        ? `<div style="color:#c0392b">差分あり: ${diffs.map(d=>`${d.item} AI:${d.aiValue} 手:${d.humanValue}(${d.ruleRef})`).join(' / ')}</div>`
+        ? diffs.map(d=>`<div style="color:#c0392b">${d.item}: AI${d.aiValue} / 人${d.humanValue} / 採用${d.adoptedValue}${d.diffReason?' ｜ 理由:'+d.diffReason:''}${d.adoptReason?' ｜ 採用理由:'+d.adoptReason:''}（${d.ruleRef}）</div>`).join('')
         : `<div style="color:#1a7a4c">全項目一致</div>`}
     </div>`;
   }).join('');
