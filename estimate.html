@@ -47,17 +47,26 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
 <div class="wrap">
 
 <div class="section">
-  <h2>📎 図面アップロード（立面図・平面図）</h2>
-  <div id="dropZone" style="border:2px dashed #9db3c8;border-radius:12px;padding:20px;text-align:center;color:#5a7a9a;cursor:pointer;background:#f7f9fc">
-    <div style="font-size:28px">📐🖼️</div>
-    <div style="font-size:14px;margin-top:6px">ここに図面画像をドラッグ、またはタップして選択</div>
-    <div style="font-size:11px;color:#999;margin-top:4px">立面図・平面図（複数枚可）／ JPG・PNG・PDF</div>
-    <input type="file" id="fileInput" accept="image/*,.pdf" multiple style="display:none">
+  <h2>📎 図面管理（立面図・平面図）</h2>
+  <div style="font-size:12px;color:#888;margin-bottom:10px">
+    種類ごとにアップロードしてください。図面を見ながら②③④の数値を入力します（自動読み取りは今後の拡張予定）。
   </div>
-  <div id="thumbs" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px"></div>
-  <div style="font-size:12px;color:#888;margin-top:8px">
-    ※現在は図面を「見ながら手入力する」ための参照表示です。画像から寸法を自動で読み取る機能は今後の拡張予定です（別途AI画像解析APIとの連携が必要）。
+
+  <div style="font-size:13px;font-weight:700;color:#1f4e79;margin:10px 0 6px">立面図</div>
+  <div class="row-flags" id="elevationSlots"></div>
+
+  <div style="font-size:13px;font-weight:700;color:#1f4e79;margin:14px 0 6px">平面図</div>
+  <div class="row-flags" style="grid-template-columns:repeat(2,1fr)" id="planSlots"></div>
+
+  <div style="margin-top:14px">
+    <label>縮尺（例：1/100）</label>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input type="text" id="scaleInput" placeholder="1/100" style="max-width:140px">
+      <span id="scaleStatus" style="font-size:12px;color:#1a7a4c;font-weight:700"></span>
+    </div>
   </div>
+
+  <input type="file" id="fileInput" accept="image/*,.pdf" style="display:none">
 </div>
 
 <div class="section">
@@ -81,11 +90,14 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
     </div>
   </div>
   <div class="grid">
-    <div><label>下屋の有無</label>
-      <select id="hasShimoya"><option value="0">なし</option><option value="1">あり</option></select>
-    </div>
-    <div><label>下屋の面</label>
-      <select id="shimoyaFace"><option value="south">南</option><option value="north">北</option><option value="east">東</option><option value="west">西</option></select>
+    <div style="grid-column:1/-1">
+      <label>下屋の面（複数チェック可・エンジンは現在1面のみ対応、最初にチェックした面を使用）</label>
+      <div style="display:flex;gap:14px;margin-top:4px">
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px"><input type="checkbox" id="shimoya_south">南</label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px"><input type="checkbox" id="shimoya_north">北</label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px"><input type="checkbox" id="shimoya_east">東</label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px"><input type="checkbox" id="shimoya_west">西</label>
+      </div>
     </div>
   </div>
 </div>
@@ -141,7 +153,7 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
 
   <h2 style="margin-top:18px">数量表（見積書式.xlsx 対応）</h2>
   <table id="qtyTable">
-    <thead><tr><th>品名</th><th>数量</th><th>単位</th><th>摘要</th></tr></thead>
+    <thead><tr><th>品名</th><th>数量</th><th>単位</th><th>摘要</th><th>根拠</th></tr></thead>
     <tbody id="qtyBody"></tbody>
   </table>
   <button class="btn green" onclick="exportExcel()">見積書式.xlsxに出力</button>
@@ -320,13 +332,15 @@ function runEstimate(){
   const v = id => document.getElementById(id).value;
   const c = id => document.getElementById(id).checked;
 
+  const shimoyaFaces = ['south','north','east','west'].filter(dir=>c('shimoya_'+dir));
   const flags = {
     south:{hasRoof:c('south_hasRoof'), isGable:c('south_isGable')},
     north:{hasRoof:c('north_hasRoof'), isGable:c('north_isGable')},
     east:{hasRoof:c('east_hasRoof'), isGable:c('east_isGable')},
     west:{hasRoof:c('west_hasRoof'), isGable:c('west_isGable')},
-    hasShimoya: v('hasShimoya')==='1',
-    shimoyaFace: v('shimoyaFace')
+    hasShimoya: shimoyaFaces.length>0,
+    shimoyaFace: shimoyaFaces[0] || null,
+    shimoyaFaces
   };
   const roofDet = detectRoofType(flags);
   const roofType = roofDet.type;
@@ -383,38 +397,61 @@ function render(){
   `;
 
   const rows = [];
-  rows.push(['屋根材工事', areas.totalArea, '㎡', `勾配伸び率${areas.slopeRate}適用`]);
-  rows.push(['軒先板金(鼻隠し)', lengths.noki, 'm', '立面図実長']);
-  if(lengths.keraba>0) rows.push(['ケラバ板金', lengths.keraba, 'm', '立面図実長']);
-  rows.push(['片棟板金', lengths.katamune, 'm', '棟換気対象外']);
-  if(lengths.mune>0) rows.push(['棟板金', lengths.mune, 'm', '切妻中央']);
-  if(lengths.amaoshi>0) rows.push(['雨押え板金', lengths.amaoshi, 'm', '下屋取合']);
-  if(lengths.mizukami>0) rows.push(['水上立ち上がり', lengths.mizukami, 'm', lengths.mizukamiRule]);
-  rows.push(['破風板金', lengths.fufu, 'm', '鼻隠し+ケラバ+片棟統合(甍標準)']);
-  rows.push(['雪止め', lengths.yukidome, 'm', '軒先(水下)のみ']);
-  if(ventilation.mainVent) rows.push([`換気部材(${ventilation.mainVent.type==='mune'?'棟換気':'片流れ換気'})`, ventilation.mainVent.count_1P, '個', `天井${ventilation.mainVent.ceilingArea}㎡÷${ventilation.mainVent.cap['1P_m2']}`]);
-  if(ventilation.shimoyaVent) rows.push(['換気部材(雨押え換気)', ventilation.shimoyaVent.count_1P, '個', `下屋天井${ventilation.shimoyaVent.shimoYaCeiling}㎡÷${ventilation.shimoyaVent.cap['1P_m2']}`]);
-  rows.push(['集水器', drainage.gutterCount, '箇所', `投影${areas.totalProj}㎡÷${drainage.capacity_m2}㎡(降雨${drainage.rainfall}mm/h)`]);
-  rows.push(['たてとい', drainage.tatetoi_total, 'm', '実長・ロスなし']);
-  if(valley) rows.push(['谷板金', valley.actualLength, 'm', `平面${valley.planLength}m×伸び率${valley.rate}`]);
+  rows.push(['屋根材工事', areas.totalArea, '㎡', `勾配伸び率${areas.slopeRate}適用`,
+    {ruleRef:'RULE-001,RULE-100', formula:areas.formula, confidence:90}]);
+  rows.push(['軒先板金(鼻隠し)', lengths.noki, 'm', '立面図実長',
+    {ruleRef:'RULE-002', formula:`桁行(${lastResult.p.buildingW}+2×${lastResult.p.noki_EW})基準。伸び率は適用しない`, confidence:90}]);
+  if(lengths.keraba>0) rows.push(['ケラバ板金', lengths.keraba, 'm', '立面図実長',
+    {ruleRef:'RULE-002,RULE-003', formula:'切妻: (梁間+軒S+軒N)×2×2。伸び率禁止', confidence:85}]);
+  rows.push(['片棟板金', lengths.katamune, 'm', '棟換気対象外',
+    {ruleRef:'RULE-002,RULE-003,RULE-005', formula:'桁行(けらば含む)=水上端', confidence:85}]);
+  if(lengths.mune>0) rows.push(['棟板金', lengths.mune, 'm', '切妻中央',
+    {ruleRef:'RULE-002', formula:'建物幅W', confidence:85}]);
+  if(lengths.amaoshi>0) rows.push(['雨押え板金', lengths.amaoshi, 'm', '下屋取合',
+    {ruleRef:'RULE-003', formula:'東西(梁間×2)+北(建物幅)。伸び率禁止', confidence:80}]);
+  if(lengths.mizukami>0) rows.push(['水上立ち上がり', lengths.mizukami, 'm', lengths.mizukamiRule,
+    {ruleRef:'RULE-007,'+lengths.mizukamiRule, formula:'屋根タイプ×下屋パターンで判定（物件依存が最も高い部材）', confidence:lengths.mizukamiRule==='RULE-901'?60:80}]);
+  rows.push(['破風板金', lengths.fufu, 'm', '鼻隠し+ケラバ+片棟統合(甍標準)',
+    {ruleRef:'RULE-010', formula:`軒先${lengths.noki}+ケラバ${lengths.keraba}+片棟${lengths.katamune}`, confidence:85}]);
+  rows.push(['雪止め', lengths.yukidome, 'm', '軒先(水下)のみ',
+    {ruleRef:'RULE-002', formula:'軒先(水下)長さと同一', confidence:85}]);
+  if(ventilation.mainVent) rows.push([`換気部材(${ventilation.mainVent.type==='mune'?'棟換気':'片流れ換気'})`, ventilation.mainVent.count_1P, '個', `天井${ventilation.mainVent.ceilingArea}㎡÷${ventilation.mainVent.cap['1P_m2']}`,
+    {ruleRef: ventilation.mainVent.type==='mune'?'RULE-200':'RULE-005,RULE-201', formula:`ceil(天井面積(投影)${ventilation.mainVent.ceilingArea}㎡ ÷ ${ventilation.mainVent.cap['1P_m2']}㎡) ※屋根実面積は使わない(RULE-004)`, confidence:90}]);
+  if(ventilation.shimoyaVent) rows.push(['換気部材(雨押え換気)', ventilation.shimoyaVent.count_1P, '個', `下屋天井${ventilation.shimoyaVent.shimoYaCeiling}㎡÷${ventilation.shimoyaVent.cap['1P_m2']}`,
+    {ruleRef:'RULE-004,RULE-202', formula:`ceil(下屋天井${ventilation.shimoyaVent.shimoYaCeiling}㎡ ÷ ${ventilation.shimoyaVent.cap['1P_m2']}㎡)`, confidence:85}]);
+  rows.push(['集水器', drainage.gutterCount, '箇所', `投影${areas.totalProj}㎡÷${drainage.capacity_m2}㎡(降雨${drainage.rainfall}mm/h)`,
+    {ruleRef:'RULE-006,RULE-008,RULE-300', formula:`max(ceil(投影${areas.totalProj}㎡÷${drainage.capacity_m2}㎡), 角2箇所) 。竪樋間隔${drainage.spacing}m(基準20m以内)`, confidence:70}]);
+  rows.push(['たてとい', drainage.tatetoi_total, 'm', '実長・ロスなし',
+    {ruleRef:'RULE-011', formula:`2F軒高×集水器数(${drainage.gutterCount}箇所)`, confidence:80}]);
+  if(valley) rows.push(['谷板金', valley.actualLength, 'm', `平面${valley.planLength}m×伸び率${valley.rate}`,
+    {ruleRef:'RULE-120', formula:`平面${valley.planLength}m × √(1+(勾配/10)²÷2) = ×${valley.rate}`, confidence:90}]);
 
-  document.getElementById('qtyBody').innerHTML = rows.map(r=>
-    `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('');
+  document.getElementById('qtyBody').innerHTML = rows.map((r,i)=>`
+    <tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td>
+    <td><button class="btn secondary" style="padding:4px 10px;font-size:11px" onclick="toggleEvidence(${i})">根拠▼</button></td></tr>
+    <tr id="ev-row-${i}" style="display:none"><td colspan="5" style="background:#f7f9fc">
+      <div style="font-size:12px"><b>RuleRef:</b> ${r[4].ruleRef} ／ <b>確信度:</b> ${r[4].confidence}%</div>
+      <div style="font-size:12px;color:#444;margin-top:3px">${r[4].formula}</div>
+    </td></tr>`).join('');
   lastResult.rows = rows;
 
-  const ev = [];
-  ev.push(`【屋根タイプ】${roofDet.reasoningText||''} RULE-001`);
-  ev.push(`【屋根面積】${areas.formula}`);
-  ev.push(`【換気】RULE-004: 必ず天井面積(投影)を使用。屋根実面積は使わない。`);
-  ev.push(`【排水】RULE-006: 投影面積${areas.totalProj}㎡で判定（屋根実面積は使わない）。RULE-300: 竪樋間隔${drainage.spacing}m（20m以内が基準）。`);
-  document.getElementById('evidenceBox').innerHTML =
-    ev.map(e=>`<div class="evidence-step">${e}</div>`).join('');
+  document.getElementById('evidenceBox').innerHTML = `
+    <div class="evidence-step">【屋根タイプ判定】${ROOFTYPE_LABEL[roofType]||roofType}（RULE-001）</div>
+    <div class="evidence-step">【屋根面積】${areas.formula}</div>
+    <div class="evidence-step">【換気の原則】RULE-004: 必ず天井面積(投影)を使用。屋根実面積は使わない。</div>
+    <div class="evidence-step">【排水の原則】RULE-006: 投影面積${areas.totalProj}㎡で判定（屋根実面積は使わない）。RULE-300: 竪樋間隔${drainage.spacing}m（20m以内が基準）。</div>
+    <div style="font-size:11px;color:#999;margin-top:8px">各数量行の「根拠▼」ボタンでも個別のRuleRef・確信度・計算式を確認できます。</div>
+  `;
+}
+function toggleEvidence(i){
+  const el = document.getElementById('ev-row-'+i);
+  el.style.display = el.style.display==='none' ? 'table-row' : 'none';
 }
 
 function exportCSV(){
   if(!lastResult) return;
   let csv = '品名,数量,単位,摘要\n';
-  lastResult.rows.forEach(r=>{ csv += r.map(x=>`"${x}"`).join(',')+'\n'; });
+  lastResult.rows.forEach(r=>{ csv += r.slice(0,4).map(x=>`"${x}"`).join(',')+'\n'; });
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -441,54 +478,62 @@ function exportExcel(){
   XLSX.writeFile(wb, '積算結果_見積書書式.xlsx');
 }
 
-document.getElementById('hasShimoya').addEventListener('change', function(){
-  document.getElementById('shimoyaSection').style.opacity = this.value==='1' ? '1':'.4';
+function updateShimoyaSectionVisibility(){
+  const any = ['south','north','east','west'].some(dir=>document.getElementById('shimoya_'+dir).checked);
+  document.getElementById('shimoyaSection').style.opacity = any ? '1':'.4';
+}
+['south','north','east','west'].forEach(dir=>{
+  document.getElementById('shimoya_'+dir).addEventListener('change', updateShimoyaSectionVisibility);
 });
+updateShimoyaSectionVisibility();
 
-/* ===== 図面アップロード（参照表示のみ） ===== */
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
-const thumbs = document.getElementById('thumbs');
-let uploadedDrawings = [];
+/* ===== 図面管理（種類別スロット） ===== */
+const DRAWING_SLOTS = [
+  {key:'elev_south', group:'elevation', label:'南立面図'},
+  {key:'elev_north', group:'elevation', label:'北立面図'},
+  {key:'elev_east',  group:'elevation', label:'東立面図'},
+  {key:'elev_west',  group:'elevation', label:'西立面図'},
+  {key:'plan_roof',  group:'plan', label:'屋根伏図'},
+  {key:'plan_layout',group:'plan', label:'配置図'},
+];
+const drawings = {}; // key -> {name,dataUrl,isPdf}
+let activeSlotKey = null;
 
-dropZone.addEventListener('click', ()=>fileInput.click());
-dropZone.addEventListener('dragover', e=>{ e.preventDefault(); dropZone.style.background='#e9f0f8'; });
-dropZone.addEventListener('dragleave', ()=>{ dropZone.style.background='#f7f9fc'; });
-dropZone.addEventListener('drop', e=>{
-  e.preventDefault(); dropZone.style.background='#f7f9fc';
-  handleFiles(e.dataTransfer.files);
+function renderSlots(){
+  const elevBox = document.getElementById('elevationSlots');
+  const planBox = document.getElementById('planSlots');
+  elevBox.innerHTML = DRAWING_SLOTS.filter(s=>s.group==='elevation').map(slotHtml).join('');
+  planBox.innerHTML = DRAWING_SLOTS.filter(s=>s.group==='plan').map(slotHtml).join('');
+}
+function slotHtml(s){
+  const d = drawings[s.key];
+  const thumb = d
+    ? (d.isPdf ? `<div style="font-size:26px">📄</div>` : `<img src="${d.dataUrl}" style="width:100%;height:56px;object-fit:cover;border-radius:6px">`)
+    : `<div style="font-size:22px;color:#bbb">＋</div>`;
+  return `<div class="flagbox" style="cursor:pointer;padding:6px" onclick="pickSlot('${s.key}')">
+    <b style="font-size:11px">${s.label}</b>
+    ${thumb}
+    <div style="font-size:10px;color:${d?'#1a7a4c':'#999'};margin-top:3px">${d? '✓ '+d.name.slice(0,10) : '未アップロード'}</div>
+  </div>`;
+}
+function pickSlot(key){
+  activeSlotKey = key;
+  document.getElementById('fileInput').click();
+}
+document.getElementById('fileInput').addEventListener('change', e=>{
+  const file = e.target.files[0];
+  if(!file || !activeSlotKey) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    drawings[activeSlotKey] = {name:file.name, dataUrl:ev.target.result, isPdf:file.type==='application/pdf'};
+    renderSlots();
+  };
+  reader.readAsDataURL(file);
 });
-fileInput.addEventListener('change', e=>handleFiles(e.target.files));
-
-function handleFiles(files){
-  [...files].forEach(file=>{
-    const reader = new FileReader();
-    reader.onload = ev=>{
-      const item = { name:file.name, dataUrl:ev.target.result, isPdf:file.type==='application/pdf' };
-      uploadedDrawings.push(item);
-      renderThumbs();
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-function renderThumbs(){
-  thumbs.innerHTML = uploadedDrawings.map((d,i)=>{
-    const inner = d.isPdf
-      ? `<div style="width:90px;height:90px;display:flex;align-items:center;justify-content:center;background:#eee;border-radius:8px;font-size:28px">📄</div>`
-      : `<img src="${d.dataUrl}" style="width:90px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer" onclick="openPreview(${i})">`;
-    return `<div style="position:relative">${inner}
-      <div style="font-size:10px;color:#666;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.name}</div>
-      <button onclick="removeDrawing(${i})" style="position:absolute;top:-6px;right:-6px;background:#c0392b;color:#fff;border:none;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer">×</button>
-    </div>`;
-  }).join('');
-}
-function removeDrawing(i){ uploadedDrawings.splice(i,1); renderThumbs(); }
-function openPreview(i){
-  const d = uploadedDrawings[i];
-  const w = window.open('');
-  w.document.write(`<title>${d.name}</title><body style="margin:0;background:#111"><img src="${d.dataUrl}" style="width:100%;display:block"></body>`);
-}
+document.getElementById('scaleInput').addEventListener('input', function(){
+  document.getElementById('scaleStatus').textContent = this.value ? '✓ 縮尺設定済み' : '';
+});
+renderSlots();
 </script>
 </body>
 </html>
