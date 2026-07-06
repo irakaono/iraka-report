@@ -40,6 +40,10 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
 .summarybox b{display:block;font-size:16px;color:#1f4e79}
 .summarybox span{font-size:11px;color:#666}
 .note{font-size:12px;color:#888;margin-top:20px;text-align:center}
+.dim-field{position:relative}
+.dim-evidence{display:flex;gap:4px;margin-top:4px}
+.dim-evidence select,.dim-evidence input{font-size:10px;padding:3px 4px;border:1px solid #ddd;border-radius:5px;background:#f9fafb}
+.dim-evidence .rule-badge{font-size:9px;background:#eaf2fb;color:#1f4e79;border-radius:5px;padding:3px 6px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -67,6 +71,8 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
   </div>
 
   <input type="file" id="fileInput" accept="image/*,.pdf" style="display:none">
+  <div id="activeDrawingBar" style="display:none;margin-top:12px;background:#eaf2fb;border-radius:10px;padding:10px;font-size:13px;color:#1f4e79;font-weight:700"></div>
+  <div id="activeDrawingPreview" style="margin-top:8px"></div>
 </div>
 
 <div class="section">
@@ -105,12 +111,12 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
 <div class="section">
   <h2>② 主屋根寸法・勾配（平面図＝面積、立面図＝長さ）</h2>
   <div class="grid">
-    <div><label>建物幅 W（桁行・平面図）m</label><input type="number" step="0.001" id="buildingW" value="10.0"></div>
-    <div><label>建物奥行 D（梁間・平面図）m</label><input type="number" step="0.001" id="buildingD" value="8.0"></div>
-    <div><label>軒の出：南 m</label><input type="number" step="0.001" id="noki_S" value="0.6"></div>
-    <div><label>軒の出：北 m</label><input type="number" step="0.001" id="noki_N" value="0.6"></div>
-    <div><label>軒の出：東西(けらば) m</label><input type="number" step="0.001" id="noki_EW" value="0.5"></div>
-    <div><label>主屋勾配（寸）</label><input type="number" step="0.5" id="slope_sun" value="4"></div>
+    <div class="dim-field"><label>建物幅 W（桁行・平面図）m</label><input type="number" step="0.001" id="buildingW" value="10.0" data-rule="RULE-002"></div>
+    <div class="dim-field"><label>建物奥行 D（梁間・平面図）m</label><input type="number" step="0.001" id="buildingD" value="8.0" data-rule="RULE-002"></div>
+    <div class="dim-field"><label>軒の出：南 m</label><input type="number" step="0.001" id="noki_S" value="0.6" data-rule="RULE-002"></div>
+    <div class="dim-field"><label>軒の出：北 m</label><input type="number" step="0.001" id="noki_N" value="0.6" data-rule="RULE-002"></div>
+    <div class="dim-field"><label>軒の出：東西(けらば) m</label><input type="number" step="0.001" id="noki_EW" value="0.5" data-rule="RULE-002"></div>
+    <div class="dim-field"><label>主屋勾配（寸）</label><input type="number" step="0.5" id="slope_sun" value="4" data-rule="RULE-100"></div>
     <div><label>地域（降雨強度）</label>
       <select id="location">
         <option value="saitama">埼玉・東京・神奈川・千葉・栃木・群馬(140mm/h)</option>
@@ -126,6 +132,7 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
 
 <div class="section" id="shimoyaSection">
   <h2>③ 下屋寸法・勾配（下屋ありの場合のみ入力）</h2>
+  <div style="font-size:12px;color:#c0392b;margin-bottom:8px">※現在の計算エンジンは下屋1面のみ対応です。複数面チェックした場合、最初にチェックした面のみで計算されます。</div>
   <div class="grid">
     <div><label>下屋幅 m</label><input type="number" step="0.001" id="shimoyaW" value="0"></div>
     <div><label>下屋奥行 m</label><input type="number" step="0.001" id="shimoyaDepth" value="0"></div>
@@ -161,6 +168,31 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
 
   <h2 style="margin-top:18px">積算根拠（Evidence）</h2>
   <div id="evidenceBox"></div>
+</div>
+
+<div class="section result" id="compareBox">
+  <h2>⑥ 手積算・メーカー見積との比較（三者比較）</h2>
+  <div style="font-size:12px;color:#888;margin-bottom:10px">
+    人が積算した資料（Excel/PDF/画像）を投げ込むと、AI値と並べて比較できます。数値はまだ自動読取できないため、右側の欄に手入力してください。
+  </div>
+  <div id="humanDropZone" style="border:2px dashed #9db3c8;border-radius:12px;padding:16px;text-align:center;color:#5a7a9a;cursor:pointer;background:#f7f9fc;margin-bottom:10px">
+    <div style="font-size:24px">🧑‍🔧📄</div>
+    <div style="font-size:13px">人の積算資料をアップロード（参照表示）</div>
+    <input type="file" id="humanFileInput" accept="image/*,.pdf,.xlsx,.xls" multiple style="display:none">
+  </div>
+  <div id="humanThumbs" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
+
+  <table>
+    <thead><tr><th>品名</th><th>AI値</th><th>手積算値</th><th>差分</th></tr></thead>
+    <tbody id="compareBody"></tbody>
+  </table>
+  <button class="btn secondary" style="margin-top:10px" onclick="saveLearningLog()">この比較結果を学習ログに保存</button>
+  <div id="learningStatus" style="font-size:12px;color:#1a7a4c;margin-top:6px"></div>
+
+  <details style="margin-top:14px">
+    <summary>保存済みの学習ログ一覧</summary>
+    <div id="learningLogList" style="font-size:12px;margin-top:8px"></div>
+  </details>
 </div>
 
 <div class="note">甍AI積算エンジン Ver.3.1 ／ AIは積算を行うのではなく、積算理由を構築する。</div>
@@ -376,6 +408,7 @@ function runEstimate(){
 function render(){
   const {roofDet, roofType, areas, lengths, ventilation, drainage, valley, allAlerts} = lastResult;
   document.getElementById('resultBox').style.display='block';
+  document.getElementById('compareBox').style.display='block';
   document.getElementById('roofTypeResult').textContent =
     `屋根タイプ判定: ${ROOFTYPE_LABEL[roofType]||roofType}（RULE-001）`;
 
@@ -398,42 +431,69 @@ function render(){
 
   const rows = [];
   rows.push(['屋根材工事', areas.totalArea, '㎡', `勾配伸び率${areas.slopeRate}適用`,
-    {ruleRef:'RULE-001,RULE-100', formula:areas.formula, confidence:90}]);
+    {ruleRef:'RULE-001,RULE-100', formula:areas.formula, confidence:90,
+     observation:'平面図で建物幅・奥行・軒の出を確認。立面図で勾配を確認。',
+     reasoning:'RULE-001(平面投影)×RULE-100(勾配伸び率)を選択。屋根実面積は平面図由来のため。'}]);
   rows.push(['軒先板金(鼻隠し)', lengths.noki, 'm', '立面図実長',
-    {ruleRef:'RULE-002', formula:`桁行(${lastResult.p.buildingW}+2×${lastResult.p.noki_EW})基準。伸び率は適用しない`, confidence:90}]);
+    {ruleRef:'RULE-002', formula:`桁行(${lastResult.p.buildingW}+2×${lastResult.p.noki_EW})基準。伸び率は適用しない`, confidence:90,
+     observation:'立面図で軒先の実長を確認。',
+     reasoning:'RULE-002・RULE-003により軒先には勾配伸び率を適用しない（立面図実寸=実長）。'}]);
   if(lengths.keraba>0) rows.push(['ケラバ板金', lengths.keraba, 'm', '立面図実長',
-    {ruleRef:'RULE-002,RULE-003', formula:'切妻: (梁間+軒S+軒N)×2×2。伸び率禁止', confidence:85}]);
+    {ruleRef:'RULE-002,RULE-003', formula:'切妻: (梁間+軒S+軒N)×2×2。伸び率禁止', confidence:85,
+     observation:'立面図（妻面）でケラバの実長を確認。',
+     reasoning:'切妻と判定されたため東西2面×両斜面で計上。伸び率禁止部材のため掛けない。'}]);
   rows.push(['片棟板金', lengths.katamune, 'm', '棟換気対象外',
-    {ruleRef:'RULE-002,RULE-003,RULE-005', formula:'桁行(けらば含む)=水上端', confidence:85}]);
+    {ruleRef:'RULE-002,RULE-003,RULE-005', formula:'桁行(けらば含む)=水上端', confidence:85,
+     observation:'立面図で水上端(片棟)を確認。',
+     reasoning:'片棟のため棟換気は使えない(RULE-005)。長さは桁行(けらば含む)と同一。'}]);
   if(lengths.mune>0) rows.push(['棟板金', lengths.mune, 'm', '切妻中央',
-    {ruleRef:'RULE-002', formula:'建物幅W', confidence:85}]);
+    {ruleRef:'RULE-002', formula:'建物幅W', confidence:85,
+     observation:'平面図・立面図で棟の位置を確認。', reasoning:'切妻中央部の棟。建物幅と同一。'}]);
   if(lengths.amaoshi>0) rows.push(['雨押え板金', lengths.amaoshi, 'm', '下屋取合',
-    {ruleRef:'RULE-003', formula:'東西(梁間×2)+北(建物幅)。伸び率禁止', confidence:80}]);
+    {ruleRef:'RULE-003', formula:'東西(梁間×2)+北(建物幅)。伸び率禁止', confidence:80,
+     observation:'立面図で下屋と2F外壁の取合を確認。',
+     reasoning:'下屋ありのため2F外壁-下屋取合部に雨押えが発生。伸び率禁止部材。'}]);
   if(lengths.mizukami>0) rows.push(['水上立ち上がり', lengths.mizukami, 'm', lengths.mizukamiRule,
-    {ruleRef:'RULE-007,'+lengths.mizukamiRule, formula:'屋根タイプ×下屋パターンで判定（物件依存が最も高い部材）', confidence:lengths.mizukamiRule==='RULE-901'?60:80}]);
+    {ruleRef:'RULE-007,'+lengths.mizukamiRule, formula:'屋根タイプ×下屋パターンで判定（物件依存が最も高い部材）', confidence:lengths.mizukamiRule==='RULE-901'?60:80,
+     observation:'立面図で水上部の下屋接続パターンを確認。',
+     reasoning:'屋根タイプと下屋の組み合わせパターンから該当ルールを選択。物件ごとの確認を推奨。'}]);
   rows.push(['破風板金', lengths.fufu, 'm', '鼻隠し+ケラバ+片棟統合(甍標準)',
-    {ruleRef:'RULE-010', formula:`軒先${lengths.noki}+ケラバ${lengths.keraba}+片棟${lengths.katamune}`, confidence:85}]);
+    {ruleRef:'RULE-010', formula:`軒先${lengths.noki}+ケラバ${lengths.keraba}+片棟${lengths.katamune}`, confidence:85,
+     observation:'各実長の合計。', reasoning:'甍の標準運用として鼻隠し・ケラバ・片棟を破風板金として統合計上(RULE-010)。'}]);
   rows.push(['雪止め', lengths.yukidome, 'm', '軒先(水下)のみ',
-    {ruleRef:'RULE-002', formula:'軒先(水下)長さと同一', confidence:85}]);
+    {ruleRef:'RULE-002', formula:'軒先(水下)長さと同一', confidence:85,
+     observation:'軒先(水下側)の長さを参照。', reasoning:'雪止めは水下軒先にのみ設置。'}]);
   if(ventilation.mainVent) rows.push([`換気部材(${ventilation.mainVent.type==='mune'?'棟換気':'片流れ換気'})`, ventilation.mainVent.count_1P, '個', `天井${ventilation.mainVent.ceilingArea}㎡÷${ventilation.mainVent.cap['1P_m2']}`,
-    {ruleRef: ventilation.mainVent.type==='mune'?'RULE-200':'RULE-005,RULE-201', formula:`ceil(天井面積(投影)${ventilation.mainVent.ceilingArea}㎡ ÷ ${ventilation.mainVent.cap['1P_m2']}㎡) ※屋根実面積は使わない(RULE-004)`, confidence:90}]);
+    {ruleRef: ventilation.mainVent.type==='mune'?'RULE-200':'RULE-005,RULE-201', formula:`ceil(天井面積(投影)${ventilation.mainVent.ceilingArea}㎡ ÷ ${ventilation.mainVent.cap['1P_m2']}㎡) ※屋根実面積は使わない(RULE-004)`, confidence:90,
+     observation:'平面図から天井面積(投影)を確認。屋根実面積は使わない。',
+     reasoning:'RULE-004: 換気計算は必ず天井面積(投影)基準。片棟の場合は棟換気禁止のため片流れ換気を選定(RULE-005)。'}]);
   if(ventilation.shimoyaVent) rows.push(['換気部材(雨押え換気)', ventilation.shimoyaVent.count_1P, '個', `下屋天井${ventilation.shimoyaVent.shimoYaCeiling}㎡÷${ventilation.shimoyaVent.cap['1P_m2']}`,
-    {ruleRef:'RULE-004,RULE-202', formula:`ceil(下屋天井${ventilation.shimoyaVent.shimoYaCeiling}㎡ ÷ ${ventilation.shimoyaVent.cap['1P_m2']}㎡)`, confidence:85}]);
+    {ruleRef:'RULE-004,RULE-202', formula:`ceil(下屋天井${ventilation.shimoyaVent.shimoYaCeiling}㎡ ÷ ${ventilation.shimoyaVent.cap['1P_m2']}㎡)`, confidence:85,
+     observation:'下屋の天井面積(投影)のみを確認。2F天井は含まない。',
+     reasoning:'下屋には雨押え換気を使用(RULE-202)。'}]);
   rows.push(['集水器', drainage.gutterCount, '箇所', `投影${areas.totalProj}㎡÷${drainage.capacity_m2}㎡(降雨${drainage.rainfall}mm/h)`,
-    {ruleRef:'RULE-006,RULE-008,RULE-300', formula:`max(ceil(投影${areas.totalProj}㎡÷${drainage.capacity_m2}㎡), 角2箇所) 。竪樋間隔${drainage.spacing}m(基準20m以内)`, confidence:70}]);
+    {ruleRef:'RULE-006,RULE-008,RULE-300', formula:`max(ceil(投影${areas.totalProj}㎡÷${drainage.capacity_m2}㎡), 角2箇所) 。竪樋間隔${drainage.spacing}m(基準20m以内)`, confidence:70,
+     observation:'平面図から投影面積、地域から降雨強度を確認。',
+     reasoning:'RULE-006: 投影面積(屋根実面積は使わない)で最低箇所数を算出。角2箇所を基本とし大きい方を採用(RULE-008)。'}]);
   rows.push(['たてとい', drainage.tatetoi_total, 'm', '実長・ロスなし',
-    {ruleRef:'RULE-011', formula:`2F軒高×集水器数(${drainage.gutterCount}箇所)`, confidence:80}]);
+    {ruleRef:'RULE-011', formula:`2F軒高×集水器数(${drainage.gutterCount}箇所)`, confidence:80,
+     observation:'立面図から2F軒高を確認。', reasoning:'RULE-011: たてといは実長のみでロス計上しない。'}]);
   if(valley) rows.push(['谷板金', valley.actualLength, 'm', `平面${valley.planLength}m×伸び率${valley.rate}`,
-    {ruleRef:'RULE-120', formula:`平面${valley.planLength}m × √(1+(勾配/10)²÷2) = ×${valley.rate}`, confidence:90}]);
+    {ruleRef:'RULE-120', formula:`平面${valley.planLength}m × √(1+(勾配/10)²÷2) = ×${valley.rate}`, confidence:90,
+     observation:'谷Line長さは本来AnnotationJSONから取得(RULE-411)。今回は簡易入力値を使用。',
+     reasoning:'谷板金は隅棟・谷専用伸び率(RULE-120)を使用。屋根材の伸び率(RULE-100)とは別の式。'}]);
 
   document.getElementById('qtyBody').innerHTML = rows.map((r,i)=>`
     <tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td>
     <td><button class="btn secondary" style="padding:4px 10px;font-size:11px" onclick="toggleEvidence(${i})">根拠▼</button></td></tr>
     <tr id="ev-row-${i}" style="display:none"><td colspan="5" style="background:#f7f9fc">
-      <div style="font-size:12px"><b>RuleRef:</b> ${r[4].ruleRef} ／ <b>確信度:</b> ${r[4].confidence}%</div>
-      <div style="font-size:12px;color:#444;margin-top:3px">${r[4].formula}</div>
+      <div class="evidence-step"><b>① Observation（観察）：</b>${r[4].observation||'-'}</div>
+      <div class="evidence-step"><b>② Reasoning（判断）：</b>${r[4].reasoning||'-'} <span class="rule-badge">${r[4].ruleRef}</span></div>
+      <div class="evidence-step"><b>③ Calculation（計算）：</b>${r[4].formula}</div>
+      <div class="evidence-step"><b>④ Evidence（確定値・確信度）：</b>${r[1]}${r[2]} ／ 確信度${r[4].confidence}%</div>
     </td></tr>`).join('');
   lastResult.rows = rows;
+  renderCompareTable();
 
   document.getElementById('evidenceBox').innerHTML = `
     <div class="evidence-step">【屋根タイプ判定】${ROOFTYPE_LABEL[roofType]||roofType}（RULE-001）</div>
@@ -510,11 +570,29 @@ function slotHtml(s){
   const thumb = d
     ? (d.isPdf ? `<div style="font-size:26px">📄</div>` : `<img src="${d.dataUrl}" style="width:100%;height:56px;object-fit:cover;border-radius:6px">`)
     : `<div style="font-size:22px;color:#bbb">＋</div>`;
-  return `<div class="flagbox" style="cursor:pointer;padding:6px" onclick="pickSlot('${s.key}')">
+  const clickAction = d ? `setActiveDrawing('${s.key}')` : `pickSlot('${s.key}')`;
+  const isActive = activeDrawingKey===s.key;
+  return `<div class="flagbox" style="cursor:pointer;padding:6px;${isActive?'outline:2px solid #1f4e79':''}" onclick="${clickAction}">
     <b style="font-size:11px">${s.label}</b>
     ${thumb}
     <div style="font-size:10px;color:${d?'#1a7a4c':'#999'};margin-top:3px">${d? '✓ '+d.name.slice(0,10) : '未アップロード'}</div>
+    ${d? `<div style="font-size:9px;color:#1f4e79;margin-top:2px" onclick="event.stopPropagation();pickSlot('${s.key}')">変更</div>`:''}
   </div>`;
+}
+let activeDrawingKey = null;
+function setActiveDrawing(key){
+  activeDrawingKey = key;
+  renderSlots();
+  const s = DRAWING_SLOTS.find(x=>x.key===key);
+  const d = drawings[key];
+  const bar = document.getElementById('activeDrawingBar');
+  bar.style.display = 'block';
+  bar.textContent = `📌 現在参照中の図面: ${s.label}`;
+  const prev = document.getElementById('activeDrawingPreview');
+  prev.innerHTML = d.isPdf
+    ? `<div style="font-size:12px;color:#666">PDF: ${d.name}（別タブで開くには「変更」の左のサムネイルをタップ）</div>`
+    : `<img src="${d.dataUrl}" style="max-width:100%;border-radius:10px;box-shadow:0 2px 10px #0002">`;
+  refreshFieldEvidenceOptions();
 }
 function pickSlot(key){
   activeSlotKey = key;
@@ -534,6 +612,124 @@ document.getElementById('scaleInput').addEventListener('input', function(){
   document.getElementById('scaleStatus').textContent = this.value ? '✓ 縮尺設定済み' : '';
 });
 renderSlots();
+
+/* ===== 寸法欄ごとの根拠(Evidence)メタデータ ===== */
+const DIM_FIELD_IDS = ['buildingW','buildingD','noki_S','noki_N','noki_EW','slope_sun'];
+const fieldEvidence = {}; // id -> {drawingKey, position}
+DIM_FIELD_IDS.forEach(id=>{ fieldEvidence[id] = {drawingKey:'', position:''}; });
+
+function buildDimEvidenceUI(){
+  DIM_FIELD_IDS.forEach(id=>{
+    const input = document.getElementById(id);
+    const wrap = input.closest('.dim-field');
+    if(wrap.querySelector('.dim-evidence')) return; // 既に追加済み
+    const rule = input.dataset.rule || '';
+    const div = document.createElement('div');
+    div.className = 'dim-evidence';
+    div.innerHTML = `
+      <select data-field="${id}" data-role="drawing" style="flex:1">
+        <option value="">根拠図面:未指定</option>
+        ${DRAWING_SLOTS.map(s=>`<option value="${s.key}">${s.label}</option>`).join('')}
+      </select>
+      <input data-field="${id}" data-role="position" placeholder="根拠位置:未指定" style="flex:1">
+      <span class="rule-badge">${rule}</span>
+    `;
+    wrap.appendChild(div);
+    div.querySelector('[data-role="drawing"]').addEventListener('change', e=>{
+      fieldEvidence[id].drawingKey = e.target.value;
+    });
+    div.querySelector('[data-role="position"]').addEventListener('input', e=>{
+      fieldEvidence[id].position = e.target.value;
+    });
+  });
+}
+function refreshFieldEvidenceOptions(){
+  DIM_FIELD_IDS.forEach(id=>{
+    const sel = document.querySelector(`.dim-evidence select[data-field="${id}"]`);
+    if(!sel) return;
+    const current = sel.value;
+    sel.innerHTML = `<option value="">根拠図面:未指定</option>` +
+      DRAWING_SLOTS.map(s=>`<option value="${s.key}" ${s.key===current?'selected':''}>${s.label}</option>`).join('');
+  });
+}
+buildDimEvidenceUI();
+
+/* ===== ⑥ 人の積算資料アップロード（参照表示のみ） ===== */
+const humanDropZone = document.getElementById('humanDropZone');
+const humanFileInput = document.getElementById('humanFileInput');
+const humanThumbs = document.getElementById('humanThumbs');
+let humanFiles = [];
+humanDropZone.addEventListener('click', ()=>humanFileInput.click());
+humanFileInput.addEventListener('change', e=>{
+  [...e.target.files].forEach(file=>{
+    const reader = new FileReader();
+    reader.onload = ev=>{
+      humanFiles.push({name:file.name, dataUrl:ev.target.result, isImg:file.type.startsWith('image/')});
+      renderHumanThumbs();
+    };
+    reader.readAsDataURL(file);
+  });
+});
+function renderHumanThumbs(){
+  humanThumbs.innerHTML = humanFiles.map((f,i)=>`
+    <div style="font-size:11px;background:#f4f7fb;border-radius:8px;padding:6px 10px">
+      ${f.isImg?'🖼️':'📄'} ${f.name.slice(0,18)}
+      <span style="cursor:pointer;color:#c0392b;margin-left:4px" onclick="humanFiles.splice(${i},1);renderHumanThumbs()">×</span>
+    </div>`).join('');
+}
+
+/* ===== 三者比較表（AI値 / 手積算値） ===== */
+function renderCompareTable(){
+  const tbody = document.getElementById('compareBody');
+  tbody.innerHTML = lastResult.rows.map((r,i)=>`
+    <tr>
+      <td>${r[0]}</td>
+      <td>${r[1]}${r[2]}</td>
+      <td><input type="number" step="0.01" style="width:80px" id="human-${i}" oninput="updateDiff(${i})"></td>
+      <td id="diff-${i}" style="font-weight:700"></td>
+    </tr>`).join('');
+}
+function updateDiff(i){
+  const aiVal = lastResult.rows[i][1];
+  const humanVal = parseFloat(document.getElementById('human-'+i).value);
+  const diffCell = document.getElementById('diff-'+i);
+  if(isNaN(humanVal)){ diffCell.textContent=''; return; }
+  const diff = +(aiVal - humanVal).toFixed(2);
+  diffCell.textContent = diff===0 ? '✅ 一致' : (diff>0?`+${diff}`:diff);
+  diffCell.style.color = diff===0 ? '#1a7a4c' : '#c0392b';
+}
+
+/* ===== 学習ログ（ブラウザ内保存・簡易版） ===== */
+function saveLearningLog(){
+  const entries = lastResult.rows.map((r,i)=>{
+    const humanVal = parseFloat(document.getElementById('human-'+i)?.value);
+    return { item:r[0], aiValue:r[1], unit:r[2], humanValue: isNaN(humanVal)?null:humanVal, ruleRef:r[4].ruleRef };
+  }).filter(e=>e.humanValue!==null);
+  if(entries.length===0){ document.getElementById('learningStatus').textContent='手積算値が入力されていません。'; return; }
+  const log = { timestamp:new Date().toISOString(), roofType:lastResult.roofType, entries };
+  const key = 'iraka_learning_log';
+  const existing = JSON.parse(localStorage.getItem(key) || '[]');
+  existing.push(log);
+  localStorage.setItem(key, JSON.stringify(existing));
+  document.getElementById('learningStatus').textContent = `✓ 保存しました（${entries.length}件の差分）。この端末のブラウザ内に保存されています。`;
+  renderLearningLogList();
+}
+function renderLearningLogList(){
+  const key = 'iraka_learning_log';
+  const logs = JSON.parse(localStorage.getItem(key) || '[]');
+  const box = document.getElementById('learningLogList');
+  if(logs.length===0){ box.textContent='まだ保存された学習ログはありません。'; return; }
+  box.innerHTML = logs.slice().reverse().map(l=>{
+    const diffs = l.entries.filter(e=>Math.abs(e.aiValue-e.humanValue)>0.001);
+    return `<div style="border-bottom:1px solid #eee;padding:6px 0">
+      <b>${new Date(l.timestamp).toLocaleString('ja-JP')}</b>（${l.roofType}）
+      ${diffs.length>0
+        ? `<div style="color:#c0392b">差分あり: ${diffs.map(d=>`${d.item} AI:${d.aiValue} 手:${d.humanValue}(${d.ruleRef})`).join(' / ')}</div>`
+        : `<div style="color:#1a7a4c">全項目一致</div>`}
+    </div>`;
+  }).join('');
+}
+renderLearningLogList();
 </script>
 </body>
 </html>
