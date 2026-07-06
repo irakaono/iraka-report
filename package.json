@@ -1,0 +1,17 @@
+{
+  "name": "iraka-estimation-engine",
+  "version": "3.1.0",
+  "description": "甍AI積算エンジン Ver.3.1 — 住宅板金積算OS",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node tests/testRunner.js && node tests/testValley.js && node tests/testValleyAssembly.js && node tests/testAssemblyFactory.js && node tests/testEvidence4Layer.js",
+    "test:main":     "node tests/testRunner.js",
+    "test:valley":   "node tests/testValley.js",
+    "test:assembly": "node tests/testValleyAssembly.js",
+    "test:factory":  "node tests/testAssemblyFactory.js",
+    "test:evidence": "node tests/testEvidence4Layer.js"
+  },
+  "keywords": ["積算","板金","雨樋","AI","Evidence"],
+  "author": "WITHDOM Saitama × 甍"
+}
