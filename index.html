@@ -782,6 +782,64 @@ function delBlock(id) {
   document.getElementById(id).remove();
 }
 
+// ===== IndexedDB（写真データの保存先） =====
+// localStorageは文字・設定の保存には向くが、写真のような大容量データには容量上限(5〜10MB)が
+// 小さすぎて不向き。写真本体はIndexedDBに保存し、localStorage(下書き本体)には
+// 「どの写真を参照しているか」の識別子だけを持たせる。
+const IDB_NAME = 'iraka_report_photos_db';
+const IDB_STORE = 'photos';
+let _idbPromise = null;
+function idbOpen(){
+  if(_idbPromise) return _idbPromise;
+  _idbPromise = new Promise((resolve, reject)=>{
+    if(!window.indexedDB){ reject(new Error('IndexedDB未対応のブラウザです')); return; }
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = ()=>{ req.result.createObjectStore(IDB_STORE); };
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  });
+  return _idbPromise;
+}
+function idbPut(key, value){
+  return idbOpen().then(db=> new Promise((resolve, reject)=>{
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(value, key);
+    tx.oncomplete = ()=> resolve(true);
+    tx.onerror = ()=> reject(tx.error);
+  }));
+}
+function idbGet(key){
+  return idbOpen().then(db=> new Promise((resolve, reject)=>{
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = ()=> resolve(req.result);
+    req.onerror = ()=> reject(req.error);
+  }));
+}
+function idbDelete(key){
+  return idbOpen().then(db=> new Promise((resolve, reject)=>{
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(key);
+    tx.oncomplete = ()=> resolve(true);
+    tx.onerror = ()=> reject(tx.error);
+  }));
+}
+function idbDeleteByPrefix(prefix){
+  return idbOpen().then(db=> new Promise((resolve, reject)=>{
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    const store = tx.objectStore(IDB_STORE);
+    const req = store.openCursor();
+    req.onsuccess = (e)=>{
+      const cursor = e.target.result;
+      if(!cursor){ return; }
+      if(String(cursor.key).startsWith(prefix)) cursor.delete();
+      cursor.continue();
+    };
+    tx.oncomplete = ()=> resolve(true);
+    tx.onerror = ()=> reject(tx.error);
+  }));
+}
+
 // ===== 写真圧縮（保存容量・メモリ対策） =====
 // フルサイズの写真(3〜8MB級)をそのまま保持するとlocalStorageの容量超過や
 // WebViewのメモリ不足によるホワイトアウト/フリーズの原因になるため、
@@ -1004,23 +1062,55 @@ function showStatus(msg, isError){
   clearTimeout(showStatus._t); showStatus._t=setTimeout(()=>s.style.display='none', isError?6000:3500);
 }
 
-function collectReportData(){
-  return {
-    blocksHTML: document.getElementById('blocks-container')?.innerHTML || '',
+function collectReportData(draftId){
+  const mediaSaves = []; // {id, src} をIndexedDBへ保存する
+
+  // ブロック写真(#pages .drop) は末尾のimages[]経由(photoRef)で復元するため、
+  // blocksHTML自体には写真データを残さない（localStorage肥大化の防止）
+  const blocksClone = document.getElementById('blocks-container')?.cloneNode(true);
+  if(blocksClone){
+    blocksClone.querySelectorAll('img.pv[src^="data:"]').forEach(img=>{ img.removeAttribute('src'); });
+  }
+
+  // 図面・PDF(mapFiles)の写真もIndexedDBへ逃がし、HTMLからは除去する
+  const mapClone = document.getElementById('mapFiles')?.cloneNode(true);
+  if(mapClone){
+    mapClone.querySelectorAll('img[src^="data:"], iframe[src^="data:"]').forEach(el=>{
+      if(!el.id) el.id = 'media-' + Math.random().toString(36).slice(2,10);
+      mediaSaves.push({ id: el.id, src: el.getAttribute('src') });
+      el.removeAttribute('src');
+    });
+  }
+
+  const images = Array.from(document.querySelectorAll('#pages .drop')).map(d=>{
+    const img = d.querySelector('img.pv');
+    if(img && img.src && img.src.startsWith('data:')){
+      const photoId = d.id + '-img';
+      mediaSaves.push({ id: photoId, src: img.src });
+      return { id: d.id, photoRef: photoId };
+    }
+    return { id: d.id, photoRef: null };
+  });
+
+  const data = {
+    blocksHTML: blocksClone ? blocksClone.innerHTML : '',
     proposalHTML: document.querySelector('#p-summary .rtbl tbody')?.innerHTML || '',
-    mapFilesHTML: document.getElementById('mapFiles')?.innerHTML || '',
+    mapFilesHTML: mapClone ? mapClone.innerHTML : '',
     inputs: Array.from(document.querySelectorAll('#pages input')).map(el=>({type:el.type, value:el.value, checked:el.checked})),
     selects: Array.from(document.querySelectorAll('#pages select')).map(el=>el.value),
     textareas: Array.from(document.querySelectorAll('#pages textarea')).map(el=>el.value),
     editables: Array.from(document.querySelectorAll('#pages [contenteditable="true"]')).map(el=>el.innerHTML),
-    images: Array.from(document.querySelectorAll('#pages .drop')).map(d=>{
-      const img=d.querySelector('img.pv'); return {id:d.id, src:img ? img.src : ''};
-    })
+    images
   };
+
+  if(mediaSaves.length===0) return Promise.resolve(data);
+  return Promise.all(mediaSaves.map(m => idbPut(`photo:${draftId}:${m.id}`, m.src)))
+    .then(()=> data)
+    .catch(e=>{ console.error('写真のIndexedDB保存に失敗', e); return data; });
 }
 
-function applyReportData(data){
-  if(!data) return;
+function applyReportData(data, draftId){
+  if(!data) return Promise.resolve();
   if(data.blocksHTML && document.getElementById('blocks-container')){
     document.getElementById('blocks-container').innerHTML = data.blocksHTML;
   }
@@ -1029,6 +1119,7 @@ function applyReportData(data){
   }
   if(data.mapFilesHTML && document.getElementById('mapFiles')){
     document.getElementById('mapFiles').innerHTML = data.mapFilesHTML;
+    document.querySelectorAll('#mapFiles .map-slot').forEach(slot=>{ if(typeof wireMapSlot==='function') wireMapSlot(slot); });
   }
   Array.from(document.querySelectorAll('#pages input')).forEach((el,i)=>{
     const v=data.inputs?.[i]; if(!v) return;
@@ -1037,20 +1128,40 @@ function applyReportData(data){
   Array.from(document.querySelectorAll('#pages select')).forEach((el,i)=>{ if(data.selects?.[i]!==undefined) el.value=data.selects[i]; });
   Array.from(document.querySelectorAll('#pages textarea')).forEach((el,i)=>{ if(data.textareas?.[i]!==undefined) el.value=data.textareas[i]; });
   Array.from(document.querySelectorAll('#pages [contenteditable="true"]')).forEach((el,i)=>{ if(data.editables?.[i]!==undefined) el.innerHTML=data.editables[i]; });
+
+  const photoJobs = [];
   (data.images||[]).forEach(item=>{
     const d=document.getElementById(item.id); if(!d) return;
     const img=d.querySelector('img.pv'); const hint=d.querySelector('.hint');
-    if(img && item.src){ img.src=item.src; img.style.display='block'; d.classList.add('has'); if(hint) hint.style.display='none'; }
+    if(img && item.src){
+      // 旧形式(移行前の下書き)との互換維持
+      img.src=item.src; img.style.display='block'; d.classList.add('has'); if(hint) hint.style.display='none';
+    } else if(img && item.photoRef && draftId){
+      photoJobs.push(idbGet(`photo:${draftId}:${item.photoRef}`).then(src=>{
+        if(src){ img.src=src; img.style.display='block'; d.classList.add('has'); if(hint) hint.style.display='none'; }
+      }).catch(()=>{}));
+    }
   });
+  if(draftId){
+    document.querySelectorAll('#mapFiles [id$="-media"]').forEach(el=>{
+      if(el.getAttribute('src')) return; // 旧形式で既にsrcが入っている場合は何もしない
+      photoJobs.push(idbGet(`photo:${draftId}:${el.id}`).then(src=>{
+        if(src) el.setAttribute('src', src);
+      }).catch(()=>{}));
+    });
+  }
+  return Promise.all(photoJobs);
 }
 
 function saveDraftById(id, name){
   const drafts=getDrafts();
-  drafts[id] = { id, name: name || drafts[id]?.name || '無題の下書き', updatedAt: new Date().toISOString(), data: collectReportData() };
-  const ok = setDrafts(drafts);
-  setCurrentDraftId(id);
-  if(ok) showStatus('✓ 下書きを保存しました（' + nowText() + '）');
-  renderDraftList();
+  collectReportData(id).then(reportData=>{
+    drafts[id] = { id, name: name || drafts[id]?.name || '無題の下書き', updatedAt: new Date().toISOString(), data: reportData };
+    const ok = setDrafts(drafts);
+    setCurrentDraftId(id);
+    if(ok) showStatus('✓ 下書きを保存しました（' + nowText() + '）');
+    renderDraftList();
+  });
 }
 
 function saveQuickDraft(){
@@ -1069,7 +1180,9 @@ function overwriteDraft(){
 function restoreCurrentDraft(){
   const id=getCurrentDraftId(); const drafts=getDrafts();
   if(!id || !drafts[id]){ openDraftModal(); showStatus('復元する下書きを選んでください'); return; }
-  applyReportData(drafts[id].data); showStatus('✓ 復元しました（' + drafts[id].name + '）');
+  applyReportData(drafts[id].data, id).then(()=>{
+    showStatus('✓ 復元しました（' + drafts[id].name + '）');
+  });
 }
 
 function saveNamedDraft(){
@@ -1081,8 +1194,11 @@ function saveNamedDraft(){
 
 function openDraft(id){
   const drafts=getDrafts(); if(!drafts[id]) return;
-  applyReportData(drafts[id].data); setCurrentDraftId(id);
-  closeDraftModal(); showStatus('✓ 開きました（' + drafts[id].name + '）');
+  showStatus('写真を読み込み中...');
+  applyReportData(drafts[id].data, id).then(()=>{
+    setCurrentDraftId(id);
+    closeDraftModal(); showStatus('✓ 開きました（' + drafts[id].name + '）');
+  });
 }
 function overwriteNamedDraft(id){
   const drafts=getDrafts(); if(!drafts[id]) return;
@@ -1092,6 +1208,7 @@ function deleteDraft(id){
   const drafts=getDrafts(); if(!drafts[id]) return;
   if(!confirm('この下書きを削除しますか？')) return;
   delete drafts[id]; setDrafts(drafts);
+  idbDeleteByPrefix(`photo:${id}:`).catch(()=>{});
   if(getCurrentDraftId()===id) setCurrentDraftId('');
   renderDraftList(); showStatus('下書きを削除しました');
 }
@@ -1164,6 +1281,7 @@ const _oldClearAll = window.clearAll;
 window.clearAll = function(){
   if(!confirm('入力内容と保存済み下書きをすべてリセットしますか？')) return;
   localStorage.removeItem(DRAFTS_KEY); localStorage.removeItem(CURRENT_KEY);
+  idbDeleteByPrefix('photo:').catch(()=>{});
   if(typeof _oldClearAll === 'function'){
     // 旧clearAll内のconfirmを避けるため、直接初期化
     document.querySelectorAll('input[type=text],input[type=date],textarea').forEach(el=>el.value='');
@@ -1259,9 +1377,10 @@ function renderMapFile(slot, name, src, type){
   body.dataset.type = type || '';
   body.dataset.src = src || '';
   body.dataset.name = name || '';
+  const mediaId = (slot.id || 'map-slot-unknown') + '-media';
   body.innerHTML = (isPdf
-    ? `<iframe class="map-pdf" src="${src}"></iframe>`
-    : `<img class="map-img" src="${src}" alt="${escapeHtml(name || '図面')}">`)
+    ? `<iframe class="map-pdf" id="${mediaId}" src="${src}"></iframe>`
+    : `<img class="map-img" id="${mediaId}" src="${src}" alt="${escapeHtml(name || '図面')}">`)
     + `<input type="file" accept="image/*,.heic,.heif,application/pdf,.pdf">`;
   oldBody.replaceWith(body);
   wireMapSlot(slot);
