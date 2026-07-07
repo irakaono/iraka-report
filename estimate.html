@@ -719,6 +719,7 @@ const DRAWING_SLOTS = [
   {key:'plan_layout',group:'plan', label:'配置図'},
 ];
 const drawings = {}; // key -> {name,dataUrl,isPdf}
+const estimateDocs = {}; // key -> {name,dataUrl,isImg}（積算資料スロット。renderProjectDashboardより前に定義する必要あり）
 let activeSlotKey = null;
 
 /* Views: 図面内の参照領域。dim-fieldの「根拠図面」はこのViews一覧から選ぶ */
@@ -1071,7 +1072,6 @@ const ESTIMATE_DOC_SLOTS = [
   {key:'human2',  label:'人積算②', autoNote:null},
   {key:'adopted', label:'採用積算', autoNote:null}
 ];
-const estimateDocs = {}; // key -> {name,dataUrl,isImg}
 let activeEstimateDocKey = null;
 function renderEstimateDocSlots(){
   const box = document.getElementById('estimateDocSlots');
