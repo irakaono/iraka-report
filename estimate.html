@@ -78,6 +78,10 @@ summary{cursor:pointer;font-size:12px;color:#1f4e79}
       <button class="btn secondary" id="modeBtnCalib" style="padding:6px 10px;font-size:12px;margin-left:auto" onclick="setAnnotationMode('calib')">📐 スケール校正</button>
     </div>
     <div id="annotationModeHint" style="font-size:11px;color:#888;margin-bottom:6px"></div>
+    <div id="annotationViewSelectBox" style="display:none;margin-bottom:6px">
+      <label style="font-size:11px;color:#1f4e79">所属View（このAnnotationはどの面の話か）</label>
+      <select id="annotationViewSelect" style="width:100%" onchange="onAnnotationViewChange()"></select>
+    </div>
     <div style="position:relative;display:inline-block;max-width:100%">
       <canvas id="rectCanvas" style="max-width:100%;border-radius:8px;touch-action:none;cursor:crosshair"></canvas>
     </div>
@@ -583,7 +587,10 @@ function render(){
     const estQty = getEstimateQty(r[1], r[4].componentKey, r[0]);
     const linkedAnns = ANNOTATIONS.filter(a=>a.type==='line' && a.componentKey===r[4].componentKey);
     const annHtml = linkedAnns.length
-      ? `<div class="evidence-step"><b>📏 Annotation：</b>${linkedAnns.map(a=>`${a.realLength}m${a.calibrated?'(校正)':'(手入力)'}`).join(' / ')}</div>`
+      ? `<div class="evidence-step"><b>📏 Annotation：</b>${linkedAnns.map(a=>{
+          const v = VIEWS.find(x=>x.id===a.viewId);
+          return `${v?v.label:'?'}: ${a.realLength}m${a.calibrated?'(校正)':'(手入力)'}`;
+        }).join(' / ')}</div>`
       : `<div class="evidence-step" style="color:#c0392b">📏 Annotation：未登録（図面上で「Annotation(線)」として登録すると、この項目の根拠として辿れます）</div>`;
     return `
     <tr><td><b>${est.itemName}</b><div style="font-size:10px;color:#999">Component: ${r[0]}</div></td>
@@ -766,12 +773,12 @@ let activeSlotKey = null;
 
 /* Views: 図面内の参照領域。dim-fieldの「根拠図面」はこのViews一覧から選ぶ */
 let VIEWS = [
-  {id:'v_south', label:'南立面', drawingKey:'elevation', note:'', rect:null},
-  {id:'v_north', label:'北立面', drawingKey:'elevation', note:'', rect:null},
-  {id:'v_east',  label:'東立面', drawingKey:'elevation', note:'', rect:null},
-  {id:'v_west',  label:'西立面', drawingKey:'elevation', note:'', rect:null},
-  {id:'v_roof',  label:'屋根伏図', drawingKey:'plan_roof', note:'', rect:null},
-  {id:'v_layout',label:'配置図', drawingKey:'plan_layout', note:'', rect:null},
+  {id:'v_south', label:'南立面', drawingKey:'elevation', note:'', rect:null, calibration:null},
+  {id:'v_north', label:'北立面', drawingKey:'elevation', note:'', rect:null, calibration:null},
+  {id:'v_east',  label:'東立面', drawingKey:'elevation', note:'', rect:null, calibration:null},
+  {id:'v_west',  label:'西立面', drawingKey:'elevation', note:'', rect:null, calibration:null},
+  {id:'v_roof',  label:'屋根伏図', drawingKey:'plan_roof', note:'', rect:null, calibration:null},
+  {id:'v_layout',label:'配置図', drawingKey:'plan_layout', note:'', rect:null, calibration:null},
 ];
 function renderViews(){
   const box = document.getElementById('elevationViews');
@@ -787,6 +794,7 @@ function renderViews(){
       <button class="btn secondary" style="padding:4px 8px;font-size:11px" onclick="referenceView('${v.id}')">参照</button>
       <b style="font-size:12px;min-width:56px">${v.label}</b>
       <input value="${v.note}" placeholder="位置メモ(例:左上・1/3ページ目)" style="flex:1;font-size:11px;padding:4px 6px" oninput="updateViewNote('${v.id}', this.value)">
+      <span class="rule-badge" style="font-size:9px;white-space:nowrap">${v.calibration ? '📐'+v.calibration.toFixed(0)+'px/m' : '未校正'}</span>
     </div>`;
   }).join('');
   // 矩形サムネイルを描画
@@ -814,12 +822,15 @@ function updateViewNote(viewId, note){
 }
 
 /* ===== Ver4.7: Annotation Engine（View矩形登録 + 点・線Annotation + スケール校正） =====
-   図面 → View → Annotation(点/線/矩形) → Observation → Reasoning → Calculation → Evidence
-   谷板金も含め、全部材を同じ仕組みで扱う（谷だけ特別扱いしない）。 */
+   図面(Drawing) → View → Calibration(Viewに所属) → Annotation(Viewの子) → Evidence
+   Annotationは必ずどこかのViewの子として登録する（「この谷はどの立面図の話か」を必ず辿れるようにする）。
+   谷板金も含め、全部材を同じ仕組みで扱う（谷だけ特別扱いしない）。
+   ※Geometry Engine（線→Component自動判定）はデータ構造確定後の次フェーズとし、
+     現時点ではComponentは登録時にユーザーが選択する。 */
 let rectEditorState = null; // {img, canvas, ctx, scale, mode, drag:{x0,y0,x1,y1}}
 let annotationMode = 'rect'; // 'rect' | 'line' | 'point' | 'calib'
-const ANNOTATIONS = []; // AnnotationJSON本体 {id, drawingKey, type, coords(%), componentKey, realLength, label, calibratedFromPxPerM}
-const CALIBRATION = {}; // drawingKey -> pxPerMeter（スケール校正結果）
+let currentAnnotationViewId = null; // line/point/calib各モードで「今どのViewの子として登録するか」
+const ANNOTATIONS = []; // AnnotationJSON本体 {id, viewId, type, coords(%), componentKey, realLength, label, calibrated}
 
 function openAnnotationEditor(){
   const d = drawings['elevation'];
@@ -827,6 +838,9 @@ function openAnnotationEditor(){
   document.getElementById('rectEditorBox').style.display = 'block';
   const sel = document.getElementById('rectViewSelect');
   sel.innerHTML = VIEWS.filter(v=>v.drawingKey==='elevation').map(v=>`<option value="${v.id}">${v.label}</option>`).join('');
+  const viewSel = document.getElementById('annotationViewSelect');
+  viewSel.innerHTML = VIEWS.filter(v=>v.drawingKey==='elevation').map(v=>`<option value="${v.id}">${v.label}</option>`).join('');
+  currentAnnotationViewId = viewSel.value || null;
   const canvas = document.getElementById('rectCanvas');
   const ctx = canvas.getContext('2d');
   const img = new Image();
@@ -846,6 +860,26 @@ function closeRectEditor(){
   document.getElementById('rectEditorBox').style.display = 'none';
   rectEditorState = null;
 }
+function onAnnotationViewChange(){
+  currentAnnotationViewId = document.getElementById('annotationViewSelect').value;
+  updateCalibStatusDisplay();
+  const v = getCurrentAnnotationView();
+  if(annotationMode==='line' && (!v || !v.calibration)){
+    document.getElementById('annotationRealLength').value = '';
+  }
+}
+function getCurrentAnnotationView(){
+  return VIEWS.find(v=>v.id===currentAnnotationViewId) || null;
+}
+function updateCalibStatusDisplay(){
+  const calibBox = document.getElementById('calibStatus');
+  if(!calibBox) return;
+  const v = getCurrentAnnotationView();
+  if(!v){ calibBox.textContent = ''; return; }
+  calibBox.textContent = v.calibration
+    ? `✓ 「${v.label}」は校正済み: ${v.calibration.toFixed(1)}px = 1m`
+    : `「${v.label}」は未校正（実長は手入力してください。View毎にスキャン歪みが異なるため校正は共通化しません）`;
+}
 function setAnnotationMode(mode){
   annotationMode = mode;
   ['rect','line','point','calib'].forEach(m=>{
@@ -855,20 +889,17 @@ function setAnnotationMode(mode){
   document.getElementById('rectCommitBox').style.display = mode==='rect' ? 'flex' : 'none';
   document.getElementById('lineCommitBox').style.display = (mode==='line'||mode==='calib') ? 'flex' : 'none';
   document.getElementById('pointCommitBox').style.display = mode==='point' ? 'flex' : 'none';
+  document.getElementById('annotationViewSelectBox').style.display = (mode==='line'||mode==='point'||mode==='calib') ? 'block' : 'none';
   document.getElementById('annotationComponentSelect').style.display = mode==='calib' ? 'none' : 'inline-block';
-  document.getElementById('annotationRealLength').placeholder = mode==='calib' ? 'この線の実長(m)を入力' : '実長(m)　※校正済みなら自動計算';
+  document.getElementById('annotationRealLength').placeholder = mode==='calib' ? 'この線の実長(m)を入力' : '実長(m)　※そのViewが校正済みなら自動計算';
   const hints = {
     rect: 'ドラッグして範囲を囲み、どの面(View)かを選んで登録してください。',
-    line: 'ドラッグして部材の実長を測りたい線を引いてください（例：軒先の始点→終点）。',
-    point: 'タップして特定の点（例：軒の角）を記録してください。',
-    calib: 'まず実寸が分かっている線（例：基礎の一辺、既知の建具幅）を1本引いて、実長(m)を入力してください。以降の線Annotationはこの縮尺で自動計算されます。'
+    line: 'まず「所属View」を選び、その面の中で部材の実長を測りたい線を引いてください（例：軒先の始点→終点）。',
+    point: 'まず「所属View」を選び、その面の中の特定の点（例：軒の角）を記録してください。',
+    calib: 'まず「所属View」を選び、その面の中で実寸が分かっている線（例：基礎の一辺）を1本引いて実長(m)を入力してください。校正はView単位（面ごと）に保存され、他の面には影響しません（スキャン歪み対策）。'
   };
   document.getElementById('annotationModeHint').textContent = hints[mode] || '';
-  const calibBox = document.getElementById('calibStatus');
-  if(calibBox){
-    const px = CALIBRATION['elevation'];
-    calibBox.textContent = px ? `✓ 校正済み: ${px.toFixed(1)}px = 1m` : '未校正（実長は手入力してください）';
-  }
+  updateCalibStatusDisplay();
   if(rectEditorState){ rectEditorState.drag = null; redrawRectCanvas(); }
 }
 function setupRectCanvasEvents(){
@@ -889,7 +920,7 @@ function setupRectCanvasEvents(){
     redrawRectCanvas();
   };
   canvas.onpointerup = ()=>{
-    if(annotationMode==='line' || annotationMode==='calib'){ updateLiveLengthPreview(); }
+    if(annotationMode==='line'){ updateLiveLengthPreview(); }
   };
 }
 function pixelDistance(drag){
@@ -898,10 +929,10 @@ function pixelDistance(drag){
 function updateLiveLengthPreview(){
   if(!rectEditorState || !rectEditorState.drag) return;
   const pxLen = pixelDistance(rectEditorState.drag) / rectEditorState.scale; // 元画像基準のpx長
-  const pxPerM = CALIBRATION['elevation'];
-  if(annotationMode==='line' && pxPerM){
+  const v = getCurrentAnnotationView();
+  if(annotationMode==='line' && v && v.calibration){
     const lenInput = document.getElementById('annotationRealLength');
-    lenInput.value = (pxLen / pxPerM).toFixed(3);
+    lenInput.value = (pxLen / v.calibration).toFixed(3);
   }
 }
 function redrawRectCanvas(){
@@ -947,41 +978,42 @@ function commitRect(){
 
 function commitLine(){
   if(!rectEditorState || !rectEditorState.drag){ alert('先に画像上で線を引いてください。'); return; }
+  const v = getCurrentAnnotationView();
+  if(!v){ alert('所属Viewを選択してください。Annotationは必ずどこかのViewに属します。'); return; }
   const realLengthInput = parseFloat(document.getElementById('annotationRealLength').value);
   if(isNaN(realLengthInput) || realLengthInput<=0){ alert('実長(m)を入力してください。'); return; }
   if(annotationMode === 'calib'){
-    commitCalibration(realLengthInput);
+    commitCalibration(v, realLengthInput);
     closeRectEditor();
-    alert(`スケール校正を保存しました（${CALIBRATION['elevation'].toFixed(1)}px = 1m）`);
+    alert(`「${v.label}」のスケール校正を保存しました（${v.calibration.toFixed(1)}px = 1m）`);
     return;
   }
   const {canvas, drag} = rectEditorState;
   const componentKey = document.getElementById('annotationComponentSelect').value;
   const p0 = toPct(canvas, drag.x0, drag.y0), p1 = toPct(canvas, drag.x1, drag.y1);
-  const pxPerM = CALIBRATION['elevation'] || null;
   const annotation = {
     id: 'ann_' + Date.now().toString(36),
-    drawingKey: 'elevation', type: 'line',
+    viewId: v.id, type: 'line',
     coords: { x0Pct:p0.xPct, y0Pct:p0.yPct, x1Pct:p1.xPct, y1Pct:p1.yPct },
     componentKey, realLength: realLengthInput,
-    calibrated: !!pxPerM,
+    calibrated: !!v.calibration,
     createdAt: new Date().toISOString()
   };
   ANNOTATIONS.push(annotation);
-  // 対応する寸法欄があれば、根拠図面/根拠位置を自動連携する
-  linkAnnotationToDimField(componentKey, annotation);
   renderAnnotationList();
   closeRectEditor();
-  alert(`Annotationを登録しました（${componentKey} / 実長${realLengthInput}m）`);
+  alert(`Annotationを登録しました（${v.label} ／ ${componentKey} / 実長${realLengthInput}m）`);
 }
 function commitPoint(){
   if(!rectEditorState || !rectEditorState.drag){ alert('先に画像上をタップしてください。'); return; }
+  const v = getCurrentAnnotationView();
+  if(!v){ alert('所属Viewを選択してください。Annotationは必ずどこかのViewに属します。'); return; }
   const {canvas, drag} = rectEditorState;
   const label = document.getElementById('pointLabel').value || '無題の点';
   const p = toPct(canvas, drag.x1, drag.y1);
   const annotation = {
     id: 'ann_' + Date.now().toString(36),
-    drawingKey: 'elevation', type: 'point',
+    viewId: v.id, type: 'point',
     coords: { xPct:p.xPct, yPct:p.yPct },
     label,
     createdAt: new Date().toISOString()
@@ -991,21 +1023,13 @@ function commitPoint(){
   closeRectEditor();
 }
 
-// スケール校正：calibモードで線を引いた後、実長を入力して確定する専用コミット
-// (lineCommitBoxを流用しているため、calibモード時はcommitLineの代わりにこちらを使う)
-function commitCalibration(realLengthM){
+// スケール校正：View単位で保存する（PDF化・スキャン時の歪みが面ごとに異なるため共通化しない）
+function commitCalibration(view, realLengthM){
   if(!rectEditorState || !rectEditorState.drag) return;
   const pxLen = pixelDistance(rectEditorState.drag) / rectEditorState.scale;
-  CALIBRATION['elevation'] = pxLen / realLengthM;
-  document.getElementById('calibStatus').textContent = `✓ 校正済み: ${CALIBRATION['elevation'].toFixed(1)}px = 1m`;
-}
-
-// 寸法欄(buildingW等)とAnnotationの自動連携:
-// componentKeyがdim-fieldに対応する場合、根拠図面/根拠位置を自動セットする
-const COMPONENT_TO_DIMFIELD = { }; // 現状は明示的な1:1マッピングがないため拡張ポイントとして保持
-function linkAnnotationToDimField(componentKey, annotation){
-  // Estimate Item側のcomponentKeyと連携し、Evidence参照用に保持しておく
-  annotation.linkedTo = componentKey;
+  view.calibration = pxLen / realLengthM;
+  updateCalibStatusDisplay();
+  renderViews();
 }
 
 function toggleAnnotationList(){
@@ -1019,14 +1043,16 @@ function renderAnnotationList(){
   if(box.style.display==='none') return;
   if(ANNOTATIONS.length===0){ box.innerHTML = '<div style="color:#999">まだ登録されたAnnotationはありません。</div>'; return; }
   box.innerHTML = ANNOTATIONS.map((a,i)=>{
+    const v = VIEWS.find(x=>x.id===a.viewId);
+    const viewLabel = v ? v.label : '(所属View不明)';
     if(a.type==='line'){
       return `<div style="border-bottom:1px solid #eee;padding:6px 0">
-        📏 <b>${a.componentKey}</b>: ${a.realLength}m ${a.calibrated?'(校正値から自動計算)':'(手入力)'}
+        📏 <span class="rule-badge" style="font-size:9px">${viewLabel}</span> <b>${a.componentKey}</b>: ${a.realLength}m ${a.calibrated?'(校正値から自動計算)':'(手入力)'}
         <button class="btn secondary" style="padding:2px 8px;font-size:10px;margin-left:6px" onclick="removeAnnotation(${i})">削除</button>
       </div>`;
     } else if(a.type==='point'){
       return `<div style="border-bottom:1px solid #eee;padding:6px 0">
-        📍 ${a.label}
+        📍 <span class="rule-badge" style="font-size:9px">${viewLabel}</span> ${a.label}
         <button class="btn secondary" style="padding:2px 8px;font-size:10px;margin-left:6px" onclick="removeAnnotation(${i})">削除</button>
       </div>`;
     }
@@ -1035,7 +1061,12 @@ function renderAnnotationList(){
 }
 function removeAnnotation(i){ ANNOTATIONS.splice(i,1); renderAnnotationList(); }
 function exportAnnotationJSON(){
-  const blob = new Blob([JSON.stringify({ annotations: ANNOTATIONS, calibration: CALIBRATION }, null, 2)], {type:'application/json'});
+  // Drawing → View(Calibration含む) → Annotation の親子構造を保ったままエクスポートする
+  const viewsExport = VIEWS.map(v=>({
+    id: v.id, label: v.label, drawingKey: v.drawingKey, rect: v.rect, calibration: v.calibration
+  }));
+  const payload = { views: viewsExport, annotations: ANNOTATIONS };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'annotations.json';
