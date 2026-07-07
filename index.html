@@ -782,18 +782,63 @@ function delBlock(id) {
   document.getElementById(id).remove();
 }
 
+// ===== 写真圧縮（保存容量・メモリ対策） =====
+// フルサイズの写真(3〜8MB級)をそのまま保持するとlocalStorageの容量超過や
+// WebViewのメモリ不足によるホワイトアウト/フリーズの原因になるため、
+// 長辺1600pxを上限にリサイズし、JPEG品質0.8で再エンコードして保存する。
+function compressImageFile(file, maxDim, quality){
+  return new Promise((resolve, reject)=>{
+    if(!file || !file.type || !file.type.startsWith('image/')){
+      // 画像以外(PDF等)はそのまま
+      const r = new FileReader();
+      r.onload = ev => resolve(ev.target.result);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+      return;
+    }
+    const r = new FileReader();
+    r.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.naturalWidth, h = img.naturalHeight;
+        const longSide = Math.max(w, h);
+        if(longSide > maxDim){
+          const scale = maxDim / longSide;
+          w = Math.round(w * scale);
+          h = Math.round(h * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        try{
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        }catch(e){
+          // toDataURLが失敗した場合は元データにフォールバック
+          resolve(ev.target.result);
+        }
+      };
+      img.onerror = () => resolve(ev.target.result); // 画像デコード失敗時は元データを使う
+      img.src = ev.target.result;
+    };
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+}
+
 // ===== 写真 =====
 function ldph(e, id) { const f=e.target.files[0]; if(f) showPh(id,f); }
 function showPh(id, f) {
-  const r=new FileReader();
-  r.onload=ev=>{
-    const d=document.getElementById(id);
-    const i=document.getElementById(id+'-img');
-    i.src=ev.target.result; i.style.display='block';
+  const d=document.getElementById(id);
+  const i=document.getElementById(id+'-img');
+  compressImageFile(f, 1600, 0.8).then(dataUrl=>{
+    i.src=dataUrl; i.style.display='block';
     d.classList.add('has');
     d.querySelector('.hint').style.display='none';
-  };
-  r.readAsDataURL(f);
+    scheduleAutoSave && scheduleAutoSave();
+  }).catch(()=>{
+    alert('写真の読み込みに失敗しました。別の写真でお試しください。');
+  });
 }
 function rmph(e,id){
   e.stopPropagation();
@@ -859,9 +904,11 @@ function setMapFile(slot, file){
   if(!slot || !file) return;
   const ok = file.type.startsWith('image/') || file.type === 'application/pdf' || /\.(pdf|heic|heif)$/i.test(file.name);
   if(!ok){ alert('画像またはPDFを選択してください。'); return; }
-  const r = new FileReader();
-  r.onload = ev => renderMapFile(slot, file.name, ev.target.result, file.type || file.name);
-  r.readAsDataURL(file);
+  compressImageFile(file, 1600, 0.8).then(dataUrl=>{
+    renderMapFile(slot, file.name, dataUrl, file.type || file.name);
+  }).catch(()=>{
+    alert('ファイルの読み込みに失敗しました。');
+  });
 }
 function renderMapFile(slot, name, src, type){
   const title = slot.querySelector('.map-file-title');
@@ -936,15 +983,25 @@ let autoSaveTimer = null;
 
 function nowText(){ return new Date().toLocaleString('ja-JP'); }
 function getDrafts(){ try { return JSON.parse(localStorage.getItem(DRAFTS_KEY) || '{}'); } catch(e){ return {}; } }
-function setDrafts(d){ localStorage.setItem(DRAFTS_KEY, JSON.stringify(d)); }
+function setDrafts(d){
+  try{
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(d));
+    return true;
+  }catch(e){
+    console.error('draft save failed', e);
+    showStatus('⚠ 保存に失敗しました（容量オーバーの可能性があります）。写真を減らすか、不要な下書きを削除してください。', true);
+    return false;
+  }
+}
 function getCurrentDraftId(){ return localStorage.getItem(CURRENT_KEY) || ''; }
 function setCurrentDraftId(id){ if(id) localStorage.setItem(CURRENT_KEY,id); else localStorage.removeItem(CURRENT_KEY); updateCurrentDraftInfo(); }
 function makeId(){ return 'd_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); }
 
-function showStatus(msg){
+function showStatus(msg, isError){
   const s=document.getElementById('saveStatus'); if(!s) return;
   s.textContent=msg; s.style.display='block';
-  clearTimeout(showStatus._t); showStatus._t=setTimeout(()=>s.style.display='none',3500);
+  s.style.background = isError ? '#c0392b' : '#1f7a3a';
+  clearTimeout(showStatus._t); showStatus._t=setTimeout(()=>s.style.display='none', isError?6000:3500);
 }
 
 function collectReportData(){
@@ -990,8 +1047,9 @@ function applyReportData(data){
 function saveDraftById(id, name){
   const drafts=getDrafts();
   drafts[id] = { id, name: name || drafts[id]?.name || '無題の下書き', updatedAt: new Date().toISOString(), data: collectReportData() };
-  setDrafts(drafts); setCurrentDraftId(id);
-  showStatus('✓ 下書きを保存しました（' + nowText() + '）');
+  const ok = setDrafts(drafts);
+  setCurrentDraftId(id);
+  if(ok) showStatus('✓ 下書きを保存しました（' + nowText() + '）');
   renderDraftList();
 }
 
