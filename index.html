@@ -310,6 +310,7 @@ body {
 @media print {
   * { -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
   #toolbar { display:none !important; }
+  #saveStatus, #draftModal, #printQualityModal { display:none !important; }
   body { background:white; }
   #pages { padding:0; }
   .pg.fixed {
@@ -429,6 +430,32 @@ body {
     </div>
     <div id="currentDraftInfo" style="font-size:12px;color:#666;margin-bottom:8px;"></div>
     <div id="draftList"></div>
+  </div>
+</div>
+
+<div id="printQualityModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10003;align-items:center;justify-content:center;padding:16px;">
+  <div class="modal-card" style="width:min(420px,96vw)">
+    <h2>🖨 印刷前チェック</h2>
+    <div style="font-size:13px;margin-bottom:10px;">
+      写真 <b id="printPhotoCount">-</b> を含む報告書を印刷します。<br>
+      写真が多いと、印刷準備の一瞬だけ端末が重くなる場合があります。
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;background:#f4f7fb;border-radius:8px;padding:8px 10px;">
+        <input type="radio" name="printQuality" value="light"> 軽量印刷（800px・現場確認向け・最も軽い）
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;background:#f4f7fb;border-radius:8px;padding:8px 10px;">
+        <input type="radio" name="printQuality" value="standard" checked> 標準印刷（1200px・通常の報告書向け）
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;background:#f4f7fb;border-radius:8px;padding:8px 10px;">
+        <input type="radio" name="printQuality" value="high"> 高画質印刷（1600px・提出用）
+      </label>
+    </div>
+    <div id="printSizeEstimate" style="font-size:12px;color:#888;margin-bottom:14px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="light" id="printQualityCancelBtn">キャンセル</button>
+      <button class="primary" id="printQualityConfirmBtn">この設定で印刷</button>
+    </div>
   </div>
 </div>
 
@@ -727,6 +754,7 @@ body {
 
 </div><!-- #pages -->
 
+<script src="./js/media-manager.js"></script>
 <script>
 let blkCount = 0;
 
@@ -782,183 +810,58 @@ function delBlock(id) {
   document.getElementById(id).remove();
 }
 
-// ===== IndexedDB（写真データの保存先） =====
-// localStorageは文字・設定の保存には向くが、写真のような大容量データには容量上限(5〜10MB)が
-// 小さすぎて不向き。写真本体はIndexedDBに保存し、localStorage(下書き本体)には
-// 「どの写真を参照しているか」の識別子だけを持たせる。
-const IDB_NAME = 'iraka_report_photos_db';
-const IDB_STORE = 'photos';
-let _idbPromise = null;
-function idbOpen(){
-  if(_idbPromise) return _idbPromise;
-  _idbPromise = new Promise((resolve, reject)=>{
-    if(!window.indexedDB){ reject(new Error('IndexedDB未対応のブラウザです')); return; }
-    const req = indexedDB.open(IDB_NAME, 1);
-    req.onupgradeneeded = ()=>{ req.result.createObjectStore(IDB_STORE); };
-    req.onsuccess = ()=> resolve(req.result);
-    req.onerror = ()=> reject(req.error);
-  });
-  return _idbPromise;
-}
-function idbPut(key, value){
-  return idbOpen().then(db=> new Promise((resolve, reject)=>{
-    const tx = db.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).put(value, key);
-    tx.oncomplete = ()=> resolve(true);
-    tx.onerror = ()=> reject(tx.error);
-  }));
-}
-function idbGet(key){
-  return idbOpen().then(db=> new Promise((resolve, reject)=>{
-    const tx = db.transaction(IDB_STORE, 'readonly');
-    const req = tx.objectStore(IDB_STORE).get(key);
-    req.onsuccess = ()=> resolve(req.result);
-    req.onerror = ()=> reject(req.error);
-  }));
-}
-function idbDelete(key){
-  return idbOpen().then(db=> new Promise((resolve, reject)=>{
-    const tx = db.transaction(IDB_STORE, 'readwrite');
-    tx.objectStore(IDB_STORE).delete(key);
-    tx.oncomplete = ()=> resolve(true);
-    tx.onerror = ()=> reject(tx.error);
-  }));
-}
-function idbDeleteByPrefix(prefix){
-  return idbOpen().then(db=> new Promise((resolve, reject)=>{
-    const tx = db.transaction(IDB_STORE, 'readwrite');
-    const store = tx.objectStore(IDB_STORE);
-    const req = store.openCursor();
-    req.onsuccess = (e)=>{
-      const cursor = e.target.result;
-      if(!cursor){ return; }
-      if(String(cursor.key).startsWith(prefix)) cursor.delete();
-      cursor.continue();
-    };
-    tx.oncomplete = ()=> resolve(true);
-    tx.onerror = ()=> reject(tx.error);
-  }));
-}
+// ===== Media Manager は js/media-manager.js（甍AI共通モジュール）を使用 =====
+// idbPut/idbGet/idbDelete/idbDeleteByPrefix, compressImageToBlobs, drawToCanvasBlob,
+// trackObjectURL/revokeObjectURL, observeLazyPhoto/loadLazyPhoto は
+// すべて window.MediaManager 経由で呼び出す（報告書・AI積算・Annotation等で共通利用するため）。
+const idbPut = (k, v) => MediaManager.idbPut(k, v);
+const idbGet = (k) => MediaManager.idbGet(k);
+const idbDelete = (k) => MediaManager.idbDelete(k);
+const idbDeleteByPrefix = (p) => MediaManager.idbDeleteByPrefix(p);
+const trackObjectURL = (u) => MediaManager.trackObjectURL(u);
+const revokeObjectURL = (u) => MediaManager.revokeObjectURL(u);
+const compressImageToBlobs = (f) => MediaManager.compressImageToBlobs(f, { thumbDim:400, thumbQuality:0.6, fullDim:1600, fullQuality:0.8 });
+const observeLazyPhoto = (el) => MediaManager.observeLazyPhoto(el);
 
-// ===== Media Manager（写真管理レイヤー） =====
-// 目的: 「保存容量」と「描画メモリ」は別問題。IndexedDB化だけではメモリ使用量は減らないため、
-//   ① Blob保存(base64より効率的) ② サムネイル/フル解像度の分離 ③ 遅延読み込み(IntersectionObserver)
-//   ④ 印刷時のみフル解像度に差し替え、という4本柱で対策する。
-const pendingMedia = {}; // elId -> {thumbBlob, fullBlob, isPdf}
-const _activeObjectURLs = new Set();
-function trackObjectURL(url){ _activeObjectURLs.add(url); return url; }
-function revokeObjectURL(url){ if(url && _activeObjectURLs.has(url)){ try{URL.revokeObjectURL(url);}catch(e){} _activeObjectURLs.delete(url); } }
+const pendingMedia = {}; // elId -> {thumbBlob, fullBlob, isPdf}（このアプリ固有の状態なのでindex.html側で保持）
 
-function drawToCanvasBlob(img, maxDim, quality){
-  let w = img.naturalWidth, h = img.naturalHeight;
-  const longSide = Math.max(w, h);
-  if(longSide > maxDim){
-    const scale = maxDim / longSide;
-    w = Math.round(w * scale); h = Math.round(h * scale);
-  }
-  const canvas = document.createElement('canvas');
-  canvas.width = w; canvas.height = h;
-  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-  return new Promise(resolve=>{
-    if(canvas.toBlob){
-      canvas.toBlob(blob=> resolve(blob || dataURLtoBlobFallback(canvas, quality)), 'image/jpeg', quality);
-    } else {
-      resolve(dataURLtoBlobFallback(canvas, quality));
-    }
-  });
-}
-function dataURLtoBlobFallback(canvas, quality){
-  const dataUrl = canvas.toDataURL('image/jpeg', quality);
-  const bstr = atob(dataUrl.split(',')[1]);
-  let n = bstr.length; const u8 = new Uint8Array(n);
-  while(n--){ u8[n] = bstr.charCodeAt(n); }
-  return new Blob([u8], {type:'image/jpeg'});
-}
-
-// サムネイル(400px/品質0.6)とフル解像度(1600px/品質0.8)の2つのBlobを生成する
-function compressImageToBlobs(file){
-  return new Promise((resolve, reject)=>{
-    if(!file || !file.type || !file.type.startsWith('image/')){
-      // 画像以外(PDF等)は圧縮せずファイル自体をBlobとして扱う
-      resolve({ thumbBlob: file, fullBlob: file, isPdf:true });
-      return;
-    }
-    const r = new FileReader();
-    r.onload = ev => {
-      const img = new Image();
-      img.onload = () => {
-        Promise.all([
-          drawToCanvasBlob(img, 1600, 0.8),
-          drawToCanvasBlob(img, 400, 0.6)
-        ]).then(([fullBlob, thumbBlob])=> resolve({ thumbBlob, fullBlob }))
-          .catch(reject);
-      };
-      img.onerror = () => reject(new Error('画像のデコードに失敗しました'));
-      img.src = ev.target.result;
-    };
-    r.onerror = reject;
-    r.readAsDataURL(file);
-  });
-}
-
-// ===== 遅延読み込み（画面に入ってきた写真だけIndexedDBから取得してサムネイル表示） =====
-let _lazyObserver = null;
-function getLazyObserver(){
-  if(_lazyObserver) return _lazyObserver;
-  if(!('IntersectionObserver' in window)) return null;
-  _lazyObserver = new IntersectionObserver((entries)=>{
-    entries.forEach(entry=>{
-      if(entry.isIntersecting){
-        loadLazyPhoto(entry.target);
-        _lazyObserver.unobserve(entry.target);
-      }
-    });
-  }, { rootMargin: '300px' });
-  return _lazyObserver;
-}
-function observeLazyPhoto(el){
-  const obs = getLazyObserver();
-  if(!obs){ loadLazyPhoto(el); return; } // IntersectionObserver未対応環境は即読込
-  obs.observe(el);
-}
-function loadLazyPhoto(el){
-  const key = el.dataset.photoKey;
-  if(!key) return;
-  idbGet(key).then(blob=>{
-    if(!blob) return;
-    const url = trackObjectURL(URL.createObjectURL(blob));
-    if(el.dataset.objectUrl) revokeObjectURL(el.dataset.objectUrl);
-    el.setAttribute('src', url);
-    el.dataset.objectUrl = url;
-  }).catch(()=>{});
-}
-
-// ===== 印刷時のみフル解像度に差し替え =====
+// ===== 印刷品質モード（印刷前チェック） =====
+// 写真が多い状態で一気にフル解像度へ差し替えると、その瞬間にメモリを食うため、
+// 印刷前に枚数と概算サイズを表示し、軽量/標準/高画質のどれで印刷するか選ばせる。
 function printReport(){
   const targets = Array.from(document.querySelectorAll('img[data-photo-key-full], iframe[data-photo-key-full]'));
-  showStatus('高画質画像を準備中...');
-  Promise.all(targets.map(el=>{
-    const fullKey = el.dataset.photoKeyFull;
-    return idbGet(fullKey).then(blob=>{
-      if(!blob) return;
-      const url = trackObjectURL(URL.createObjectURL(blob));
-      el.dataset.printSwapUrl = el.getAttribute('src') || '';
-      el.dataset.printFullUrl = url;
-      el.setAttribute('src', url);
-    }).catch(()=>{});
-  })).then(()=>{
-    document.getElementById('saveStatus').style.display='none';
-    window.print();
+  const count = targets.length;
+  if(count === 0){ window.print(); return; }
+  openPrintQualityModal(count, (qualityKey)=>{
+    showStatus('画像を準備中...');
+    MediaManager.applyPrintQuality(targets, qualityKey).then(()=>{
+      document.getElementById('saveStatus').style.display='none';
+      window.print();
+    });
   });
 }
 window.addEventListener('afterprint', ()=>{
-  document.querySelectorAll('[data-print-full-url]').forEach(el=>{
-    revokeObjectURL(el.dataset.printFullUrl);
-    el.setAttribute('src', el.dataset.printSwapUrl || '');
-    delete el.dataset.printFullUrl;
-    delete el.dataset.printSwapUrl;
-  });
+  MediaManager.restorePrintQuality();
 });
+
+function openPrintQualityModal(count, onConfirm){
+  const modal = document.getElementById('printQualityModal');
+  document.getElementById('printPhotoCount').textContent = count + '枚';
+  const estBox = document.getElementById('printSizeEstimate');
+  const updateEstimate = ()=>{
+    const q = modal.querySelector('input[name=printQuality]:checked').value;
+    estBox.textContent = MediaManager.estimateSizeLabel(count, q);
+  };
+  modal.querySelectorAll('input[name=printQuality]').forEach(r=> r.onchange = updateEstimate);
+  updateEstimate();
+  modal.style.display = 'flex';
+  document.getElementById('printQualityConfirmBtn').onclick = ()=>{
+    const q = modal.querySelector('input[name=printQuality]:checked').value;
+    modal.style.display = 'none';
+    onConfirm(q);
+  };
+  document.getElementById('printQualityCancelBtn').onclick = ()=>{ modal.style.display = 'none'; };
+}
 
 // ===== 写真 =====
 function ldph(e, id) { const f=e.target.files[0]; if(f) showPh(id,f); }
