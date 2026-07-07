@@ -2,6 +2,10 @@
 
 > 住宅板金・雨樋工事積算OS（Iraka Knowledge OS）
 
+## 📐 アーキテクチャ仕様書（憲法）
+新機能を実装する前に必ず読むこと: [ARCHITECTURE.md](./ARCHITECTURE.md)
+（Drawing → View → Calibration → Annotation → Geometry → Engine → Assembly → Estimate Mapping → Estimate のレイヤー構造と、各機能がどのレイヤーに属するかを定義）
+
 ## 設計思想
 
 ```
