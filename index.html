@@ -416,7 +416,7 @@ body {
   <button class="tbtn s" onclick="openDraftModal()">📋 下書き管理</button>
   <button class="tbtn s" onclick="overwriteDraft()">💾 上書き保存</button>
   <button class="tbtn s" onclick="clearAll()">🗑 リセット</button>
-  <button class="tbtn p" onclick="window.print()">🖨 印刷 / PDF保存</button>
+  <button class="tbtn p" onclick="printReport()">🖨 印刷 / PDF保存</button>
 </div>
 <div id="saveStatus"></div>
 <div id="draftModal" onclick="closeDraftModalOnBg(event)">
@@ -840,43 +840,60 @@ function idbDeleteByPrefix(prefix){
   }));
 }
 
-// ===== 写真圧縮（保存容量・メモリ対策） =====
-// フルサイズの写真(3〜8MB級)をそのまま保持するとlocalStorageの容量超過や
-// WebViewのメモリ不足によるホワイトアウト/フリーズの原因になるため、
-// 長辺1600pxを上限にリサイズし、JPEG品質0.8で再エンコードして保存する。
-function compressImageFile(file, maxDim, quality){
+// ===== Media Manager（写真管理レイヤー） =====
+// 目的: 「保存容量」と「描画メモリ」は別問題。IndexedDB化だけではメモリ使用量は減らないため、
+//   ① Blob保存(base64より効率的) ② サムネイル/フル解像度の分離 ③ 遅延読み込み(IntersectionObserver)
+//   ④ 印刷時のみフル解像度に差し替え、という4本柱で対策する。
+const pendingMedia = {}; // elId -> {thumbBlob, fullBlob, isPdf}
+const _activeObjectURLs = new Set();
+function trackObjectURL(url){ _activeObjectURLs.add(url); return url; }
+function revokeObjectURL(url){ if(url && _activeObjectURLs.has(url)){ try{URL.revokeObjectURL(url);}catch(e){} _activeObjectURLs.delete(url); } }
+
+function drawToCanvasBlob(img, maxDim, quality){
+  let w = img.naturalWidth, h = img.naturalHeight;
+  const longSide = Math.max(w, h);
+  if(longSide > maxDim){
+    const scale = maxDim / longSide;
+    w = Math.round(w * scale); h = Math.round(h * scale);
+  }
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+  return new Promise(resolve=>{
+    if(canvas.toBlob){
+      canvas.toBlob(blob=> resolve(blob || dataURLtoBlobFallback(canvas, quality)), 'image/jpeg', quality);
+    } else {
+      resolve(dataURLtoBlobFallback(canvas, quality));
+    }
+  });
+}
+function dataURLtoBlobFallback(canvas, quality){
+  const dataUrl = canvas.toDataURL('image/jpeg', quality);
+  const bstr = atob(dataUrl.split(',')[1]);
+  let n = bstr.length; const u8 = new Uint8Array(n);
+  while(n--){ u8[n] = bstr.charCodeAt(n); }
+  return new Blob([u8], {type:'image/jpeg'});
+}
+
+// サムネイル(400px/品質0.6)とフル解像度(1600px/品質0.8)の2つのBlobを生成する
+function compressImageToBlobs(file){
   return new Promise((resolve, reject)=>{
     if(!file || !file.type || !file.type.startsWith('image/')){
-      // 画像以外(PDF等)はそのまま
-      const r = new FileReader();
-      r.onload = ev => resolve(ev.target.result);
-      r.onerror = reject;
-      r.readAsDataURL(file);
+      // 画像以外(PDF等)は圧縮せずファイル自体をBlobとして扱う
+      resolve({ thumbBlob: file, fullBlob: file, isPdf:true });
       return;
     }
     const r = new FileReader();
     r.onload = ev => {
       const img = new Image();
       img.onload = () => {
-        let w = img.naturalWidth, h = img.naturalHeight;
-        const longSide = Math.max(w, h);
-        if(longSide > maxDim){
-          const scale = maxDim / longSide;
-          w = Math.round(w * scale);
-          h = Math.round(h * scale);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, w, h);
-        try{
-          resolve(canvas.toDataURL('image/jpeg', quality));
-        }catch(e){
-          // toDataURLが失敗した場合は元データにフォールバック
-          resolve(ev.target.result);
-        }
+        Promise.all([
+          drawToCanvasBlob(img, 1600, 0.8),
+          drawToCanvasBlob(img, 400, 0.6)
+        ]).then(([fullBlob, thumbBlob])=> resolve({ thumbBlob, fullBlob }))
+          .catch(reject);
       };
-      img.onerror = () => resolve(ev.target.result); // 画像デコード失敗時は元データを使う
+      img.onerror = () => reject(new Error('画像のデコードに失敗しました'));
       img.src = ev.target.result;
     };
     r.onerror = reject;
@@ -884,13 +901,80 @@ function compressImageFile(file, maxDim, quality){
   });
 }
 
+// ===== 遅延読み込み（画面に入ってきた写真だけIndexedDBから取得してサムネイル表示） =====
+let _lazyObserver = null;
+function getLazyObserver(){
+  if(_lazyObserver) return _lazyObserver;
+  if(!('IntersectionObserver' in window)) return null;
+  _lazyObserver = new IntersectionObserver((entries)=>{
+    entries.forEach(entry=>{
+      if(entry.isIntersecting){
+        loadLazyPhoto(entry.target);
+        _lazyObserver.unobserve(entry.target);
+      }
+    });
+  }, { rootMargin: '300px' });
+  return _lazyObserver;
+}
+function observeLazyPhoto(el){
+  const obs = getLazyObserver();
+  if(!obs){ loadLazyPhoto(el); return; } // IntersectionObserver未対応環境は即読込
+  obs.observe(el);
+}
+function loadLazyPhoto(el){
+  const key = el.dataset.photoKey;
+  if(!key) return;
+  idbGet(key).then(blob=>{
+    if(!blob) return;
+    const url = trackObjectURL(URL.createObjectURL(blob));
+    if(el.dataset.objectUrl) revokeObjectURL(el.dataset.objectUrl);
+    el.setAttribute('src', url);
+    el.dataset.objectUrl = url;
+  }).catch(()=>{});
+}
+
+// ===== 印刷時のみフル解像度に差し替え =====
+function printReport(){
+  const targets = Array.from(document.querySelectorAll('img[data-photo-key-full], iframe[data-photo-key-full]'));
+  showStatus('高画質画像を準備中...');
+  Promise.all(targets.map(el=>{
+    const fullKey = el.dataset.photoKeyFull;
+    return idbGet(fullKey).then(blob=>{
+      if(!blob) return;
+      const url = trackObjectURL(URL.createObjectURL(blob));
+      el.dataset.printSwapUrl = el.getAttribute('src') || '';
+      el.dataset.printFullUrl = url;
+      el.setAttribute('src', url);
+    }).catch(()=>{});
+  })).then(()=>{
+    document.getElementById('saveStatus').style.display='none';
+    window.print();
+  });
+}
+window.addEventListener('afterprint', ()=>{
+  document.querySelectorAll('[data-print-full-url]').forEach(el=>{
+    revokeObjectURL(el.dataset.printFullUrl);
+    el.setAttribute('src', el.dataset.printSwapUrl || '');
+    delete el.dataset.printFullUrl;
+    delete el.dataset.printSwapUrl;
+  });
+});
+
 // ===== 写真 =====
 function ldph(e, id) { const f=e.target.files[0]; if(f) showPh(id,f); }
 function showPh(id, f) {
   const d=document.getElementById(id);
   const i=document.getElementById(id+'-img');
-  compressImageFile(f, 1600, 0.8).then(dataUrl=>{
-    i.src=dataUrl; i.style.display='block';
+  const elId = id + '-img';
+  compressImageToBlobs(f).then(({thumbBlob, fullBlob})=>{
+    pendingMedia[elId] = { thumbBlob, fullBlob };
+    const url = trackObjectURL(URL.createObjectURL(thumbBlob));
+    if(i.dataset.objectUrl) revokeObjectURL(i.dataset.objectUrl);
+    i.src = url; i.dataset.objectUrl = url;
+    i.loading = 'lazy';
+    i.dataset.hasPhoto = '1';
+    delete i.dataset.photoKey; delete i.dataset.photoKeyFull; // 新規選択なのでpendingMediaを優先
+    i.style.display='block';
     d.classList.add('has');
     d.querySelector('.hint').style.display='none';
     scheduleAutoSave && scheduleAutoSave();
@@ -901,6 +985,9 @@ function showPh(id, f) {
 function rmph(e,id){
   e.stopPropagation();
   const d=document.getElementById(id), i=document.getElementById(id+'-img');
+  if(i.dataset.objectUrl) revokeObjectURL(i.dataset.objectUrl);
+  delete pendingMedia[id+'-img'];
+  delete i.dataset.hasPhoto; delete i.dataset.photoKey; delete i.dataset.photoKeyFull; delete i.dataset.objectUrl;
   i.src=''; i.style.display='none'; d.classList.remove('has');
   d.querySelector('.hint').style.display='';
   d.querySelector('input[type=file]').value='';
@@ -962,8 +1049,11 @@ function setMapFile(slot, file){
   if(!slot || !file) return;
   const ok = file.type.startsWith('image/') || file.type === 'application/pdf' || /\.(pdf|heic|heif)$/i.test(file.name);
   if(!ok){ alert('画像またはPDFを選択してください。'); return; }
-  compressImageFile(file, 1600, 0.8).then(dataUrl=>{
-    renderMapFile(slot, file.name, dataUrl, file.type || file.name);
+  const mediaId = (slot.id || 'map-slot-unknown') + '-media';
+  compressImageToBlobs(file).then(({thumbBlob, fullBlob, isPdf})=>{
+    pendingMedia[mediaId] = { thumbBlob, fullBlob, isPdf: !!isPdf };
+    const url = trackObjectURL(URL.createObjectURL(thumbBlob));
+    renderMapFile(slot, file.name, url, file.type || file.name, true);
   }).catch(()=>{
     alert('ファイルの読み込みに失敗しました。');
   });
@@ -1063,33 +1153,40 @@ function showStatus(msg, isError){
 }
 
 function collectReportData(draftId){
-  const mediaSaves = []; // {id, src} をIndexedDBへ保存する
+  const mediaSaves = []; // {id, thumbBlob, fullBlob} をIndexedDBへ保存する
 
   // ブロック写真(#pages .drop) は末尾のimages[]経由(photoRef)で復元するため、
   // blocksHTML自体には写真データを残さない（localStorage肥大化の防止）
   const blocksClone = document.getElementById('blocks-container')?.cloneNode(true);
   if(blocksClone){
-    blocksClone.querySelectorAll('img.pv[src^="data:"]').forEach(img=>{ img.removeAttribute('src'); });
+    blocksClone.querySelectorAll('img.pv').forEach(img=>{ img.removeAttribute('src'); img.removeAttribute('loading'); });
   }
 
-  // 図面・PDF(mapFiles)の写真もIndexedDBへ逃がし、HTMLからは除去する
+  // 図面・PDF(mapFiles)の写真もHTMLからは除去する（本体はIndexedDBへ）
   const mapClone = document.getElementById('mapFiles')?.cloneNode(true);
   if(mapClone){
-    mapClone.querySelectorAll('img[src^="data:"], iframe[src^="data:"]').forEach(el=>{
-      if(!el.id) el.id = 'media-' + Math.random().toString(36).slice(2,10);
-      mediaSaves.push({ id: el.id, src: el.getAttribute('src') });
-      el.removeAttribute('src');
-    });
+    mapClone.querySelectorAll('[id$="-media"]').forEach(el=>{ el.removeAttribute('src'); });
   }
 
   const images = Array.from(document.querySelectorAll('#pages .drop')).map(d=>{
     const img = d.querySelector('img.pv');
-    if(img && img.src && img.src.startsWith('data:')){
-      const photoId = d.id + '-img';
-      mediaSaves.push({ id: photoId, src: img.src });
-      return { id: d.id, photoRef: photoId };
+    const elId = d.id + '-img';
+    if(img && img.dataset.hasPhoto){
+      if(pendingMedia[elId]){
+        mediaSaves.push({ id: elId, ...pendingMedia[elId] });
+        delete pendingMedia[elId];
+      }
+      return { id: d.id, photoRef: elId };
     }
     return { id: d.id, photoRef: null };
+  });
+
+  document.querySelectorAll('#mapFiles [id$="-media"]').forEach(el=>{
+    const mediaId = el.id;
+    if(pendingMedia[mediaId]){
+      mediaSaves.push({ id: mediaId, ...pendingMedia[mediaId] });
+      delete pendingMedia[mediaId];
+    }
   });
 
   const data = {
@@ -1104,7 +1201,10 @@ function collectReportData(draftId){
   };
 
   if(mediaSaves.length===0) return Promise.resolve(data);
-  return Promise.all(mediaSaves.map(m => idbPut(`photo:${draftId}:${m.id}`, m.src)))
+  return Promise.all(mediaSaves.map(m => Promise.all([
+      idbPut(`photo:${draftId}:${m.id}:thumb`, m.thumbBlob),
+      idbPut(`photo:${draftId}:${m.id}:full`, m.fullBlob)
+    ])))
     .then(()=> data)
     .catch(e=>{ console.error('写真のIndexedDB保存に失敗', e); return data; });
 }
@@ -1129,28 +1229,32 @@ function applyReportData(data, draftId){
   Array.from(document.querySelectorAll('#pages textarea')).forEach((el,i)=>{ if(data.textareas?.[i]!==undefined) el.value=data.textareas[i]; });
   Array.from(document.querySelectorAll('#pages [contenteditable="true"]')).forEach((el,i)=>{ if(data.editables?.[i]!==undefined) el.innerHTML=data.editables[i]; });
 
-  const photoJobs = [];
+  // 写真は即座に全部読み込まず、画面に入ってきたタイミングで遅延読み込みする(Lazy Loading)
   (data.images||[]).forEach(item=>{
     const d=document.getElementById(item.id); if(!d) return;
     const img=d.querySelector('img.pv'); const hint=d.querySelector('.hint');
-    if(img && item.src){
-      // 旧形式(移行前の下書き)との互換維持
-      img.src=item.src; img.style.display='block'; d.classList.add('has'); if(hint) hint.style.display='none';
-    } else if(img && item.photoRef && draftId){
-      photoJobs.push(idbGet(`photo:${draftId}:${item.photoRef}`).then(src=>{
-        if(src){ img.src=src; img.style.display='block'; d.classList.add('has'); if(hint) hint.style.display='none'; }
-      }).catch(()=>{}));
+    if(!img) return;
+    if(item.src){
+      // 旧形式(DataURL直埋め込み)との後方互換
+      img.src=item.src; img.dataset.hasPhoto='1'; img.style.display='block'; d.classList.add('has'); if(hint) hint.style.display='none';
+    } else if(item.photoRef && draftId){
+      img.loading='lazy';
+      img.dataset.hasPhoto='1';
+      img.dataset.photoKey = `photo:${draftId}:${item.photoRef}:thumb`;
+      img.dataset.photoKeyFull = `photo:${draftId}:${item.photoRef}:full`;
+      img.style.display='block'; d.classList.add('has'); if(hint) hint.style.display='none';
+      observeLazyPhoto(img);
     }
   });
   if(draftId){
     document.querySelectorAll('#mapFiles [id$="-media"]').forEach(el=>{
       if(el.getAttribute('src')) return; // 旧形式で既にsrcが入っている場合は何もしない
-      photoJobs.push(idbGet(`photo:${draftId}:${el.id}`).then(src=>{
-        if(src) el.setAttribute('src', src);
-      }).catch(()=>{}));
+      el.dataset.photoKey = `photo:${draftId}:${el.id}:thumb`;
+      el.dataset.photoKeyFull = `photo:${draftId}:${el.id}:full`;
+      observeLazyPhoto(el);
     });
   }
-  return Promise.all(photoJobs);
+  return Promise.resolve(); // 写真は非同期(遅延)で読み込まれるため、ここでは待たない
 }
 
 function saveDraftById(id, name){
@@ -1379,8 +1483,8 @@ function renderMapFile(slot, name, src, type){
   body.dataset.name = name || '';
   const mediaId = (slot.id || 'map-slot-unknown') + '-media';
   body.innerHTML = (isPdf
-    ? `<iframe class="map-pdf" id="${mediaId}" src="${src}"></iframe>`
-    : `<img class="map-img" id="${mediaId}" src="${src}" alt="${escapeHtml(name || '図面')}">`)
+    ? `<iframe class="map-pdf" id="${mediaId}" src="${src}" data-has-photo="1"></iframe>`
+    : `<img class="map-img" id="${mediaId}" src="${src}" loading="lazy" data-has-photo="1" alt="${escapeHtml(name || '図面')}">`)
     + `<input type="file" accept="image/*,.heic,.heif,application/pdf,.pdf">`;
   oldBody.replaceWith(body);
   wireMapSlot(slot);
