@@ -218,6 +218,14 @@ body {
   border-radius:8px; font-size:12px; box-shadow:0 2px 12px rgba(0,0,0,.2);
   display:none;
 }
+#mediaStatusBar {
+  position:sticky; top:0; z-index:9000;
+  background:#eef3f8; color:#345; font-size:11px;
+  padding:5px 10px; text-align:center; border-bottom:1px solid #d7e0ea;
+  white-space:nowrap; overflow-x:auto;
+}
+#mediaStatusBar b { color:#1f4e79; }
+@media print { #mediaStatusBar { display:none !important; } }
 #draftModal {
   position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:10001;
   display:none; align-items:center; justify-content:center; padding:16px;
@@ -420,6 +428,12 @@ body {
   <button class="tbtn p" onclick="printReport()">🖨 印刷 / PDF保存</button>
 </div>
 <div id="saveStatus"></div>
+<div id="mediaStatusBar">
+  📷 写真: <b id="msPhotoCount">0枚</b>
+  ／ 💾 保存容量: <b id="msStorage">-</b>
+  ／ 👁 表示中: <b id="msVisibleCount">0枚</b>
+  ／ 🖨 印刷品質: <b id="msQuality">標準</b>
+</div>
 <div id="draftModal" onclick="closeDraftModalOnBg(event)">
   <div class="modal-card">
     <h2>📋 下書き管理</h2>
@@ -824,6 +838,31 @@ const compressImageToBlobs = (f) => MediaManager.compressImageToBlobs(f, { thumb
 const observeLazyPhoto = (el) => MediaManager.observeLazyPhoto(el);
 
 const pendingMedia = {}; // elId -> {thumbBlob, fullBlob, isPdf}（このアプリ固有の状態なのでindex.html側で保持）
+const QUALITY_LABELS = { light:'軽量', standard:'標準', high:'高画質' };
+let lastPrintQuality = 'standard';
+
+// ===== 使用状況表示（Media Manager Status） =====
+function updateMediaStatus(){
+  const totalEls = Array.from(document.querySelectorAll('[data-has-photo="1"]'));
+  const total = totalEls.length;
+  const visible = totalEls.filter(el=> !!el.getAttribute('src')).length;
+  const pc = document.getElementById('msPhotoCount'); if(pc) pc.textContent = total + '枚';
+  const vc = document.getElementById('msVisibleCount'); if(vc) vc.textContent = visible + '枚';
+  const qc = document.getElementById('msQuality'); if(qc) qc.textContent = QUALITY_LABELS[lastPrintQuality] || '標準';
+
+  const pendingSize = Object.values(pendingMedia).reduce((sum,m)=>{
+    const tSize = (m.thumbBlob && typeof m.thumbBlob.size==='number') ? m.thumbBlob.size : 0;
+    const fSize = (m.fullBlob && typeof m.fullBlob.size==='number') ? m.fullBlob.size : 0;
+    return sum + tSize + fSize;
+  }, 0);
+  const draftId = getCurrentDraftId();
+  const storedP = draftId ? MediaManager.estimateStoredSize(`photo:${draftId}:`) : Promise.resolve(0);
+  storedP.then(storedSize=>{
+    const sc = document.getElementById('msStorage');
+    if(sc) sc.textContent = MediaManager.formatBytes(storedSize + pendingSize);
+  }).catch(()=>{});
+}
+setInterval(updateMediaStatus, 2500);
 
 // ===== 印刷品質モード（印刷前チェック） =====
 // 写真が多い状態で一気にフル解像度へ差し替えると、その瞬間にメモリを食うため、
@@ -833,6 +872,8 @@ function printReport(){
   const count = targets.length;
   if(count === 0){ window.print(); return; }
   openPrintQualityModal(count, (qualityKey)=>{
+    lastPrintQuality = qualityKey;
+    updateMediaStatus();
     showStatus('画像を準備中...');
     MediaManager.applyPrintQuality(targets, qualityKey).then(()=>{
       document.getElementById('saveStatus').style.display='none';
@@ -842,6 +883,7 @@ function printReport(){
 }
 window.addEventListener('afterprint', ()=>{
   MediaManager.restorePrintQuality();
+  updateMediaStatus();
 });
 
 function openPrintQualityModal(count, onConfirm){
@@ -894,6 +936,7 @@ function rmph(e,id){
   i.src=''; i.style.display='none'; d.classList.remove('has');
   d.querySelector('.hint').style.display='';
   d.querySelector('input[type=file]').value='';
+  updateMediaStatus();
 }
 function dov(e,id){ e.preventDefault(); e.stopPropagation(); document.getElementById(id).classList.add('over'); }
 function dlv(e,id){ e.preventDefault(); e.stopPropagation(); document.getElementById(id).classList.remove('over'); }
@@ -1189,6 +1232,7 @@ function restoreCurrentDraft(){
   if(!id || !drafts[id]){ openDraftModal(); showStatus('復元する下書きを選んでください'); return; }
   applyReportData(drafts[id].data, id).then(()=>{
     showStatus('✓ 復元しました（' + drafts[id].name + '）');
+    updateMediaStatus();
   });
 }
 
@@ -1205,6 +1249,7 @@ function openDraft(id){
   applyReportData(drafts[id].data, id).then(()=>{
     setCurrentDraftId(id);
     closeDraftModal(); showStatus('✓ 開きました（' + drafts[id].name + '）');
+    updateMediaStatus();
   });
 }
 function overwriteNamedDraft(id){
@@ -1405,6 +1450,7 @@ document.addEventListener('DOMContentLoaded', function(){
   document.querySelectorAll('#pages .tbl td.lb, #pages .rtbl th').forEach(function(el){
     el.setAttribute('contenteditable', 'true');
   });
+  if(typeof updateMediaStatus === 'function') updateMediaStatus();
 });
 
 </script>

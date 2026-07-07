@@ -75,6 +75,32 @@
     }));
   }
 
+  // 指定プレフィックスに一致するキーのBlobサイズ合計(バイト)を返す。使用状況表示用。
+  function estimateStoredSize(prefix) {
+    return idbOpen().then(db => new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.openCursor();
+      let total = 0;
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (!cursor) { resolve(total); return; }
+        if (String(cursor.key).startsWith(prefix)) {
+          const val = cursor.value;
+          if (val && typeof val.size === 'number') total += val.size;
+        }
+        cursor.continue();
+      };
+      req.onerror = () => reject(req.error);
+    }));
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + 'KB';
+    return (bytes / 1024 / 1024).toFixed(1) + 'MB';
+  }
+
   // ===== Object URL 管理（作りっぱなしによるメモリリークを防ぐ） =====
   const _activeObjectURLs = new Set();
   function trackObjectURL(url) { _activeObjectURLs.add(url); return url; }
@@ -241,7 +267,7 @@
   }
 
   global.MediaManager = {
-    idbPut, idbGet, idbDelete, idbDeleteByPrefix,
+    idbPut, idbGet, idbDelete, idbDeleteByPrefix, estimateStoredSize, formatBytes,
     trackObjectURL, revokeObjectURL,
     compressImageToBlobs, resizeBlobToBlob, drawToCanvasBlob,
     observeLazyPhoto, loadLazyPhoto,
