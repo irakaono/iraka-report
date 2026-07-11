@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>甍AI Field — Ver.2.0 アーキテクチャ憲法</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Hiragino Sans', 'Meiryo', sans-serif; background: #F4F7FB; color: #1a1a1a; font-size: 14px; line-height: 1.7; }
+  .cover { background: linear-gradient(135deg, #1F4E79 0%, #2E74B5 100%); color: #fff; padding: 48px 32px 40px; }
+  .cover h1 { font-size: 28px; font-weight: bold; letter-spacing: .08em; margin-bottom: 6px; }
+  .cover .sub { font-size: 14px; opacity: .8; margin-bottom: 24px; }
+  .cover .badge { display: inline-block; background: rgba(255,255,255,.18); border: 1px solid rgba(255,255,255,.4); border-radius: 20px; padding: 4px 14px; font-size: 12px; margin-right: 8px; }
+  .body { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+  h2 { font-size: 18px; color: #1F4E79; border-left: 4px solid #2E74B5; padding-left: 12px; margin: 36px 0 14px; }
+  h3 { font-size: 14px; font-weight: bold; color: #2E74B5; margin: 20px 0 8px; }
+  p { margin-bottom: 10px; }
+  .card { background: #fff; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.07); padding: 20px 24px; margin-bottom: 16px; }
+  .card-title { font-size: 13px; font-weight: bold; color: #1F4E79; margin-bottom: 10px; border-bottom: 1px solid #E8EEF6; padding-bottom: 6px; }
+  .law { counter-reset: law; }
+  .law-item { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 14px; }
+  .law-item::before { counter-increment: law; content: counter(law); background: #2E74B5; color: #fff; font-size: 13px; font-weight: bold; min-width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+  .law-item .law-body { flex: 1; }
+  .law-item .law-head { font-weight: bold; font-size: 14px; color: #1F4E79; }
+  .law-item .law-desc { font-size: 13px; color: #555; margin-top: 3px; }
+  .code { background: #1e2a3a; color: #c9d8e8; font-family: 'Courier New', monospace; font-size: 12px; border-radius: 8px; padding: 16px 18px; margin: 10px 0; overflow-x: auto; line-height: 1.6; }
+  .code .cm { color: #6a8fa8; }
+  .code .key { color: #79c0ff; }
+  .code .val { color: #a8d4a8; }
+  .code .str { color: #f8c96a; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
+  th { background: #2E74B5; color: #fff; padding: 8px 12px; text-align: left; }
+  td { padding: 8px 12px; border-bottom: 1px solid #E8EEF6; vertical-align: top; }
+  tr:nth-child(even) td { background: #F8FAFD; }
+  .tag { display: inline-block; border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: bold; margin-right: 4px; }
+  .tag-must { background: #FFE4E4; color: #C00; }
+  .tag-opt { background: #E4F0FF; color: #1F4E79; }
+  .tag-future { background: #E8F5E9; color: #2E7D32; }
+  .tree { background: #fff; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.07); padding: 20px 24px; font-family: 'Courier New', monospace; font-size: 13px; line-height: 2; color: #1a1a1a; }
+  .tree .dir { color: #2E74B5; font-weight: bold; }
+  .tree .file { color: #1a1a1a; }
+  .tree .comment { color: #888; }
+  .phase { display: flex; gap: 0; margin: 16px 0; }
+  .phase-item { flex: 1; padding: 14px 16px; text-align: center; position: relative; }
+  .phase-item:not(:last-child)::after { content: '→'; position: absolute; right: -10px; top: 50%; transform: translateY(-50%); font-size: 18px; color: #2E74B5; z-index: 1; }
+  .phase-v1 { background: #BDD7EE; border-radius: 8px 0 0 8px; }
+  .phase-v2 { background: #2E74B5; color: #fff; }
+  .phase-v3 { background: #1F4E79; color: #fff; border-radius: 0 8px 8px 0; }
+  .phase-item .ver { font-size: 11px; opacity: .8; }
+  .phase-item .name { font-size: 13px; font-weight: bold; margin-top: 4px; }
+  .phase-item .items { font-size: 11px; margin-top: 6px; opacity: .85; }
+  .highlight { background: #FFF8E1; border-left: 3px solid #F9A825; padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 12px 0; font-size: 13px; }
+  .footer { background: #1F4E79; color: rgba(255,255,255,.7); text-align: center; padding: 20px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div style="max-width:860px;margin:0 auto;">
+    <h1>甍AI Field</h1>
+    <div class="sub">Ver.2.0 アーキテクチャ憲法 — 設計原則と実装仕様</div>
+    <span class="badge">作成日：2026/07/11</span>
+    <span class="badge">対象：開発者・将来の自分</span>
+    <span class="badge">改訂：設計変更時のみ</span>
+  </div>
+</div>
+
+<div class="body">
+
+  <!-- ===== ビジョン ===== -->
+  <h2>ビジョン</h2>
+  <div class="card">
+    <p>甍AI Field は「雨漏り調査報告書アプリ」ではない。<strong>屋根・外装工事の現場業務を一気通貫で支援するフィールドOS</strong>である。</p>
+    <p>Ver.1では「帳票を作れる」レベルに到達した。Ver.2では<strong>「案件単位で全情報が繋がる」</strong>基盤を構築する。この基盤の上に、AI所見・写真解析・音声入力・見積連携が積み上がっていく。</p>
+    <div class="highlight">土台を正しく設計すれば、今後10年の機能追加がすべてその上で動く。</div>
+  </div>
+
+  <!-- ===== ロードマップ ===== -->
+  <h2>ロードマップ</h2>
+  <div class="phase">
+    <div class="phase-item phase-v1">
+      <div class="ver">Ver.1.x（完了）</div>
+      <div class="name">帳票完成</div>
+      <div class="items">雨漏り調査報告書<br>工事完了報告書<br>写真編集・下書き保存</div>
+    </div>
+    <div class="phase-item phase-v2">
+      <div class="ver">Ver.2.0（今ここ）</div>
+      <div class="name">案件管理基盤</div>
+      <div class="items">projects.html<br>案件×帳票×写真<br>IndexedDB統合</div>
+    </div>
+    <div class="phase-item phase-v3">
+      <div class="ver">Ver.3.0（将来）</div>
+      <div class="name">AI統合</div>
+      <div class="items">AI所見生成<br>写真解析・診断<br>音声入力・見積連携</div>
+    </div>
+  </div>
+
+
+  <!-- ===== PRINCIPLE 0 ===== -->
+  <h2>Principle 0 ― 最上位原則</h2>
+  <div class="card" style="border-left:4px solid #1F4E79;">
+    <p style="font-size:16px;font-weight:bold;color:#1F4E79;margin-bottom:12px;">帳票より案件を優先する</p>
+    <div class="code">
+案件がある
+  ↓
+帳票がある
+  ↓
+写真がある
+  ↓
+AIがある</div>
+    <div class="highlight" style="margin-top:12px;">この順番は絶対に崩さない。案件のない帳票は存在しない。写真のないAI診断は存在しない。すべての機能追加はこの4階層に収まるかを最初に確認する。</div>
+  </div>
+
+  <!-- ===== DESIGN PRINCIPLES ===== -->
+  <h2>Design Principles</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:8px;">
+    <div class="card">
+      <div class="card-title">Simple over Clever</div>
+      <p style="font-size:13px;">賢いコードより、読めるコード。6ヶ月後の自分が理解できない実装はしない。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Data First</div>
+      <p style="font-size:13px;">画面より先にデータ設計をする。DBスキーマが決まる前にUIを作らない。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">AI is Optional</div>
+      <p style="font-size:13px;">AIが止まっても帳票は作れる。AI機能は常に補助であり、コア機能に依存させない。</p>
+    </div>
+    <div class="card">
+      <div class="card-title">One Source of Truth</div>
+      <p style="font-size:13px;">同じデータを2箇所に持たない。案件情報・写真・帳票は必ずDBの単一ストアが正とする。</p>
+    </div>
+  </div>
+
+  <!-- ===== SCOPE ===== -->
+  <h2>Ver.2.0 スコープ ― やらないこと</h2>
+  <div class="card">
+    <div class="card-title">これを書いておく理由：実装中の「あれもやろう」を防ぐ</div>
+    <table>
+      <tr><th>やらないこと</th><th>理由</th><th>将来</th></tr>
+      <tr><td>クラウド同期</td><td>サーバー設計が別途必要。Ver.2の範囲外。</td><td>Ver.4以降で検討</td></tr>
+      <tr><td>複数人編集・共有</td><td>競合解決の実装コストが高い。</td><td>Ver.4以降</td></tr>
+      <tr><td>ログイン・認証</td><td>クラウドなしなら不要。</td><td>クラウド導入時に同時実装</td></tr>
+      <tr><td>サーバーサイド処理</td><td>完全PWA・オフライン動作を維持する。</td><td>AI診断APIのみ例外として検討</td></tr>
+      <tr><td>AI写真診断</td><td>データ蓄積フェーズが先。Ver.2で土台を作る。</td><td>Ver.3</td></tr>
+      <tr><td>見積書への自動連携</td><td>見積ロジックの設計が別途必要。</td><td>Ver.3〜4</td></tr>
+      <tr><td>旧Ver.1下書きの自動移行</td><td>ADR-001参照。バックアップのみ実施。</td><td>手動インポート機能として将来検討</td></tr>
+    </table>
+  </div>
+
+  <!-- ===== ファイル構成 ===== -->
+  <h2>ファイル構成</h2>
+  <div class="tree">
+    <div><span class="dir">iraka-report/</span></div>
+    <div>│</div>
+    <div>├── <span class="file">portal.html</span>　　　　<span class="comment">← アプリランチャー（既存・変更なし）</span></div>
+    <div>├── <span class="file">projects.html</span>　　　<span class="comment">← 案件一覧・案件詳細 【Ver.2.0 新規】</span></div>
+    <div>│</div>
+    <div>├── <span class="dir">report/</span></div>
+    <div>│　　├── <span class="file">amamori.html</span>　　<span class="comment">← 雨漏り調査報告書（現index.htmlを移行）</span></div>
+    <div>│　　├── <span class="file">completion.html</span>　<span class="comment">← 工事完了報告書</span></div>
+    <div>│　　├── <span class="file">inspection.html</span>　<span class="comment">← 点検報告書 【将来】</span></div>
+    <div>│　　└── <span class="file">estimate.html</span>　　<span class="comment">← AI積算 【将来】</span></div>
+    <div>│</div>
+    <div>├── <span class="dir">js/</span></div>
+    <div>│　　├── <span class="file">media-manager.js</span>　<span class="comment">← 写真管理（既存・共通）</span></div>
+    <div>│　　├── <span class="file">db.js</span>　　　　　　<span class="comment">← IndexedDB操作共通モジュール 【新規】</span></div>
+    <div>│　　└── <span class="file">project-api.js</span>　<span class="comment">← 案件CRUD操作 【新規】</span></div>
+    <div>│</div>
+    <div>└── <span class="dir">ai/</span>　　　　　　　　　<span class="comment">← AI機能 【Ver.3.0】</span></div>
+    <div>　　　├── <span class="file">opinion.js</span></div>
+    <div>　　　└── <span class="file">voice.js</span></div>
+  </div>
+
+  <!-- ===== 5か条 ===== -->
+  <h2>アーキテクチャ憲法 — 5か条</h2>
+  <div class="law">
+    <div class="law-item">
+      <div class="law-body">
+        <div class="law-head">案件（Project）が最上位</div>
+        <div class="law-desc">すべての帳票・写真・AI出力は必ず案件に紐づく。案件なしに帳票は存在しない。</div>
+      </div>
+    </div>
+    <div class="law-item">
+      <div class="law-body">
+        <div class="law-head">すべての帳票は案件配下</div>
+        <div class="law-desc">雨漏り調査・工事完了・点検・積算、どの帳票も <code>projectId</code> を持つ。帳票を開く動線は必ず案件詳細画面から。</div>
+      </div>
+    </div>
+    <div class="law-item">
+      <div class="law-body">
+        <div class="law-head">写真は帳票に紐付く独立データ</div>
+        <div class="law-desc">写真は帳票データに埋め込まず、<code>photos</code> ストアで独立管理。<code>photoId</code> だけを帳票が参照する。transform（拡大・移動・回転）も写真データが保持する。</div>
+      </div>
+    </div>
+    <div class="law-item">
+      <div class="law-body">
+        <div class="law-head">帳票データには <code>schemaVersion</code> を必須</div>
+        <div class="law-desc">帳票の <code>data</code> オブジェクト第一階層に必ず <code>schemaVersion: 2</code> を持つ。将来の項目追加時は <code>migrateV2toV3()</code> を書けばよい。</div>
+      </div>
+    </div>
+    <div class="law-item">
+      <div class="law-body">
+        <div class="law-head">Ver.1の下書きは移行せずバックアップのみ</div>
+        <div class="law-desc">Ver.2起動時に <code>iraka_report_drafts_v1</code> を <code>iraka_report_drafts_v1_backup</code> へコピーして保存。「旧データはバックアップされています」と表示するだけ。移行コードは持ち込まない。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== DB設計 ===== -->
+  <h2>IndexedDB 設計</h2>
+  <p style="font-size:13px;color:#555;margin-bottom:16px;">DB名：<code>irakafieldDB</code>　バージョン：2</p>
+
+  <h3>projects ストア</h3>
+  <div class="code">
+<span class="cm">// キー：id（自動生成 "proj_xxxxxxxx"）</span>
+{
+  <span class="key">id</span>:          <span class="str">"proj_a1b2c3d4"</span>,
+  <span class="key">name</span>:        <span class="str">"山田様邸"</span>,
+  <span class="key">customer</span>:    <span class="str">"山田 太郎 様"</span>,
+  <span class="key">address</span>:     <span class="str">"埼玉県坂戸市○○1-2-3"</span>,
+  <span class="key">status</span>:      <span class="str">"active"</span>,  <span class="cm">// active | completed | archived</span>
+  <span class="key">tags</span>:        [<span class="str">"雨漏り"</span>, <span class="str">"SW会"</span>],
+  <span class="key">createdAt</span>:   <span class="str">"2026-07-11T09:00:00.000Z"</span>,
+  <span class="key">updatedAt</span>:   <span class="str">"2026-07-11T09:00:00.000Z"</span>
+}</div>
+
+  <h3>reports ストア</h3>
+  <div class="code">
+<span class="cm">// キー：id（自動生成 "rep_xxxxxxxx"）</span>
+<span class="cm">// インデックス：projectId, type</span>
+{
+  <span class="key">id</span>:          <span class="str">"rep_e5f6g7h8"</span>,
+  <span class="key">projectId</span>:   <span class="str">"proj_a1b2c3d4"</span>,
+  <span class="key">type</span>:        <span class="str">"amamori"</span>,  <span class="cm">// amamori | completion | inspection | estimate</span>
+  <span class="key">version</span>:     <span class="val">1</span>,           <span class="cm">// 同じ案件で2回目の調査など</span>
+  <span class="key">title</span>:       <span class="str">"雨漏り調査報告書"</span>,
+  <span class="key">data</span>: {
+    <span class="key">schemaVersion</span>: <span class="val">2</span>,        <span class="cm">// ← 必須</span>
+    <span class="key">formMap</span>:       { <span class="cm">/* フォーム値 */</span> },
+    <span class="key">blocksHTML</span>:    <span class="str">"..."</span>,
+    <span class="key">proposalHTML</span>:  <span class="str">"..."</span>,
+    <span class="key">mapFilesHTML</span>:  <span class="str">"..."</span>,
+    <span class="key">images</span>:        [{ <span class="key">id</span>: <span class="str">"dp-yane"</span>, <span class="key">photoId</span>: <span class="str">"photo_001"</span> }]
+  },
+  <span class="key">createdAt</span>:   <span class="str">"2026-07-11T09:00:00.000Z"</span>,
+  <span class="key">updatedAt</span>:   <span class="str">"2026-07-11T09:00:00.000Z"</span>
+}</div>
+
+  <h3>photos ストア</h3>
+  <div class="code">
+<span class="cm">// キー：id（自動生成 "photo_xxxxxxxx"）</span>
+<span class="cm">// インデックス：reportId</span>
+{
+  <span class="key">id</span>:          <span class="str">"photo_001"</span>,
+  <span class="key">reportId</span>:    <span class="str">"rep_e5f6g7h8"</span>,
+  <span class="key">targetKey</span>:   <span class="str">"dp-yane"</span>,   <span class="cm">// どのdropエリアの写真か</span>
+  <span class="key">thumb</span>:       <span class="cm">/* Blob (600px/70%) */</span>,
+  <span class="key">full</span>:        <span class="cm">/* Blob (2000px/90%) */</span>,
+  <span class="key">transform</span>: {
+    <span class="key">scale</span>: <span class="val">1.5</span>,
+    <span class="key">tx</span>:    <span class="val">-23</span>,
+    <span class="key">ty</span>:    <span class="val">15</span>,
+    <span class="key">rot</span>:   <span class="val">90</span>
+  },
+  <span class="key">createdAt</span>:   <span class="str">"2026-07-11T09:00:00.000Z"</span>
+}</div>
+
+  <!-- ===== 画面遷移 ===== -->
+  <h2>画面遷移</h2>
+  <table>
+    <tr><th>画面</th><th>ファイル</th><th>役割</th></tr>
+    <tr><td>アプリランチャー</td><td>portal.html</td><td>帳票種別を選ぶ。既存のまま変更なし。</td></tr>
+    <tr><td>案件一覧</td><td>projects.html</td><td>案件の作成・検索・一覧表示。案件詳細へのナビゲーション。</td></tr>
+    <tr><td>案件詳細</td><td>projects.html#proj_xxxxx</td><td>案件情報＋紐づく帳票一覧＋写真枚数。帳票を開く・新規作成。</td></tr>
+    <tr><td>雨漏り調査報告書</td><td>report/amamori.html?proj=xxx&rep=yyy</td><td>URLパラメータでprojectId・reportIdを受け取り、DBから読み書き。</td></tr>
+    <tr><td>工事完了報告書</td><td>report/completion.html?proj=xxx&rep=yyy</td><td>同上。</td></tr>
+  </table>
+
+  <!-- ===== 案件詳細画面 ===== -->
+  <h2>案件詳細画面 — UI仕様</h2>
+  <div class="card">
+    <div class="card-title">表示項目</div>
+    <table>
+      <tr><th>セクション</th><th>内容</th><th>備考</th></tr>
+      <tr><td>案件ヘッダー</td><td>案件名・お客様名・所在地・ステータス</td><td>タップで編集</td></tr>
+      <tr><td>写真サマリー</td><td>📷 写真 N枚</td><td>全報告書の合計枚数</td></tr>
+      <tr><td>帳票一覧</td><td>各帳票の種別・タイトル・最終更新日・ステータス</td><td>「未作成」ならグレー表示</td></tr>
+      <tr><td>メモ</td><td>案件メモ（自由記入）</td><td></td></tr>
+    </table>
+  </div>
+
+  <!-- ===== 移行方針 ===== -->
+  <h2>Ver.1 → Ver.2 移行方針</h2>
+  <div class="card">
+    <div class="card-title">バックアップのみ、移行コードなし</div>
+    <div class="code">
+<span class="cm">// Ver.2 初回起動時に1回だけ実行</span>
+<span class="key">function</span> backupV1Drafts() {
+  const v1 = localStorage.getItem(<span class="str">'iraka_report_drafts_v1'</span>);
+  if (v1 && !localStorage.getItem(<span class="str">'iraka_report_drafts_v1_backup'</span>)) {
+    localStorage.setItem(<span class="str">'iraka_report_drafts_v1_backup'</span>, v1);
+    <span class="cm">// 「旧下書きをバックアップしました。必要な場合はお問い合わせください。」と表示</span>
+  }
+}</div>
+    <p style="font-size:13px;color:#555;margin-top:10px;">移行UIは作らない。バックアップデータはlocalStorageに残り、将来必要になったときに読み出せる。</p>
+  </div>
+
+  <!-- ===== 実装順序 ===== -->
+  <h2>Ver.2.0 実装順序</h2>
+  <table>
+    <tr><th>ステップ</th><th>作業内容</th><th>優先度</th></tr>
+    <tr>
+      <td>①</td>
+      <td><strong>db.js 作成</strong>：irakafieldDB の初期化、projects/reports/photos ストアのCRUD関数</td>
+      <td><span class="tag tag-must">必須</span></td>
+    </tr>
+    <tr>
+      <td>②</td>
+      <td><strong>projects.html 作成</strong>：案件一覧・案件詳細・案件作成UI</td>
+      <td><span class="tag tag-must">必須</span></td>
+    </tr>
+    <tr>
+      <td>③</td>
+      <td><strong>amamori.html へ移行</strong>：index.html を report/amamori.html にコピー、URLパラメータでprojectId・reportIdを受け取る形に改修</td>
+      <td><span class="tag tag-must">必須</span></td>
+    </tr>
+    <tr>
+      <td>④</td>
+      <td><strong>photos ストア統合</strong>：既存のMediaManagerをphotosストア経由に切り替え</td>
+      <td><span class="tag tag-must">必須</span></td>
+    </tr>
+    <tr>
+      <td>⑤</td>
+      <td><strong>portal.html 更新</strong>：「案件管理」ボタンを追加、projects.html へのリンク</td>
+      <td><span class="tag tag-must">必須</span></td>
+    </tr>
+    <tr>
+      <td>⑥</td>
+      <td>completion.html 作成</td>
+      <td><span class="tag tag-opt">推奨</span></td>
+    </tr>
+    <tr>
+      <td>⑦</td>
+      <td>AI所見生成（甍ノウハウ入り）</td>
+      <td><span class="tag tag-future">Ver.3</span></td>
+    </tr>
+  </table>
+
+
+  <!-- ===== ADR ===== -->
+  <h2>Architecture Decision Records（ADR）</h2>
+  <p style="font-size:13px;color:#555;margin-bottom:16px;">「なぜこう設計したか」を残す。将来の自分・チームへのメモ。</p>
+
+  <div class="card">
+    <div class="card-title">ADR-001 ／ Ver.1下書きの自動移行を採用しない</div>
+    <table>
+      <tr><th style="width:120px;">項目</th><th>内容</th></tr>
+      <tr><td>決定日</td><td>2026-07-11</td></tr>
+      <tr><td>ステータス</td><td>確定</td></tr>
+      <tr><td>決定内容</td><td>Ver.2移行時、Ver.1のlocalStorage下書きを自動でIndexedDBへ移行しない。バックアップコピーのみ実施。</td></tr>
+      <tr><td>理由①</td><td><strong>保守性</strong>：旧スキーマへの <code>if(oldData)</code> 分岐を永続させない。</td></tr>
+      <tr><td>理由②</td><td><strong>コード簡潔化</strong>：移行コードは書いた瞬間から負債になる。</td></tr>
+      <tr><td>理由③</td><td><strong>現実的影響が小さい</strong>：Ver.1で保存された下書きは多くない。作り直しの方が速い。</td></tr>
+      <tr><td>代替策</td><td>バックアップをlocalStorageに残す。将来必要になれば手動インポート機能を追加できる。</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">ADR-002 ／ 写真をreportsストアに保持しない</div>
+    <table>
+      <tr><th style="width:120px;">項目</th><th>内容</th></tr>
+      <tr><td>決定日</td><td>2026-07-11</td></tr>
+      <tr><td>ステータス</td><td>確定</td></tr>
+      <tr><td>決定内容</td><td>写真BlobはIndexedDBの独立した <code>photos</code> ストアで管理する。帳票データは <code>photoId</code> のみ参照する。</td></tr>
+      <tr><td>理由①</td><td><strong>独立管理</strong>：帳票を削除しても写真を残せる。写真を差し替えても帳票構造は変わらない。</td></tr>
+      <tr><td>理由②</td><td><strong>AI解析への対応</strong>：写真ストアをAIモジュールが直接参照できる構造にする。</td></tr>
+      <tr><td>理由③</td><td><strong>transform保持</strong>：拡大・移動・回転の状態を写真データが持つことで、帳票をまたいで再利用できる。</td></tr>
+      <tr><td>理由④</td><td><strong>キャッシュ戦略</strong>：thumb/fullを分離管理することで、一覧表示はthumbのみ読み込めばよい。</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">ADR-003 ／ schemaVersionを全帳票データに必須とする</div>
+    <table>
+      <tr><th style="width:120px;">項目</th><th>内容</th></tr>
+      <tr><td>決定日</td><td>2026-07-11</td></tr>
+      <tr><td>ステータス</td><td>確定</td></tr>
+      <tr><td>決定内容</td><td>帳票の <code>data</code> オブジェクトに <code>schemaVersion: 2</code> を必須フィールドとして持つ。</td></tr>
+      <tr><td>理由</td><td>将来の項目追加・変更時に <code>migrateV2toV3()</code> を書ける。バージョンがなければどの形式か判断できない。</td></tr>
+      <tr><td>運用ルール</td><td>スキーマを変更する際は必ずバージョンを上げ、マイグレーション関数を書いてからリリースする。</td></tr>
+    </table>
+  </div>
+
+  <!-- ===== 憲法を破ってよい条件 ===== -->
+  <h2>憲法を破ってよい条件</h2>
+  <div class="card" style="border-left:4px solid #C00;">
+    <p style="margin-bottom:12px;">この憲法は原則である。ただし、以下の3条件については<strong>憲法より優先してよい</strong>。</p>
+    <table>
+      <tr><th>条件</th><th>具体例</th></tr>
+      <tr><td><strong>性能改善</strong></td><td>写真の独立管理原則より、100枚以上の案件でのメモリ枯渇を防ぐことを優先する。</td></tr>
+      <tr><td><strong>セキュリティ</strong></td><td>案件管理の原則より、XSS・インジェクション対策を優先する。</td></tr>
+      <tr><td><strong>データ保全</strong></td><td>コード簡潔化の原則より、ユーザーデータの損失を防ぐことを優先する。</td></tr>
+    </table>
+    <div class="highlight" style="margin-top:12px;">憲法を破る場合は必ずADRを追加すること。「なぜ原則を曲げたか」を記録に残す。</div>
+  </div>
+
+
+  <!-- ===== settingsストア ===== -->
+  <h2>settings ストア（Ver.2.0から空で用意）</h2>
+  <div class="card">
+    <div class="card-title">今は使わない。ただし最初から作っておく。</div>
+    <div class="code">
+<span class="cm">// 将来ここに集約されるもの</span>
+{
+  <span class="key">companyName</span>:  <span class="str">"株式会社 甍（いらか）"</span>,
+  <span class="key">logo</span>:         <span class="cm">/* Blob or DataURL */</span>,
+  <span class="key">theme</span>:        <span class="str">"blue"</span>,
+  <span class="key">pdfQuality</span>:   <span class="str">"high"</span>,   <span class="cm">// high | standard | light</span>
+  <span class="key">aiEnabled</span>:    <span class="val">false</span>,
+  <span class="key">schemaVersion</span>: <span class="val">2</span>
+}</div>
+    <p style="font-size:13px;color:#555;margin-top:10px;">DB初期化時にストアだけ作成。値は入れない。Ver.3のAI設定・会社情報・テーマをここへ集約する。後から追加するよりDBバージョンアップが不要なので最初に宣言しておく。</p>
+  </div>
+
+  <!-- ===== Ver.2.0 完成条件 ===== -->
+  <h2>Ver.2.0 完成条件（Non-goals）</h2>
+  <div class="card">
+    <div class="card-title">これが全部✅になったらVer.2.0完成。これ以上はVer.2.0ではやらない。</div>
+    <table>
+      <tr><th style="width:40px;">✅</th><th>完成条件</th><th>備考</th></tr>
+      <tr><td>□</td><td>新規案件を作成できる</td><td>名前・顧客・住所・ステータス</td></tr>
+      <tr><td>□</td><td>案件一覧で検索・絞り込みができる</td><td>名前・ステータス</td></tr>
+      <tr><td>□</td><td>案件に雨漏り調査報告書を作成できる</td><td>projectId紐付き</td></tr>
+      <tr><td>□</td><td>案件に工事完了報告書を作成できる</td><td>同上</td></tr>
+      <tr><td>□</td><td>写真が案件単位でphotosストアに保存される</td><td>transform含む</td></tr>
+      <tr><td>□</td><td>案件詳細に帳票一覧・写真枚数が表示される</td><td></td></tr>
+      <tr><td>□</td><td>報告書のPDF出力が正常に動作する</td><td>写真の調整状態を反映</td></tr>
+      <tr><td>□</td><td>Ver.1の全機能を失っていない</td><td>下書き以外のすべての機能</td></tr>
+      <tr><td>□</td><td>スマホ（Android Chrome）で全操作が完結する</td><td>モバイルファースト確認</td></tr>
+      <tr><td>□</td><td>オフラインで動作する（PWA）</td><td>ServiceWorker確認</td></tr>
+    </table>
+    <div class="highlight" style="margin-top:12px;">これ以上はVer.2.0ではやらない：クラウド同期・複数人編集・ログイン・AI診断・見積連携</div>
+  </div>
+
+  <!-- ===== Definition of Done ===== -->
+  <h2>Definition of Done（DoD）</h2>
+  <p style="font-size:13px;color:#555;margin-bottom:16px;">「動いたからOK」で終わらない。各コンポーネントがこのチェックリストを満たして初めて完成とする。</p>
+
+  <div class="card">
+    <div class="card-title">js/db.js</div>
+    <table>
+      <tr><th style="width:40px;">✅</th><th>条件</th></tr>
+      <tr><td>□</td><td>projects / reports / photos / settings 全ストアのCRUDが動作する</td></tr>
+      <tr><td>□</td><td>DBバージョンアップ（onupgradeneeded）が正常に動作する</td></tr>
+      <tr><td>□</td><td>全関数に try/catch の例外処理がある</td></tr>
+      <tr><td>□</td><td>存在しないIDへのget/deleteが安全に処理される</td></tr>
+      <tr><td>□</td><td>インデックス（projectId, reportId）による検索が動作する</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">projects.html</div>
+    <table>
+      <tr><th style="width:40px;">✅</th><th>条件</th></tr>
+      <tr><td>□</td><td>案件の新規作成・編集・削除が動作する</td></tr>
+      <tr><td>□</td><td>案件一覧で名前・ステータスによる絞り込みができる</td></tr>
+      <tr><td>□</td><td>案件詳細に紐づく帳票一覧と写真枚数が表示される</td></tr>
+      <tr><td>□</td><td>帳票の新規作成ボタンから各report/*.htmlへ遷移できる</td></tr>
+      <tr><td>□</td><td>モバイル（スマホ縦画面）で全操作が完結する</td></tr>
+      <tr><td>□</td><td>案件0件の初期状態で「まず案件を作成してください」が表示される</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">report/amamori.html・completion.html</div>
+    <table>
+      <tr><th style="width:40px;">✅</th><th>条件</th></tr>
+      <tr><td>□</td><td>URLパラメータ（?proj=xxx&rep=yyy）でDBから正しく読み込まれる</td></tr>
+      <tr><td>□</td><td>入力内容が自動保存される（30秒インターバル）</td></tr>
+      <tr><td>□</td><td>上書き保存・名前付き保存が動作する</td></tr>
+      <tr><td>□</td><td>リロード後に内容が復元される</td></tr>
+      <tr><td>□</td><td>PDF出力で写真の拡大・移動・回転が反映される</td></tr>
+      <tr><td>□</td><td>印刷・PDF保存で背景色（青ヘッダー等）が正常に出力される</td></tr>
+      <tr><td>□</td><td>写真のピンチズーム・回転・長押し差し替えが動作する</td></tr>
+      <tr><td>□</td><td>スマホ・PCの両方でレイアウトが崩れない</td></tr>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-title">全体（PWA）</div>
+    <table>
+      <tr><th style="width:40px;">✅</th><th>条件</th></tr>
+      <tr><td>□</td><td>オフライン状態でアプリが起動する</td></tr>
+      <tr><td>□</td><td>ホーム画面に追加した状態で全機能が動作する</td></tr>
+      <tr><td>□</td><td>GitHub Pagesへのデプロイ後に全ページが正常に表示される</td></tr>
+    </table>
+  </div>
+
+  <!-- ===== 命名規則 ===== -->
+  <h2>ID命名規則</h2>
+  <div class="code">
+proj_<span class="val">xxxxxxxx</span>   <span class="cm">← 案件ID（8文字ランダム英数字）</span>
+rep_<span class="val">xxxxxxxx</span>    <span class="cm">← 帳票ID</span>
+photo_<span class="val">xxxxxxxx</span>  <span class="cm">← 写真ID</span>
+
+<span class="cm">// 生成例</span>
+<span class="key">function</span> makeId(prefix) {
+  return prefix + Math.random().toString(36).slice(2, 10);
+}
+makeId(<span class="str">'proj_'</span>)   <span class="cm">// → "proj_a1b2c3d4"</span>
+makeId(<span class="str">'rep_'</span>)    <span class="cm">// → "rep_e5f6g7h8"</span>
+makeId(<span class="str">'photo_'</span>)  <span class="cm">// → "photo_i9j0k1l2"</span></div>
+
+</div>
+
+<div class="footer">
+  甍AI Field — Ver.2.0 アーキテクチャ憲法　|　株式会社 甍（いらか）　|　2026/07/11
+</div>
+</body>
+</html>
