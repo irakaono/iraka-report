@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>甍AI 下書き救出ツール</title>
+<style>
+  :root { --bg:#f4f5f7; --surface:#fff; --ink:#1f2430; --sub:#6b7280; --line:#e5e7eb;
+    --brand:#1f2b45; --accent:#c8672f; --ok:#1a7f37; --danger:#b42318; --warn:#fff7ed; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    background:var(--bg); color:var(--ink); padding:16px; line-height:1.6; }
+  .wrap { max-width:720px; margin:0 auto; }
+  h1 { font-size:19px; margin:0 0 4px; }
+  .lead { color:var(--sub); font-size:13px; margin:0 0 14px; }
+  .warnbox { background:var(--warn); border:1px solid #f4c48a; border-radius:12px; padding:12px 14px; font-size:13.5px; color:#8a4b12; margin-bottom:16px; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; box-shadow:0 1px 3px rgba(16,24,40,.06); }
+  .verdict { font-size:16px; font-weight:700; margin:0 0 8px; }
+  .verdict.ok { color:var(--ok); }
+  .verdict.ng { color:var(--danger); }
+  .kv { font-size:13px; color:var(--sub); margin:2px 0; }
+  .big { font-size:34px; text-align:center; margin:6px 0; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th,td { text-align:left; padding:8px 6px; border-bottom:1px solid #f0f1f4; vertical-align:top; word-break:break-all; }
+  th { color:var(--sub); font-weight:600; }
+  .hit { background:#eefaf1; }
+  .btnrow { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+  button { font-size:15px; font-weight:600; padding:12px 16px; border-radius:10px; border:0; cursor:pointer; }
+  .b-primary { background:var(--brand); color:#fff; }
+  .b-accent { background:var(--accent); color:#fff; }
+  .b-ghost { background:#eef0f3; color:var(--ink); }
+  .draftname { font-weight:600; color:var(--ink); }
+  pre { background:#0f1420; color:#d7e0ea; padding:12px; border-radius:10px; overflow:auto; font-size:11.5px; max-height:220px; }
+  details { margin-top:8px; }
+  summary { cursor:pointer; font-size:13px; color:var(--brand); font-weight:600; }
+  textarea { width:100%; height:120px; font-size:12px; border:1px solid var(--line); border-radius:10px; padding:10px; }
+  .small { font-size:12px; color:var(--sub); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🛟 甍AI 下書き救出ツール</h1>
+  <p class="lead">この画面の localStorage / IndexedDB を丸ごと確認・バックアップします。<b>必ず、いつも報告書アプリ（index.html）を開くのと同じ方法・同じ場所で開いてください。</b></p>
+
+  <div class="warnbox">⚠️ まだ新規保存はしないでください。ここでデータの在りかを確認してから復旧します。</div>
+
+  <div class="card" id="verdictCard">
+    <div class="big" id="vIcon">⏳</div>
+    <div class="verdict" id="vText">確認中…</div>
+    <div id="vDetail"></div>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:700; margin-bottom:8px;">バックアップ操作</div>
+    <div class="small">まず「JSONで保存」を押して、今の状態を丸ごと書き出してください（データが有っても無くても、まず保全）。</div>
+    <div class="btnrow">
+      <button class="b-accent" id="btnExport">💾 JSONで保存（ダウンロード）</button>
+      <button class="b-ghost" id="btnCopy">📋 全部コピー</button>
+    </div>
+    <div class="small" id="copyMsg" style="margin-top:6px;"></div>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:700; margin-bottom:8px;">localStorage の中身（全キー）</div>
+    <div id="lsSummary" class="kv"></div>
+    <table id="lsTable"><thead><tr><th>キー</th><th>サイズ</th><th>先頭</th></tr></thead><tbody></tbody></table>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:700; margin-bottom:8px;">IndexedDB データベース一覧</div>
+    <div id="idbList" class="kv">確認中…</div>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>🔁 バックアップから復元（インポート）— 上級者向け</summary>
+      <p class="small">別端末や別の開き方で保存した JSON を、この画面の localStorage に書き戻します。既存のキーは上書きされるので注意。</p>
+      <textarea id="importArea" placeholder='ここに「JSONで保存」した中身を貼り付け'></textarea>
+      <div class="btnrow">
+        <button class="b-primary" id="btnImport">この画面へ復元する</button>
+      </div>
+      <div class="small" id="importMsg"></div>
+    </details>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>🔎 生データを見る（コピー用）</summary>
+      <pre id="rawDump"></pre>
+    </details>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var DRAFTS_KEY = 'iraka_report_drafts_v1';
+  var CURRENT_KEY = 'iraka_report_current_draft_v1';
+
+  function bytes(s) { try { return new Blob([s]).size; } catch (e) { return (s || '').length; } }
+  function fmtBytes(n) { return n < 1024 ? n + ' B' : (n / 1024).toFixed(1) + ' KB'; }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+  // ---- localStorage 全ダンプ ----
+  var all = {};
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      all[k] = localStorage.getItem(k);
+    }
+  } catch (e) {}
+  var keys = Object.keys(all);
+
+  // テーブル描画
+  var tbody = document.querySelector('#lsTable tbody');
+  var totalBytes = 0;
+  keys.forEach(function (k) {
+    var v = all[k] || '';
+    totalBytes += bytes(v);
+    var tr = document.createElement('tr');
+    if (k === DRAFTS_KEY || k === CURRENT_KEY) tr.className = 'hit';
+    tr.innerHTML = '<td>' + esc(k) + '</td><td>' + fmtBytes(bytes(v)) + '</td><td>' + esc(v.slice(0, 40)) + (v.length > 40 ? '…' : '') + '</td>';
+    tbody.appendChild(tr);
+  });
+  document.getElementById('lsSummary').textContent =
+    keys.length + ' 個のキー / 合計 ' + fmtBytes(totalBytes);
+
+  // ---- 判定 ----
+  var vIcon = document.getElementById('vIcon');
+  var vText = document.getElementById('vText');
+  var vDetail = document.getElementById('vDetail');
+  var vc = document.getElementById('verdictCard');
+
+  var raw = null;
+  try { raw = localStorage.getItem(DRAFTS_KEY); } catch (e) {}
+  var drafts = null;
+  if (raw) { try { drafts = JSON.parse(raw); } catch (e) { drafts = null; } }
+  var draftKeys = drafts && typeof drafts === 'object' ? Object.keys(drafts) : [];
+
+  if (draftKeys.length > 0) {
+    vIcon.textContent = '✅';
+    vText.textContent = '下書きが見つかりました！ ' + draftKeys.length + ' 件';
+    vText.className = 'verdict ok';
+    var listHtml = '<div class="kv">この画面（この開き方）にデータが残っています。すぐ上の「JSONで保存」でバックアップしてください。</div>';
+    listHtml += '<div style="margin-top:8px;">';
+    draftKeys.forEach(function (dk) {
+      var d = drafts[dk] || {};
+      var name = d.name || d.title || d.projectName || d.customer || dk;
+      var when = d.updatedAt || d.savedAt || d.date || '';
+      listHtml += '<div>・<span class="draftname">' + esc(name) + '</span> <span class="small">' + esc(when) + '</span></div>';
+    });
+    listHtml += '</div>';
+    vDetail.innerHTML = listHtml;
+  } else {
+    vIcon.textContent = '🔍';
+    vText.textContent = 'この画面には下書きがありません';
+    vText.className = 'verdict ng';
+    vDetail.innerHTML =
+      '<div class="kv">この「開き方（＝保存領域）」には <b>' + esc(DRAFTS_KEY) + '</b> がありません。' +
+      'データが消えたとは限りません。<b>別のアプリ／別の場所</b>で開いていた可能性が高いです。</div>' +
+      '<div class="kv" style="margin-top:8px;">対処: ①いつも報告書を開いていた <b>まったく同じアプリ・同じ場所</b>から、この救出ツールをもう一度開く。' +
+      '②Chromeで使っていたなら Chrome で、ファイルアプリで開いていたならそのアプリで開く。' +
+      'どれかで上の判定が✅になれば、データは無事です。</div>';
+  }
+
+  // ---- 生データ ----
+  document.getElementById('rawDump').textContent = JSON.stringify(all, null, 2);
+
+  // ---- エクスポート ----
+  function download(filename, text) {
+    try {
+      var blob = new Blob([text], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+      return true;
+    } catch (e) { return false; }
+  }
+  document.getElementById('btnExport').addEventListener('click', function () {
+    var stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    var payload = JSON.stringify({ savedAt: new Date().toISOString(), origin: location.href, localStorage: all }, null, 2);
+    var okd = download('iraka-backup-' + stamp + '.json', payload);
+    document.getElementById('copyMsg').textContent = okd ? '書き出しました。ダウンロード先を確認してください。' : 'ダウンロードに失敗。「全部コピー」を使ってください。';
+  });
+  document.getElementById('btnCopy').addEventListener('click', function () {
+    var payload = JSON.stringify({ savedAt: new Date().toISOString(), origin: location.href, localStorage: all }, null, 2);
+    var done = function () { document.getElementById('copyMsg').textContent = 'クリップボードにコピーしました。メモ帳などに貼り付けて保管してください。'; };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(payload).then(done, function () { fallbackCopy(payload); });
+    } else { fallbackCopy(payload); }
+  });
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); document.getElementById('copyMsg').textContent = 'コピーしました。'; }
+    catch (e) { document.getElementById('copyMsg').textContent = 'コピー不可。「生データを見る」から手動でコピーしてください。'; }
+    document.body.removeChild(ta);
+  }
+
+  // ---- インポート（復元） ----
+  document.getElementById('btnImport').addEventListener('click', function () {
+    var msg = document.getElementById('importMsg');
+    var txt = document.getElementById('importArea').value.trim();
+    if (!txt) { msg.textContent = '貼り付けが空です。'; return; }
+    var obj;
+    try { obj = JSON.parse(txt); } catch (e) { msg.textContent = 'JSONの形式が不正です。'; return; }
+    var store = obj.localStorage || obj;
+    if (!store || typeof store !== 'object') { msg.textContent = '復元できる localStorage データが見つかりません。'; return; }
+    if (!confirm('この画面の localStorage に ' + Object.keys(store).length + ' 件を書き戻します。よろしいですか？')) return;
+    var n = 0;
+    Object.keys(store).forEach(function (k) { try { localStorage.setItem(k, store[k]); n++; } catch (e) {} });
+    msg.textContent = n + ' 件を復元しました。報告書アプリを開き直して確認してください。';
+  });
+
+  // ---- IndexedDB 一覧 ----
+  var idbEl = document.getElementById('idbList');
+  if (indexedDB && indexedDB.databases) {
+    indexedDB.databases().then(function (dbs) {
+      if (!dbs || !dbs.length) { idbEl.textContent = 'IndexedDB のデータベースはありません。'; return; }
+      idbEl.innerHTML = dbs.map(function (d) { return '・' + esc(d.name) + '（v' + (d.version || '?') + '）'; }).join('<br>');
+    }).catch(function () { idbEl.textContent = 'この端末では IndexedDB 一覧を取得できません（Ver.1はlocalStorageのみ使用のため影響なし）。'; });
+  } else {
+    idbEl.textContent = 'この端末では IndexedDB 一覧APIが使えません（Ver.1はlocalStorageのみ使用のため影響なし）。';
+  }
+})();
+</script>
+</body>
+</html>
