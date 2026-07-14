@@ -1,128 +1,344 @@
-/* =============================================================================
- * 甍AI Field  Ver.2.0  —  js/irbk.js
- * -----------------------------------------------------------------------------
- * 依存ゼロの ZIP 生成 / 展開（stored 方式 = 無圧縮）。
- *   - CDN 不要。オフラインの現場でそのまま動く。
- *   - .irbk（甍AI バックアップ）コンテナの土台。
- *
- *  API:
- *    IrakaIrbk.zip(entries) -> Uint8Array         entries: [{name, data:Uint8Array}]
- *    IrakaIrbk.unzip(bytes) -> [{name, data:Uint8Array}]
- *    IrakaIrbk.crc32(bytes) -> number
- *    IrakaIrbk.utf8(str) / IrakaIrbk.fromUtf8(bytes)
- *
- *  グローバル公開: window.IrakaIrbk
- * ========================================================================== */
-(function (root) {
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2b45">
+<title>案件 | 甍AI Field</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --surface: #ffffff; --ink: #1f2430; --ink-sub: #6b7280;
+    --line: #e5e7eb; --brand: #1f2b45; --brand-ink: #ffffff; --accent: #c8672f;
+    --accent-weak: #fbeee5; --danger: #b42318; --ok: #1a7f37;
+    --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08); --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+    background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .app { max-width: 720px; margin: 0 auto; min-height: 100vh; }
+  header.bar {
+    position: sticky; top: 0; z-index: 20; background: var(--brand); color: var(--brand-ink);
+    padding: calc(env(safe-area-inset-top) + 12px) 12px 12px; display: flex; align-items: center; gap: 6px;
+  }
+  .back { background: transparent; border: 0; color: #fff; font-size: 22px; padding: 4px 8px; cursor: pointer; line-height: 1; border-radius: 8px; }
+  .back:active { background: rgba(255,255,255,.12); }
+  header .title { font-size: 16px; font-weight: 600; }
+  header .sub { font-size: 12px; opacity: .75; margin-left: auto; }
+  .hero { background: var(--surface); border-bottom: 1px solid var(--line); padding: 18px 18px 16px; }
+  .hero .titlerow { display: flex; align-items: center; gap: 10px; }
+  .hero .kicon { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 11px; background: var(--accent-weak); color: var(--accent); display: grid; place-items: center; font-size: 22px; }
+  .hero .pname { font-size: 22px; font-weight: 700; }
+  .hero .pmeta { color: var(--ink-sub); font-size: 13.5px; margin-top: 8px; line-height: 1.5; }
+  .hero .badge { display: inline-block; font-size: 11px; color: var(--ink-sub); border: 1px solid var(--line); border-radius: 999px; padding: 2px 9px; margin-top: 8px; }
+  .hero .badge.completed { color: var(--ok); border-color: #bbe6c6; background: #eefaf1; }
+  .actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; background: #f2f4f7; color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+  .pill:active { transform: translateY(1px); }
+  .pill.primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .pill.danger { color: var(--danger); border-color: #f3c9c4; background: #fdf3f2; }
+  .section-head { padding: 20px 18px 8px; color: var(--ink-sub); font-size: 12px; font-weight: 600; letter-spacing: .04em; }
+  .doc-group { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); margin: 0 12px 12px; overflow: hidden; }
+  .doc-head { display: flex; align-items: center; gap: 12px; padding: 14px 14px 10px; }
+  .doc-head .icon { width: 42px; height: 42px; flex: 0 0 42px; border-radius: 11px; background: var(--accent-weak); color: var(--accent); display: grid; place-items: center; font-size: 22px; }
+  .doc-head .dname { font-size: 16px; font-weight: 600; }
+  .doc-head .ddesc { font-size: 12px; color: var(--ink-sub); margin-top: 2px; }
+  /* 帳票の一覧枠。将来ここに日付つきの帳票行が縦に並ぶ（一覧前提レイアウト）。 */
+  .doc-list { border-top: 1px dashed var(--line); }
+  .doc-row { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid #f0f1f4; cursor: pointer; }
+  .doc-row:active { background: #f6f7f9; }
+  .doc-row .rdate { font-size: 14px; font-weight: 600; }
+  .doc-row .rchev { margin-left: auto; color: #c3c8d0; font-size: 18px; }
+  .doc-empty { padding: 14px 16px; color: var(--ink-sub); font-size: 13px; }
+  .doc-foot { padding: 10px 12px 12px; }
+  .doc-add { width: 100%; background: var(--accent); color: #fff; border: 0; cursor: pointer; font-size: 15px; font-weight: 600; border-radius: 10px; padding: 12px; }
+  .doc-add:active { transform: translateY(1px); }
+  .notfound { text-align: center; color: var(--ink-sub); padding: 70px 24px; }
+  .notfound .big { font-size: 42px; margin-bottom: 10px; }
+  .notfound a { color: var(--accent); font-weight: 600; text-decoration: none; }
+  .toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px); background: #22272e; color: #fff; font-size: 13.5px; padding: 11px 16px; border-radius: 999px; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 60; max-width: 90%; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .modal-back { position: fixed; inset: 0; background: rgba(17,22,34,.45); display: none; align-items: flex-end; justify-content: center; z-index: 50; }
+  .modal-back.open { display: flex; }
+  .modal { background: var(--surface); width: 100%; max-width: 720px; border-radius: 18px 18px 0 0; padding: 18px 18px calc(18px + env(safe-area-inset-bottom)); animation: up .18s ease; }
+  @keyframes up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+  .modal h2 { margin: 4px 0 6px; font-size: 18px; }
+  .modal p.lead { color: var(--ink-sub); font-size: 13.5px; margin: 0 0 8px; line-height: 1.6; }
+  .modal p.warn { color: var(--danger); font-size: 13px; font-weight: 600; margin: 0 0 14px; line-height: 1.6; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 13px; color: var(--ink-sub); margin-bottom: 5px; }
+  .field label .req { color: var(--accent); margin-left: 3px; }
+  .field input, .field select { width: 100%; font-size: 16px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; outline: 0; background: #fff; color: var(--ink); }
+  .field input:focus, .field select:focus { border-color: var(--brand); }
+  .modal-actions { display: flex; gap: 10px; margin-top: 8px; }
+  .modal-actions button { flex: 1; font-size: 16px; font-weight: 600; padding: 13px; border-radius: 12px; cursor: pointer; border: 0; }
+  .btn-cancel { background: #eef0f3; color: var(--ink); }
+  .btn-save { background: var(--accent); color: #fff; }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-save:disabled, .btn-danger:disabled { opacity: .5; }
+  .err { color: var(--danger); font-size: 12.5px; min-height: 16px; margin: 2px 2px 0; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <button class="back" id="back" aria-label="戻る">‹</button>
+    <span class="title">案件</span>
+    <span class="sub">甍AI Field</span>
+  </header>
+  <div id="content"></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<div class="modal-back" id="editBack">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="eTitle">
+    <h2 id="eTitle">案件を編集</h2>
+    <div class="field"><label for="eName">案件名<span class="req">*</span></label><input id="eName" type="text" autocomplete="off"></div>
+    <div class="field"><label for="eKind">種別</label>
+      <select id="eKind">
+        <option value="housing">🏠 住宅</option>
+        <option value="factory">🏭 工場</option>
+        <option value="public">🏛 公共</option>
+        <option value="roof">🧱 屋根</option>
+        <option value="inspection">🔍 点検</option>
+        <option value="other">📁 その他</option>
+      </select>
+    </div>
+    <div class="field"><label for="eCustomer">お客様名</label><input id="eCustomer" type="text" autocomplete="off"></div>
+    <div class="field"><label for="eAddress">住所</label><input id="eAddress" type="text" autocomplete="off"></div>
+    <div class="err" id="editErr"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="editCancel">キャンセル</button>
+      <button class="btn-save" id="editSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-back" id="delBack">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="dTitle">
+    <h2 id="dTitle">案件を削除しますか？</h2>
+    <p class="lead" id="delLead"></p>
+    <p class="warn">案件のみ削除します。帳票・写真は残ります（Ver2では）。</p>
+    <div class="err" id="delErr"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="delCancel">キャンセル</button>
+      <button class="btn-danger" id="delConfirm">削除する</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/project-api.js"></script>
+<script>
+(function () {
   'use strict';
+  var contentEl = document.getElementById('content');
+  var toastEl = document.getElementById('toast');
+  var current = null;
 
-  var CRC_TABLE = (function () {
-    var t = [];
-    for (var n = 0; n < 256; n++) {
-      var c = n;
-      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-      t[n] = c >>> 0;
-    }
-    return t;
-  })();
+  // 帳票種別。route で遷移先URLを「今」確定させておく（機能開通は config で制御）。
+  var DOC_TYPES = [
+    { type: 'leak_survey', icon: '📄', name: '雨漏り調査報告書', desc: '現地調査の記録と所見', route: 'report/amamori.html' },
+    { type: 'completion',  icon: '🛠', name: '工事完了報告書',   desc: '施工内容と完了写真',   route: 'report/kanryo.html' }
+  ];
+  // 機能フラグは config.js（window.IrakaConfig）に集約。実装できたら true にすると開通。
+  var CFG = (window.IrakaConfig || {});
+  var REPORT_READY = !!CFG.REPORT_READY;
 
-  function crc32(bytes) {
-    var c = 0xFFFFFFFF;
-    for (var i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
-    return (c ^ 0xFFFFFFFF) >>> 0;
+  var KIND_ICON = { housing: '🏠', factory: '🏭', public: '🏛', roof: '🧱', inspection: '🔍', other: '📁' };
+  var KIND_LABEL = { housing: '住宅', factory: '工場', public: '公共', roof: '屋根', inspection: '点検', other: 'その他' };
+  function kindIcon(k) { return KIND_ICON[k] || '🏠'; }
+  function kindLabel(k) { return KIND_LABEL[k] || '住宅'; }
+
+  function getParam(k) {
+    var m = new RegExp('[?&]' + k + '=([^&]*)').exec(location.search);
+    return m ? decodeURIComponent(m[1]) : null;
   }
-
-  function utf8(str) {
-    if (typeof TextEncoder !== 'undefined') return new TextEncoder().encode(str);
-    // フォールバック
-    var out = [], p = 0;
-    for (var i = 0; i < str.length; i++) {
-      var c = str.charCodeAt(i);
-      if (c < 128) out[p++] = c;
-      else if (c < 2048) { out[p++] = (c >> 6) | 192; out[p++] = (c & 63) | 128; }
-      else { out[p++] = (c >> 12) | 224; out[p++] = ((c >> 6) & 63) | 128; out[p++] = (c & 63) | 128; }
-    }
-    return new Uint8Array(out);
-  }
-  function fromUtf8(bytes) {
-    if (typeof TextDecoder !== 'undefined') return new TextDecoder().decode(bytes);
-    var s = '';
-    for (var i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
-    return decodeURIComponent(escape(s));
-  }
-
-  function u16(n) { return [n & 0xff, (n >>> 8) & 0xff]; }
-  function u32(n) { n = n >>> 0; return [n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff]; }
-
-  function concat(list) {
-    var total = 0, i;
-    for (i = 0; i < list.length; i++) total += list[i].length;
-    var out = new Uint8Array(total), off = 0;
-    for (i = 0; i < list.length; i++) { out.set(list[i], off); off += list[i].length; }
-    return out;
-  }
-
-  // stored ZIP を生成
-  function zip(entries) {
-    var chunks = [], central = [], offset = 0;
-    entries.forEach(function (e) {
-      var nameB = utf8(e.name);
-      var data = e.data || new Uint8Array(0);
-      var crc = crc32(data);
-      var local = [].concat(
-        u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(0),
-        u32(crc), u32(data.length), u32(data.length), u16(nameB.length), u16(0)
-      );
-      var localHead = new Uint8Array(local);
-      chunks.push(localHead, nameB, data);
-      var cen = [].concat(
-        u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(0),
-        u32(crc), u32(data.length), u32(data.length),
-        u16(nameB.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset)
-      );
-      central.push(new Uint8Array(cen), nameB);
-      offset += localHead.length + nameB.length + data.length;
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
-    var centralBytes = concat(central);
-    var eocd = [].concat(
-      u32(0x06054b50), u16(0), u16(0), u16(entries.length), u16(entries.length),
-      u32(centralBytes.length), u32(offset), u16(0)
-    );
-    return concat(chunks.concat([centralBytes, new Uint8Array(eocd)]));
+  }
+  function fmtDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso); if (isNaN(d)) return '';
+    var p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '/' + p(d.getMonth() + 1) + '/' + p(d.getDate());
+  }
+  var tt;
+  function toast(msg) {
+    toastEl.textContent = msg; toastEl.classList.add('show');
+    clearTimeout(tt); tt = setTimeout(function () { toastEl.classList.remove('show'); }, 2600);
   }
 
-  // stored ZIP を展開（method=0 前提）
-  function unzip(bytes) {
-    if (!(bytes instanceof Uint8Array)) bytes = new Uint8Array(bytes);
-    var dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    var i = bytes.length - 22;
-    for (; i >= 0; i--) { if (dv.getUint32(i, true) === 0x06054b50) break; }
-    if (i < 0) throw new Error('ZIP の終端(EOCD)が見つかりません。');
-    var count = dv.getUint16(i + 10, true);
-    var cdOffset = dv.getUint32(i + 16, true);
-    var p = cdOffset, out = [];
-    for (var n = 0; n < count; n++) {
-      if (dv.getUint32(p, true) !== 0x02014b50) break;
-      var compSize = dv.getUint32(p + 20, true);
-      var nameLen = dv.getUint16(p + 28, true);
-      var extraLen = dv.getUint16(p + 30, true);
-      var commentLen = dv.getUint16(p + 32, true);
-      var lho = dv.getUint32(p + 42, true);
-      var name = fromUtf8(bytes.subarray(p + 46, p + 46 + nameLen));
-      var lNameLen = dv.getUint16(lho + 26, true);
-      var lExtra = dv.getUint16(lho + 28, true);
-      var dataStart = lho + 30 + lNameLen + lExtra;
-      var data = bytes.subarray(dataStart, dataStart + compSize);
-      out.push({ name: name, data: new Uint8Array(data) });
-      p += 46 + nameLen + extraLen + commentLen;
+  document.getElementById('back').addEventListener('click', function () {
+    if (history.length > 1) history.back(); else location.href = 'projects.html';
+  });
+
+  function renderNotFound(msg) {
+    contentEl.innerHTML =
+      '<div class="notfound"><div class="big">🧭</div><div>' + esc(msg) + '</div>' +
+      '<p><a href="projects.html">← 案件一覧へ戻る</a></p></div>';
+  }
+
+  function statusBadge(status) {
+    if (status === 'archived') return '<div class="badge">アーカイブ済み</div>';
+    if (status === 'completed') return '<div class="badge completed">完成</div>';
+    return '';
+  }
+
+  // 状態に応じた遷移ボタン（施工中→完成→アーカイブ / 復帰）
+  function statusActions(status) {
+    if (status === 'active') {
+      return '<button class="pill primary" data-act="complete">✅ 完成にする</button>' +
+             '<button class="pill" data-act="archive">📦 アーカイブ</button>';
     }
-    return out;
+    if (status === 'completed') {
+      return '<button class="pill" data-act="reopen">↩︎ 施工中に戻す</button>' +
+             '<button class="pill" data-act="archive">📦 アーカイブ</button>';
+    }
+    // archived → 退避した状態へ復帰（unarchive）
+    return '<button class="pill" data-act="unarchive">↩️ 復帰する</button>';
   }
 
-  var IrakaIrbk = { zip: zip, unzip: unzip, crc32: crc32, utf8: utf8, fromUtf8: fromUtf8 };
-  root.IrakaIrbk = IrakaIrbk;
-  if (typeof module !== 'undefined' && module.exports) module.exports = IrakaIrbk;
+  function renderProject(p) {
+    current = p;
+    var meta = [];
+    meta.push('種別: ' + kindLabel(p.kind));
+    if (p.customer) meta.push(esc(p.customer));
+    if (p.address) meta.push(esc(p.address));
+    var metaHtml = meta.join('<br>');
 
-})(typeof window !== 'undefined' ? window
-   : typeof globalThis !== 'undefined' ? globalThis
-   : this);
+    var docsHtml = DOC_TYPES.map(function (d) {
+      return '<div class="doc-group">' +
+        '<div class="doc-head">' +
+          '<div class="icon">' + d.icon + '</div>' +
+          '<div><div class="dname">' + esc(d.name) + '</div>' +
+          '<div class="ddesc">' + esc(d.desc) + '</div></div>' +
+        '</div>' +
+        '<div class="doc-list"><div class="doc-empty">まだ作成されていません</div></div>' +
+        '<div class="doc-foot"><button class="doc-add" data-type="' + d.type + '">＋ 新規作成</button></div>' +
+      '</div>';
+    }).join('');
+
+    contentEl.innerHTML =
+      '<div class="hero">' +
+        '<div class="titlerow"><div class="kicon">' + kindIcon(p.kind) + '</div>' +
+          '<div class="pname">' + esc(p.name) + '</div></div>' +
+        '<div class="pmeta">' + metaHtml + '</div>' +
+        statusBadge(p.status) +
+        '<div class="pmeta" style="margin-top:8px">更新: ' + fmtDate(p.updatedAt) + '　作成: ' + fmtDate(p.createdAt) + '</div>' +
+        '<div class="actions">' +
+          '<button class="pill" data-act="edit">✏️ 編集</button>' +
+          statusActions(p.status) +
+          '<button class="pill danger" data-act="delete">🗑 削除</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="section-head">帳票</div>' +
+      docsHtml;
+
+    Array.prototype.forEach.call(contentEl.querySelectorAll('.doc-add'), function (btn) {
+      btn.addEventListener('click', function () {
+        var t = btn.getAttribute('data-type');
+        var d = DOC_TYPES.filter(function (x) { return x.type === t; })[0];
+        var url = d.route + '?projectId=' + encodeURIComponent(p.id);
+        if (REPORT_READY) { location.href = url; }
+        else { toast('準備中: ' + url); }
+      });
+    });
+
+    Array.prototype.forEach.call(contentEl.querySelectorAll('.pill[data-act]'), function (btn) {
+      btn.addEventListener('click', function () { onAction(btn.getAttribute('data-act')); });
+    });
+  }
+
+  function onAction(act) {
+    if (!current) return;
+    if (act === 'edit') return openEdit();
+    if (act === 'delete') return openDelete();
+    var op;
+    if (act === 'complete') op = IrakaProject.complete(current.id);
+    else if (act === 'reopen') op = IrakaProject.reopen(current.id);
+    else if (act === 'archive') op = IrakaProject.archive(current.id);
+    else if (act === 'unarchive') op = IrakaProject.unarchive(current.id);
+    else return;
+    op.then(function (updated) {
+      renderProject(updated);
+      var msg = { completed: '完成にしました', active: '施工中に戻しました', archived: 'アーカイブしました' }[updated.status];
+      toast(msg || '更新しました');
+    }).catch(function (e) { toast('失敗: ' + (e && e.message ? e.message : e)); });
+  }
+
+  /* ---- 編集 ---- */
+  var editBack = document.getElementById('editBack');
+  function openEdit() {
+    if (!current) return;
+    document.getElementById('eName').value = current.name || '';
+    document.getElementById('eKind').value = current.kind || 'housing';
+    document.getElementById('eCustomer').value = current.customer || '';
+    document.getElementById('eAddress').value = current.address || '';
+    document.getElementById('editErr').textContent = '';
+    editBack.classList.add('open');
+    setTimeout(function () { document.getElementById('eName').focus(); }, 60);
+  }
+  function closeEdit() { editBack.classList.remove('open'); }
+  document.getElementById('editCancel').addEventListener('click', closeEdit);
+  editBack.addEventListener('click', function (e) { if (e.target === editBack) closeEdit(); });
+  document.getElementById('editSave').addEventListener('click', function () {
+    var btn = this, errEl = document.getElementById('editErr');
+    btn.disabled = true;
+    IrakaProject.update(current.id, {
+      name: document.getElementById('eName').value,
+      kind: document.getElementById('eKind').value,
+      customer: document.getElementById('eCustomer').value,
+      address: document.getElementById('eAddress').value
+    }).then(function (updated) {
+      closeEdit(); renderProject(updated); toast('保存しました');
+    }).catch(function (e) {
+      errEl.textContent = e && e.message ? e.message : '保存に失敗しました。';
+    }).then(function () { btn.disabled = false; });
+  });
+
+  /* ---- 削除（確認つき） ---- */
+  // 注意: 案件レコードのみ削除。帳票(reports)・写真(photos)の連鎖削除は field-api（後工程）へ委譲。
+  var delBack = document.getElementById('delBack');
+  function openDelete() {
+    if (!current) return;
+    document.getElementById('delLead').textContent =
+      '「' + current.name + '」を削除します。この操作は取り消せません。';
+    document.getElementById('delErr').textContent = '';
+    delBack.classList.add('open');
+  }
+  function closeDelete() { delBack.classList.remove('open'); }
+  document.getElementById('delCancel').addEventListener('click', closeDelete);
+  delBack.addEventListener('click', function (e) { if (e.target === delBack) closeDelete(); });
+  document.getElementById('delConfirm').addEventListener('click', function () {
+    var btn = this, errEl = document.getElementById('delErr');
+    btn.disabled = true;
+    IrakaProject.remove(current.id).then(function () {
+      location.href = 'projects.html';
+    }).catch(function (e) {
+      errEl.textContent = e && e.message ? e.message : '削除に失敗しました。';
+      btn.disabled = false;
+    });
+  });
+
+  /* ---- 起動 ---- */
+  var id = getParam('id');
+  if (!window.IrakaProject) { renderNotFound('project-api.js / db.js が読み込まれていません。'); return; }
+  if (!id) { renderNotFound('案件IDが指定されていません。'); return; }
+  IrakaProject.get(id).then(function (p) {
+    if (!p) { renderNotFound('案件が見つかりません（' + id + '）。'); return; }
+    document.title = p.name + ' | 甍AI Field';
+    renderProject(p);
+  }).catch(function (e) {
+    renderNotFound('読み込みエラー: ' + (e && e.message ? e.message : e));
+  });
+})();
+</script>
+</body>
+</html>
