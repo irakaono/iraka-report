@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2b45">
+<title>案件一覧 | 甍AI Field</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --surface: #ffffff; --ink: #1f2430; --ink-sub: #6b7280;
+    --line: #e5e7eb; --brand: #1f2b45; --brand-ink: #ffffff; --accent: #c8672f;
+    --accent-weak: #fbeee5;
+    --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08); --radius: 14px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+    background: var(--bg); color: var(--ink); -webkit-font-smoothing: antialiased;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .app { max-width: 720px; margin: 0 auto; min-height: 100vh; background: var(--bg); }
+  header.bar {
+    position: sticky; top: 0; z-index: 20; background: var(--brand); color: var(--brand-ink);
+    padding: calc(env(safe-area-inset-top) + 14px) 18px 14px; display: flex; align-items: center; gap: 10px;
+  }
+  header.bar .logo { font-size: 20px; font-weight: 700; letter-spacing: .02em; }
+  header.bar .sub { font-size: 12px; opacity: .75; margin-left: auto; }
+  .toolbar { padding: 14px 16px 6px; display: flex; gap: 10px; align-items: center; }
+  .search {
+    flex: 1; display: flex; align-items: center; gap: 8px; background: var(--surface);
+    border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; box-shadow: var(--shadow);
+  }
+  .search input { border: 0; outline: 0; flex: 1; font-size: 16px; background: transparent; color: var(--ink); }
+  .search .ic { color: var(--ink-sub); font-size: 16px; }
+  .btn-new {
+    display: inline-flex; align-items: center; gap: 6px; background: var(--accent); color: #fff;
+    border: 0; cursor: pointer; font-size: 15px; font-weight: 600; border-radius: 12px;
+    padding: 11px 14px; box-shadow: var(--shadow); white-space: nowrap;
+  }
+  .btn-new:active { transform: translateY(1px); }
+  .filters { display: flex; gap: 6px; padding: 8px 16px 0; overflow-x: auto; }
+  .seg {
+    flex: 0 0 auto; background: #eef0f3; border: 0; color: var(--ink-sub);
+    font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 999px; cursor: pointer;
+  }
+  .seg.active { background: var(--brand); color: #fff; }
+  .meta { padding: 8px 18px 2px; color: var(--ink-sub); font-size: 12px; }
+  ul.list { list-style: none; margin: 0; padding: 8px 12px 24px; }
+  li.card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow); margin-bottom: 10px; display: flex; align-items: center; gap: 12px;
+    padding: 14px 14px; cursor: pointer; transition: background .12s;
+  }
+  li.card:active { background: #f0f2f5; }
+  .card .icon {
+    width: 44px; height: 44px; flex: 0 0 44px; border-radius: 12px; background: var(--accent-weak);
+    color: var(--accent); display: grid; place-items: center; font-size: 22px;
+  }
+  .card .body { flex: 1; min-width: 0; }
+  .card .name { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card .subline { font-size: 12.5px; color: var(--ink-sub); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* 件数表示エリア（将来: 雨漏り 2件 / 工事完了 1件 / 写真 38枚 を入れる。今は空で確保） */
+  .card .counts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .card .counts:not(:empty) { margin-top: 6px; }
+  .card .counts .chip { font-size: 11px; color: var(--ink-sub); background: #f2f4f7; border-radius: 999px; padding: 2px 8px; }
+  .card .chev { color: #c3c8d0; font-size: 20px; flex: 0 0 auto; }
+  .card .badge { font-size: 11px; color: var(--ink-sub); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; margin-left: 6px; }
+  .card .badge.completed { color: #1a7f37; border-color: #bbe6c6; background: #eefaf1; }
+  .empty { text-align: center; color: var(--ink-sub); padding: 60px 24px; }
+  .empty .big { font-size: 40px; margin-bottom: 12px; }
+  .empty .hint { font-size: 14px; margin-top: 6px; }
+  .modal-back { position: fixed; inset: 0; background: rgba(17,22,34,.45); display: none; align-items: flex-end; justify-content: center; z-index: 50; }
+  .modal-back.open { display: flex; }
+  .modal { background: var(--surface); width: 100%; max-width: 720px; border-radius: 18px 18px 0 0; padding: 18px 18px calc(18px + env(safe-area-inset-bottom)); animation: up .18s ease; }
+  @keyframes up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+  .modal h2 { margin: 4px 0 14px; font-size: 18px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 13px; color: var(--ink-sub); margin-bottom: 5px; }
+  .field label .req { color: var(--accent); margin-left: 3px; }
+  .field input, .field select { width: 100%; font-size: 16px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; outline: 0; background: #fff; color: var(--ink); }
+  .field input:focus, .field select:focus { border-color: var(--brand); }
+  .modal-actions { display: flex; gap: 10px; margin-top: 8px; }
+  .modal-actions button { flex: 1; font-size: 16px; font-weight: 600; padding: 13px; border-radius: 12px; cursor: pointer; border: 0; }
+  .btn-cancel { background: #eef0f3; color: var(--ink); }
+  .btn-save { background: var(--accent); color: #fff; }
+  .btn-save:disabled { opacity: .5; }
+  .err { color: #b42318; font-size: 12.5px; min-height: 16px; margin: 2px 2px 0; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <span class="logo">甍AI Field</span>
+    <a href="recovery.html" style="margin-left:auto;color:#fff;opacity:.9;font-size:12px;text-decoration:none;font-weight:600">🩺 データ診断</a>
+  </header>
+  <div class="toolbar">
+    <div class="search">
+      <span class="ic">🔍</span>
+      <input id="q" type="search" inputmode="search" placeholder="案件名・お客様・住所で検索" autocomplete="off">
+    </div>
+    <button class="btn-new" id="btnNew">＋ 新規案件</button>
+  </div>
+  <div class="filters" id="filters">
+    <button class="seg active" data-status="">すべて</button>
+    <button class="seg" data-status="active">施工中</button>
+    <button class="seg" data-status="completed">完成</button>
+    <button class="seg" data-status="archived">アーカイブ</button>
+  </div>
+  <div class="meta" id="meta"></div>
+  <ul class="list" id="list"></ul>
+</div>
+
+<div class="modal-back" id="modalBack">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <h2 id="mTitle">新規案件</h2>
+    <div class="field">
+      <label for="fName">案件名<span class="req">*</span></label>
+      <input id="fName" type="text" placeholder="例）山田様邸" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="fKind">種別</label>
+      <select id="fKind">
+        <option value="housing">🏠 住宅</option>
+        <option value="factory">🏭 工場</option>
+        <option value="public">🏛 公共</option>
+        <option value="roof">🧱 屋根</option>
+        <option value="inspection">🔍 点検</option>
+        <option value="other">📁 その他</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="fCustomer">お客様名</label>
+      <input id="fCustomer" type="text" placeholder="例）山田 太郎 様" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="fAddress">住所</label>
+      <input id="fAddress" type="text" placeholder="例）埼玉県さいたま市…" autocomplete="off">
+    </div>
+    <div class="err" id="formErr"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="btnCancel">キャンセル</button>
+      <button class="btn-save" id="btnSave">作成</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/project-api.js"></script>
+<script>
+(function () {
+  'use strict';
+  var listEl = document.getElementById('list');
+  var metaEl = document.getElementById('meta');
+  var qEl = document.getElementById('q');
+  var modalBack = document.getElementById('modalBack');
+
+  var KIND_ICON = { housing: '🏠', factory: '🏭', public: '🏛', roof: '🧱', inspection: '🔍', other: '📁' };
+  function kindIcon(k) { return KIND_ICON[k] || '🏠'; }
+
+  function fmtDate(iso) {
+    if (!iso) return '';
+    var d = new Date(iso);
+    if (isNaN(d)) return '';
+    var p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '/' + p(d.getMonth() + 1) + '/' + p(d.getDate());
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function statusBadge(status) {
+    if (status === 'archived') return '<span class="badge">アーカイブ</span>';
+    if (status === 'completed') return '<span class="badge completed">完成</span>';
+    return '';
+  }
+
+  function render(rows) {
+    listEl.innerHTML = '';
+    if (!rows.length) {
+      var kw = qEl.value.trim();
+      metaEl.textContent = '';
+      listEl.innerHTML = '<div class="empty"><div class="big">' +
+        (kw ? '🔍' : '🏠') + '</div><div>' +
+        (kw ? '該当する案件がありません' : 'まだ案件がありません') + '</div>' +
+        '<div class="hint">' +
+        (kw ? '別のキーワードでお試しください' : '右上の「＋ 新規案件」から追加できます') +
+        '</div></div>';
+      return;
+    }
+    metaEl.textContent = rows.length + ' 件';
+    rows.forEach(function (p) {
+      var sub = [p.customer, p.address].filter(Boolean).join(' ・ ') || 'お客様・住所は未設定';
+      var li = document.createElement('li');
+      li.className = 'card';
+      li.innerHTML =
+        '<div class="icon">' + kindIcon(p.kind) + '</div>' +
+        '<div class="body">' +
+          '<div class="name">' + esc(p.name) + statusBadge(p.status) + '</div>' +
+          '<div class="subline">' + esc(sub) + '　更新: ' + fmtDate(p.updatedAt) + '</div>' +
+          '<div class="counts" data-project="' + esc(p.id) + '"></div>' +
+        '</div>' +
+        '<div class="chev">›</div>';
+      li.addEventListener('click', function () {
+        location.href = 'project.html?id=' + encodeURIComponent(p.id);
+      });
+      listEl.appendChild(li);
+    });
+  }
+
+  var filterStatus = '';
+  var t;
+  function refresh() {
+    var kw = qEl.value.trim();
+    var opts = filterStatus ? { status: filterStatus } : {};
+    var op = kw ? IrakaProject.search(kw, opts) : IrakaProject.list(opts);
+    op.then(render).catch(function (e) {
+      metaEl.textContent = '読み込みエラー: ' + (e && e.message ? e.message : e);
+    });
+  }
+  qEl.addEventListener('input', function () { clearTimeout(t); t = setTimeout(refresh, 150); });
+
+  Array.prototype.forEach.call(document.querySelectorAll('#filters .seg'), function (seg) {
+    seg.addEventListener('click', function () {
+      Array.prototype.forEach.call(document.querySelectorAll('#filters .seg'), function (s) {
+        s.classList.remove('active');
+      });
+      seg.classList.add('active');
+      filterStatus = seg.getAttribute('data-status') || '';
+      refresh();
+    });
+  });
+
+  function openModal() {
+    document.getElementById('fName').value = '';
+    document.getElementById('fKind').value = 'housing';
+    document.getElementById('fCustomer').value = '';
+    document.getElementById('fAddress').value = '';
+    document.getElementById('formErr').textContent = '';
+    modalBack.classList.add('open');
+    setTimeout(function () { document.getElementById('fName').focus(); }, 60);
+  }
+  function closeModal() { modalBack.classList.remove('open'); }
+
+  document.getElementById('btnNew').addEventListener('click', openModal);
+  document.getElementById('btnCancel').addEventListener('click', closeModal);
+  modalBack.addEventListener('click', function (e) { if (e.target === modalBack) closeModal(); });
+
+  document.getElementById('btnSave').addEventListener('click', function () {
+    var errEl = document.getElementById('formErr');
+    var btn = this;
+    var data = {
+      name: document.getElementById('fName').value,
+      kind: document.getElementById('fKind').value,
+      customer: document.getElementById('fCustomer').value,
+      address: document.getElementById('fAddress').value
+    };
+    btn.disabled = true;
+    IrakaProject.create(data).then(function () {
+      closeModal();
+      qEl.value = '';
+      refresh();
+    }).catch(function (e) {
+      errEl.textContent = e && e.message ? e.message : '作成に失敗しました。';
+    }).then(function () { btn.disabled = false; });
+  });
+
+  if (!window.IrakaProject) {
+    metaEl.textContent = 'エラー: project-api.js / db.js が読み込まれていません。';
+  } else {
+    refresh();
+  }
+})();
+</script>
+</body>
+</html>

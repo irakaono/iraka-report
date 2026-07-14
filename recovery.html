@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2b45">
+<title>データ診断・バックアップ | 甍AI Field</title>
+<style>
+  :root { --bg:#f4f5f7; --surface:#fff; --ink:#1f2430; --sub:#6b7280; --line:#e5e7eb;
+    --brand:#1f2b45; --accent:#c8672f; --ok:#1a7f37; --danger:#b42318; --warn:#fff7ed;
+    --shadow:0 1px 3px rgba(16,24,40,.08); --radius:14px; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; padding-bottom:env(safe-area-inset-bottom); }
+  .app { max-width:720px; margin:0 auto; min-height:100vh; }
+  header.bar { position:sticky; top:0; z-index:20; background:var(--brand); color:#fff;
+    padding:calc(env(safe-area-inset-top) + 12px) 14px 12px; display:flex; align-items:center; gap:8px; }
+  .back { background:transparent; border:0; color:#fff; font-size:22px; padding:4px 8px; text-decoration:none; }
+  header .title { font-size:16px; font-weight:700; }
+  header .sub { font-size:12px; opacity:.75; margin-left:auto; }
+  .steps { display:flex; gap:6px; padding:12px 14px 0; font-size:11px; color:var(--sub); }
+  .steps span { background:#eef0f3; border-radius:999px; padding:3px 10px; }
+  .warnbox { background:var(--warn); border:1px solid #f4c48a; color:#8a4b12; font-size:13px;
+    margin:12px 14px; padding:12px 14px; border-radius:12px; line-height:1.6; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); margin:14px; padding:16px; }
+  .card h2 { font-size:15px; margin:0 0 4px; display:flex; align-items:center; gap:8px; }
+  .card .num { background:var(--brand); color:#fff; font-size:12px; width:22px; height:22px; border-radius:50%; display:inline-grid; place-items:center; }
+  .card .desc { font-size:12.5px; color:var(--sub); margin:0 0 12px; line-height:1.6; }
+  .verdict { font-weight:700; font-size:15px; margin:4px 0; }
+  .verdict.ok { color:var(--ok); } .verdict.ng { color:var(--danger); }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th,td { text-align:left; padding:7px 6px; border-bottom:1px solid #f0f1f4; vertical-align:top; word-break:break-all; }
+  th { color:var(--sub); font-weight:600; }
+  .hit { background:#eefaf1; }
+  .kv { font-size:13px; color:var(--sub); margin:3px 0; }
+  .btnrow { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+  button { font-size:15px; font-weight:600; padding:12px 16px; border-radius:10px; border:0; cursor:pointer; }
+  .b-brand { background:var(--brand); color:#fff; } .b-accent { background:var(--accent); color:#fff; }
+  .b-ghost { background:#eef0f3; color:var(--ink); } .b-danger { background:var(--danger); color:#fff; }
+  button:disabled { opacity:.5; }
+  label.chk { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--sub); margin-top:10px; }
+  select { font-size:15px; padding:10px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+  textarea { width:100%; height:100px; font-size:12px; border:1px solid var(--line); border-radius:10px; padding:10px; margin-top:8px; }
+  input[type=file] { font-size:13px; margin-top:8px; }
+  .msg { font-size:12.5px; margin-top:8px; min-height:16px; }
+  .msg.ok { color:var(--ok); } .msg.ng { color:var(--danger); }
+  .chip { display:inline-block; font-size:11px; color:var(--sub); background:#f2f4f7; border-radius:999px; padding:2px 9px; margin:2px 4px 2px 0; }
+  details { margin-top:8px; } summary { cursor:pointer; font-size:13px; color:var(--brand); font-weight:600; }
+  .list { margin:6px 0 0; padding-left:18px; font-size:12.5px; }
+  .ro { font-size:11px; color:var(--ok); font-weight:700; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <a class="back" href="projects.html" aria-label="戻る">‹</a>
+    <span class="title">データ診断・バックアップ</span>
+    <span class="sub">甍AI Field</span>
+  </header>
+  <div class="steps"><span>①診断</span><span>②バックアップ</span><span>③検証</span><span>④復元</span></div>
+  <div class="warnbox">まず<b>①診断</b>で在りかを確認し、<b>②バックアップ</b>で丸ごと書き出してください。<b>④復元は最後</b>です（先にバックアップを取ってから）。</div>
+  <div class="warnbox" style="background:#eef4ff;border-color:#b9d0f5;color:#1f2b45;">🧪 復元が本当に効くか確かめたいときは <a href="recovery-selftest.html" style="font-weight:700;color:#1f2b45;">Recovery セルフテスト</a>（本番データ非破壊で「消して復元」を自動検証）。</div>
+
+  <!-- ① 診断（読み取り専用） -->
+  <div class="card">
+    <h2><span class="num">1</span>データ診断 <span class="ro">読み取り専用</span></h2>
+    <p class="desc">端末に保存されている全データ（localStorage / IndexedDB）を一覧します。</p>
+    <div id="diag">確認中…</div>
+    <div class="btnrow"><button class="b-ghost" id="btnDiag">🔄 再診断</button></div>
+  </div>
+
+  <!-- ② バックアップ（読み取り専用） -->
+  <div class="card">
+    <h2><span class="num">2</span>バックアップ <span class="ro">読み取り専用</span></h2>
+    <p class="desc">全データを書き出します。<b>.irbk</b>（ZIP・写真も1ファイルにまとめられる推奨形式）か、JSON を選べます。</p>
+    <label class="chk"><input type="checkbox" id="incMedia"> 写真の本体も含める（.irbk 推奨・大きくなります）</label>
+    <div class="btnrow">
+      <button class="b-accent" id="btnIrbk">📦 .irbk で保存（推奨）</button>
+      <button class="b-ghost" id="btnJson">💾 JSON で保存</button>
+      <button class="b-ghost" id="btnCopy">📋 JSONコピー</button>
+    </div>
+    <div class="msg" id="backupMsg"></div>
+  </div>
+
+  <!-- ③ 検証（読み取り専用・削除は自動でしない） -->
+  <div class="card">
+    <h2><span class="num">3</span>整合性の検証 <span class="ro">読み取り専用</span></h2>
+    <p class="desc">案件と帳票・写真の紐付けを点検します。壊れていても<b>自動では削除しません</b>。原因調査 → 復旧 → （最後に）削除の順で扱えます。</p>
+    <div id="integ"></div>
+    <div class="btnrow"><button class="b-ghost" id="btnInteg">🩺 チェック実行</button></div>
+    <div id="fixArea" style="display:none;margin-top:12px;padding-top:12px;border-top:1px dashed var(--line);">
+      <div class="kv" style="font-weight:600;color:var(--ink)">孤立データの扱い（削除は最後）</div>
+      <div class="btnrow">
+        <button class="b-ghost" id="btnCsv">📄 CSVで書き出し</button>
+      </div>
+      <div class="kv" style="margin-top:12px">別案件へ移動（孤立した帳票の親を付け替え）</div>
+      <div class="btnrow">
+        <select id="moveTarget"></select>
+        <button class="b-brand" id="btnMove">↪ この案件へ移動</button>
+      </div>
+      <div class="btnrow" style="margin-top:12px">
+        <button class="b-danger" id="btnDelete">🗑 孤立データを削除（最終手段）</button>
+      </div>
+      <div class="msg" id="fixMsg"></div>
+    </div>
+  </div>
+
+  <!-- ④ 復元（最後・破壊的可能性あり） -->
+  <div class="card">
+    <h2><span class="num">4</span>復元（インポート）</h2>
+    <p class="desc">バックアップ（.irbk / JSON）から書き戻します。<b>既存の同じレコードは上書き</b>されます。先に②でバックアップを取ってから実行してください。</p>
+    <input type="file" id="restoreFile" accept=".irbk,.json,application/json,application/zip">
+    <textarea id="restoreText" placeholder="または JSON バックアップをここに貼り付け（.irbk は上のファイル選択から）"></textarea>
+    <div class="btnrow"><button class="b-brand" id="btnRestore">この端末へ復元する</button></div>
+    <div class="msg" id="restoreMsg"></div>
+  </div>
+</div>
+
+<script src="./js/config.js"></script>
+<script src="./js/db.js"></script>
+<script src="./js/project-api.js"></script>
+<script src="./js/report-api.js"></script>
+<script src="./js/irbk.js"></script>
+<script src="./js/recovery-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  var REC = window.IrakaRecovery, IRBK = window.IrakaIrbk, IP = window.IrakaProject;
+  function el(id){ return document.getElementById(id); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function fmtBytes(n){ return n<1024? n+' B' : n<1048576? (n/1024).toFixed(1)+' KB' : (n/1048576).toFixed(2)+' MB'; }
+  function stamp(){ return new Date().toISOString().replace(/[:.]/g,'-').slice(0,19); }
+  function download(name, blob){ try{ var url=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},1000); return true; }catch(e){ return false; } }
+  if (!REC) { el('diag').innerHTML='<div class="verdict ng">recovery-core.js が読み込まれていません。</div>'; return; }
+
+  /* ---- ① 診断 ---- */
+  function renderDiag() {
+    el('diag').textContent='確認中…';
+    REC.diagnose().then(function (d) {
+      var html='';
+      if (d.drafts.count>0){ html+='<div class="verdict ok">Ver.1 下書き: '+d.drafts.count+' 件</div><div>'+d.drafts.names.map(function(n){return '<span class="chip">'+esc(n)+'</span>';}).join('')+'</div>'; }
+      else { html+='<div class="kv">Ver.1 下書き（iraka_report_drafts_v1）: この端末には見つかりません</div>'; }
+      html+='<div class="kv" style="margin-top:10px;font-weight:600;color:var(--ink)">案件DB（irakafieldDB）</div><div>'+['projects','reports','photos','settings'].map(function(s){return '<span class="chip">'+s+': '+(d.iraka[s]!=null?d.iraka[s]:0)+'</span>';}).join('')+'</div>';
+      html+='<details><summary>IndexedDB データベース一覧（'+d.indexeddb.length+'）</summary>';
+      d.indexeddb.forEach(function(db){ html+='<div class="kv" style="margin-top:6px;font-weight:600">・'+esc(db.name)+(db.version?' (v'+db.version+')':'')+'</div><div>'+(db.stores.length?db.stores.map(function(s){return '<span class="chip">'+esc(s.name)+': '+s.count+'</span>';}).join(''):'<span class="kv">ストアなし</span>')+'</div>'; });
+      html+='</details>';
+      html+='<details><summary>localStorage（'+d.localStorage.length+' キー）</summary><table><thead><tr><th>キー</th><th>サイズ</th></tr></thead><tbody>';
+      d.localStorage.forEach(function(r){ var hit=r.key==='iraka_report_drafts_v1'; html+='<tr'+(hit?' class="hit"':'')+'><td>'+esc(r.key)+'</td><td>'+fmtBytes(r.size)+'</td></tr>'; });
+      html+='</tbody></table></details>';
+      el('diag').innerHTML=html;
+    }).catch(function(e){ el('diag').innerHTML='<div class="verdict ng">診断エラー: '+esc(e&&e.message)+'</div>'; });
+  }
+  el('btnDiag').addEventListener('click', renderDiag);
+
+  /* ---- ② バックアップ ---- */
+  el('btnIrbk').addEventListener('click', function () {
+    if (!IRBK){ el('backupMsg').className='msg ng'; el('backupMsg').textContent='irbk.js が読み込まれていません。'; return; }
+    var btn=this; btn.disabled=true; el('backupMsg').className='msg'; el('backupMsg').textContent='書き出し中…';
+    REC.backupIrbk({ includeMedia: el('incMedia').checked }).then(function (bytes) {
+      var blob=new Blob([bytes],{type:'application/zip'});
+      var ok=download('iraka-field-'+stamp()+'.irbk', blob);
+      el('backupMsg').className='msg ok'; el('backupMsg').textContent=ok?'✓ .irbk を書き出しました（'+fmtBytes(bytes.length)+'）。保存先を確認してください。':'ダウンロード不可でした。';
+    }).catch(function(e){ el('backupMsg').className='msg ng'; el('backupMsg').textContent='失敗: '+(e&&e.message); }).then(function(){ btn.disabled=false; });
+  });
+  el('btnJson').addEventListener('click', function () {
+    var btn=this; btn.disabled=true; el('backupMsg').className='msg'; el('backupMsg').textContent='書き出し中…';
+    REC.backup({ includeMedia: el('incMedia').checked }).then(function (payload) {
+      var text=JSON.stringify(payload);
+      var ok=download('iraka-field-'+stamp()+'.json', new Blob([text],{type:'application/json'}));
+      el('backupMsg').className='msg ok'; el('backupMsg').textContent=ok?'✓ JSON を書き出しました（'+fmtBytes(text.length)+'）。':'ダウンロード不可。「コピー」をお使いください。';
+    }).catch(function(e){ el('backupMsg').className='msg ng'; el('backupMsg').textContent='失敗: '+(e&&e.message); }).then(function(){ btn.disabled=false; });
+  });
+  el('btnCopy').addEventListener('click', function () {
+    REC.backup({ includeMedia:false }).then(function (payload) {
+      var text=JSON.stringify(payload,null,2);
+      function done(){ el('backupMsg').className='msg ok'; el('backupMsg').textContent='クリップボードにコピーしました。'; }
+      if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done,function(){fb(text);}); else fb(text);
+    });
+    function fb(t){ var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy'); el('backupMsg').className='msg ok'; el('backupMsg').textContent='コピーしました。';}catch(e){} document.body.removeChild(ta); }
+  });
+
+  /* ---- ③ 検証 ---- */
+  el('btnInteg').addEventListener('click', function () {
+    el('integ').textContent='点検中…'; el('fixMsg').textContent='';
+    REC.integrity().then(function (r) {
+      var html='<div class="verdict '+(r.healthy?'ok':'ng')+'">'+(r.healthy?'✓ 問題は見つかりませんでした':'⚠ 修復候補があります（自動削除はしません）')+'</div>';
+      html+='<div><span class="chip">案件 '+r.counts.projects+'</span><span class="chip">帳票 '+r.counts.reports+'</span><span class="chip">写真 '+r.counts.photos+'</span></div>';
+      if(r.orphanReports.length){ html+='<div class="kv" style="margin-top:8px">親案件のない帳票: '+r.orphanReports.length+' 件</div><ul class="list">'+r.orphanReports.map(function(x){return '<li>'+esc(x.title||x.id)+'（'+esc(x.id)+' → 親 '+esc(x.projectId)+'）</li>';}).join('')+'</ul>'; }
+      if(r.orphanPhotos.length){ html+='<div class="kv">親のない写真: '+r.orphanPhotos.length+' 件</div>'; }
+      if(r.bridgeDangling.length){ html+='<div class="kv">失効した連携マップ: '+r.bridgeDangling.length+' 件</div>'; }
+      el('integ').innerHTML=html;
+      el('fixArea').style.display = r.healthy ? 'none' : '';
+      if(!r.healthy && IP){ IP.list().then(function(ps){ el('moveTarget').innerHTML=ps.map(function(p){return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>';}).join(''); }); }
+    }).catch(function(e){ el('integ').innerHTML='<div class="verdict ng">エラー: '+esc(e&&e.message)+'</div>'; });
+  });
+  el('btnCsv').addEventListener('click', function () {
+    REC.exportOrphansCSV().then(function (csv) {
+      var ok=download('iraka-orphans-'+stamp()+'.csv', new Blob(['﻿'+csv],{type:'text/csv'}));
+      el('fixMsg').className='msg ok'; el('fixMsg').textContent=ok?'✓ CSV を書き出しました。':'ダウンロード不可でした。';
+    }).catch(function(e){ el('fixMsg').className='msg ng'; el('fixMsg').textContent='失敗: '+(e&&e.message); });
+  });
+  el('btnMove').addEventListener('click', function () {
+    var target=el('moveTarget').value;
+    if(!target){ el('fixMsg').className='msg ng'; el('fixMsg').textContent='移動先の案件を選んでください。'; return; }
+    if(!confirm('孤立した帳票を選択した案件へ移動します。よろしいですか？')) return;
+    this.disabled=true;
+    REC.reassignOrphanReports(target).then(function (r) {
+      el('fixMsg').className='msg ok'; el('fixMsg').textContent='✓ '+r.moved+' 件を移動しました。';
+      el('btnInteg').click(); renderDiag();
+    }).catch(function(e){ el('fixMsg').className='msg ng'; el('fixMsg').textContent='失敗: '+(e&&e.message); }).then(function(){ el('btnMove').disabled=false; });
+  });
+  el('btnDelete').addEventListener('click', function () {
+    if(!confirm('孤立データ（親のない帳票・写真）を削除します。これは取り消せません。先にバックアップを取りましたか？')) return;
+    if(!confirm('本当に削除しますか？（最終確認）')) return;
+    this.disabled=true;
+    REC.deleteOrphans({}).then(function (rm) {
+      el('fixMsg').className='msg ok'; el('fixMsg').textContent='削除しました（帳票 '+rm.reports+' / 写真 '+rm.photos+'）。';
+      el('btnInteg').click(); renderDiag();
+    }).catch(function(e){ el('fixMsg').className='msg ng'; el('fixMsg').textContent='失敗: '+(e&&e.message); }).then(function(){ el('btnDelete').disabled=false; });
+  });
+
+  /* ---- ④ 復元 ---- */
+  function looksLikeZip(u8){ return u8 && u8.length>=2 && u8[0]===0x50 && u8[1]===0x4B; }
+  function restoreJson(text) {
+    var payload; try{ payload=JSON.parse(text); }catch(e){ el('restoreMsg').className='msg ng'; el('restoreMsg').textContent='JSON の形式が不正です。'; return; }
+    var n=payload.localStorage?Object.keys(payload.localStorage).length:0;
+    if(!confirm('この端末へ復元します。localStorage '+n+' 件と案件DBを書き戻します（上書きあり）。よろしいですか？')) return;
+    el('btnRestore').disabled=true; el('restoreMsg').className='msg'; el('restoreMsg').textContent='復元中…';
+    REC.restore(payload,{}).then(function (r) {
+      el('restoreMsg').className='msg ok'; el('restoreMsg').textContent='✓ 復元しました（localStorage '+r.localStorageKeys+' / 案件DB '+r.irakaRecords+(r.skipped.length?' / スキップ: '+r.skipped.join(','):'')+'）。'; renderDiag();
+    }).catch(function(e){ el('restoreMsg').className='msg ng'; el('restoreMsg').textContent='失敗: '+(e&&e.message); }).then(function(){ el('btnRestore').disabled=false; });
+  }
+  function restoreIrbk(bytes) {
+    if(!confirm('この端末へ .irbk から復元します（写真も含む場合あり・上書きあり）。よろしいですか？')) return;
+    el('btnRestore').disabled=true; el('restoreMsg').className='msg'; el('restoreMsg').textContent='復元中…';
+    REC.restoreFromIrbk(bytes,{}).then(function (r) {
+      el('restoreMsg').className='msg ok'; el('restoreMsg').textContent='✓ 復元しました（localStorage '+r.localStorageKeys+' / 案件DB '+r.irakaRecords+' / 写真 '+r.media+'）。'; renderDiag();
+    }).catch(function(e){ el('restoreMsg').className='msg ng'; el('restoreMsg').textContent='失敗: '+(e&&e.message); }).then(function(){ el('btnRestore').disabled=false; });
+  }
+  el('btnRestore').addEventListener('click', function () {
+    var f=el('restoreFile').files&&el('restoreFile').files[0];
+    if(f){
+      var isIrbk=/\.irbk$/i.test(f.name)||/zip/.test(f.type);
+      var fr=new FileReader();
+      if(isIrbk){ fr.onload=function(){ restoreIrbk(new Uint8Array(fr.result)); }; fr.readAsArrayBuffer(f); }
+      else { fr.onload=function(){ var u8=new Uint8Array(fr.result); if(looksLikeZip(u8)) restoreIrbk(u8); else restoreJson(new TextDecoder().decode(u8)); }; fr.readAsArrayBuffer(f); }
+      return;
+    }
+    var t=el('restoreText').value.trim();
+    if(!t){ el('restoreMsg').className='msg ng'; el('restoreMsg').textContent='ファイルを選ぶか、JSON を貼り付けてください。'; return; }
+    restoreJson(t);
+  });
+
+  renderDiag();
+})();
+</script>
+</body>
+</html>

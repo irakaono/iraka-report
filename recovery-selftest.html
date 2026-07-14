@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2b45">
+<title>Recovery セルフテスト | 甍AI Field</title>
+<style>
+  :root { --bg:#f4f5f7; --surface:#fff; --ink:#1f2430; --sub:#6b7280; --line:#e5e7eb;
+    --brand:#1f2b45; --accent:#c8672f; --ok:#1a7f37; --danger:#b42318; --warn:#fff7ed;
+    --shadow:0 1px 3px rgba(16,24,40,.08); --radius:14px; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    background:var(--bg); color:var(--ink); padding-bottom:env(safe-area-inset-bottom); }
+  .app { max-width:720px; margin:0 auto; min-height:100vh; }
+  header.bar { position:sticky; top:0; z-index:20; background:var(--brand); color:#fff;
+    padding:calc(env(safe-area-inset-top) + 12px) 14px 12px; display:flex; align-items:center; gap:8px; }
+  .back { background:transparent; border:0; color:#fff; font-size:22px; padding:4px 8px; text-decoration:none; }
+  header .title { font-size:16px; font-weight:700; }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); margin:14px; padding:16px; }
+  .card h2 { font-size:15px; margin:0 0 4px; }
+  .desc { font-size:12.5px; color:var(--sub); margin:0 0 12px; line-height:1.7; }
+  .verdict { font-size:22px; font-weight:800; text-align:center; padding:14px; border-radius:12px; margin:6px 0; }
+  .verdict.idle { background:#eef0f3; color:var(--sub); }
+  .verdict.run { background:#fff7ed; color:#8a4b12; }
+  .verdict.ok { background:#eefaf1; color:var(--ok); }
+  .verdict.ng { background:#fdf3f2; color:var(--danger); }
+  .btnrow { display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }
+  button { font-size:15px; font-weight:600; padding:12px 16px; border-radius:10px; border:0; cursor:pointer; }
+  .b-brand { background:var(--brand); color:#fff; } .b-accent { background:var(--accent); color:#fff; }
+  .b-ghost { background:#eef0f3; color:var(--ink); }
+  button:disabled { opacity:.5; }
+  .log { background:#0f1420; color:#d7e0ea; padding:12px; border-radius:10px; font-size:11.5px; line-height:1.7; max-height:320px; overflow:auto; margin-top:12px; white-space:pre-wrap; word-break:break-all; }
+  .log .p { color:#7ee0a1; } .log .f { color:#ff9b9b; } .log .i { color:#9fb4cc; }
+  .warnbox { background:var(--warn); border:1px solid #f4c48a; color:#8a4b12; font-size:13px; margin:12px 14px; padding:12px 14px; border-radius:12px; line-height:1.7; }
+  ol { margin:6px 0; padding-left:20px; font-size:13px; line-height:1.9; }
+  code { background:#eef0f3; padding:1px 5px; border-radius:4px; font-size:12px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <a class="back" href="recovery.html" aria-label="戻る">‹</a>
+    <span class="title">Recovery セルフテスト</span>
+  </header>
+
+  <div class="warnbox">
+    このテストは <b>専用マーカー付きのテストレコードだけ</b>を作って消して復元します。<b>あなたの本番データは削除しません</b>（復元は同じ値の再書き込みのため無害）。
+    それでも念のため、先に <b>本番の.irbkバックアップ</b>を取ってから実行することをおすすめします。
+  </div>
+
+  <div class="card">
+    <h2>自動セルフテスト</h2>
+    <p class="desc">「作成 → .irbk 保存 → テストデータ削除 → 復元 → 100%一致（写真のバイトまで）」を自動で回します。3件の案件・帳票・写真（Blob）で検証します。</p>
+    <div class="verdict idle" id="verdict">未実行</div>
+    <div class="btnrow">
+      <button class="b-brand" id="btnRun">▶ セルフテスト（1回）</button>
+      <button class="b-accent" id="btn3">▶▶ 3回連続</button>
+      <button class="b-ghost" id="btnBackupFirst">💾 先に本番を.irbk保存</button>
+      <button class="b-ghost" id="btnClean">🧹 テスト残骸を掃除</button>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="card">
+    <h2>別PC / USB での手動テスト（人が行う最終確認）</h2>
+    <p class="desc">自動テストで「消えても戻る」ことは確認できます。最後に「別の端末でも開ける」ことを人の手で1回だけ確かめれば、恐怖は完全になくなります。</p>
+    <ol>
+      <li>PC① の <code>recovery.html</code> で <b>②.irbk で保存</b>（写真を含めるにチェック）。</li>
+      <li>その <code>.irbk</code> を USB などで PC②（またはスマホ）へコピー。</li>
+      <li>PC② で <code>recovery.html</code> を開き、<b>④復元</b>でその <code>.irbk</code> を読み込む。</li>
+      <li><code>projects.html</code> を開き、案件・帳票・写真がすべて見えることを確認。</li>
+    </ol>
+    <p class="desc">これが通れば、「全部壊れても .irbk から数分で完全復旧」という状態になります。</p>
+  </div>
+</div>
+
+<script src="./js/config.js"></script>
+<script src="./js/db.js"></script>
+<script src="./js/project-api.js"></script>
+<script src="./js/report-api.js"></script>
+<script src="./js/irbk.js"></script>
+<script src="./js/recovery-core.js"></script>
+<script>
+(function () {
+  'use strict';
+  var DB = window.IrakaDB, P = window.IrakaProject, R = window.IrakaReport, REC = window.IrakaRecovery;
+  var logEl = document.getElementById('log'), vEl = document.getElementById('verdict');
+  function log(msg, cls){ var s=document.createElement('div'); if(cls) s.className=cls; s.textContent=msg; logEl.appendChild(s); logEl.scrollTop=logEl.scrollHeight; }
+  function setVerdict(text, cls){ vEl.textContent=text; vEl.className='verdict '+cls; }
+  function rand(){ return Math.random().toString(36).slice(2,10); }
+  function randomBytes(n){ var a=new Uint8Array(n); if(window.crypto&&crypto.getRandomValues) crypto.getRandomValues(a); else for(var i=0;i<n;i++) a[i]=Math.floor(Math.random()*256); return a; }
+  function sameBytes(a,b){ if(a.length!==b.length) return false; for(var i=0;i<a.length;i++) if(a[i]!==b[i]) return false; return true; }
+
+  if(!REC||!window.IrakaIrbk){ setVerdict('読込エラー','ng'); log('recovery-core.js / irbk.js が読み込まれていません。','f'); return; }
+
+  function cleanupTestRecords(){
+    return Promise.all([DB.getAll('projects'),DB.getAll('reports'),DB.getAll('photos')]).then(function(res){
+      var chain=Promise.resolve(), removed=0;
+      res[0].forEach(function(p){ if(p.id.indexOf('proj_st_')===0||(p.extensions&&p.extensions.selftest)){ chain=chain.then(function(){return DB.remove('projects',p.id).then(function(){removed++;});}); } });
+      res[1].forEach(function(r){ if(r.id.indexOf('rep_st_')===0){ chain=chain.then(function(){return DB.remove('reports',r.id);}); } });
+      res[2].forEach(function(ph){ if(ph.id.indexOf('photo_st_')===0){ chain=chain.then(function(){return DB.remove('photos',ph.id);}); } });
+      return chain.then(function(){ return removed; });
+    });
+  }
+
+  function runOnce(iter){
+    var created={projects:[],reports:[],photos:[]}, photoBytes={};
+    var baseCount;
+    log('── テスト'+iter+' 開始 ──','i');
+    return DB.getAll('projects').then(function(ps){ baseCount=ps.length; })
+    .then(function(){
+      // 1) テストデータ作成（3件・写真つき）
+      var chain=Promise.resolve();
+      for(var i=0;i<3;i++){ (function(i){
+        var pid='proj_st_'+rand(), rid='rep_st_'+rand(), phid='photo_st_'+rand();
+        var bytes=randomBytes(80); photoBytes[phid]=bytes;
+        chain=chain.then(function(){ return P.create({ id:pid, name:'ST案件'+i+'_'+rand(), kind:'housing', extensions:{selftest:true} }); })
+          .then(function(){ created.projects.push(pid); return R.create({ id:rid, projectId:pid, type:'amamori', schemaVersion:2, data:{memo:'st'+i}, metadata:{selftest:true,photoCount:1} }); })
+          .then(function(){ created.reports.push(rid); return DB.put('photos',{ id:phid, reportId:rid, projectId:pid, createdAt:DB.nowISO(), full:new Blob([bytes],{type:'image/png'}) }); })
+          .then(function(){ created.photos.push(phid); });
+      })(i); }
+      return chain;
+    })
+    .then(function(){ log('作成: 案件3 / 帳票3 / 写真3',''); return REC.backupIrbk({ includeMedia:true, dbFilter:['irakafieldDB'] }); })
+    .then(function(zip){
+      log('.irbk 生成: '+(zip.length/1024).toFixed(1)+' KB',''); window.__stzip=zip;
+      // 2) テストデータのみ削除
+      var chain=Promise.resolve();
+      created.projects.forEach(function(id){ chain=chain.then(function(){return DB.remove('projects',id);}); });
+      created.reports.forEach(function(id){ chain=chain.then(function(){return DB.remove('reports',id);}); });
+      created.photos.forEach(function(id){ chain=chain.then(function(){return DB.remove('photos',id);}); });
+      return chain;
+    })
+    .then(function(){
+      // 3) 削除確認
+      return Promise.all(created.projects.map(function(id){return P.get(id);})).then(function(rs){
+        var gone=rs.every(function(x){return x===null;});
+        log(gone?'削除確認: OK（テストデータ消滅）':'削除確認: NG', gone?'p':'f');
+        return gone;
+      });
+    })
+    .then(function(gone){
+      if(!gone) throw new Error('削除段階で不整合');
+      // 4) 復元
+      return REC.restoreFromIrbk(window.__stzip,{});
+    })
+    .then(function(rep){
+      log('復元完了: 案件DB '+rep.irakaRecords+' 件 / 写真 '+rep.media+' 枚',''); 
+      // 5) 検証
+      return Promise.all([
+        Promise.all(created.projects.map(function(id){return P.get(id);})),
+        Promise.all(created.reports.map(function(id){return R.get(id);})),
+        Promise.all(created.photos.map(function(id){return DB.get('photos',id);}))
+      ]);
+    })
+    .then(function(res){
+      var projOk=res[0].every(function(x){return !!x;});
+      var repOk=res[1].every(function(x){return !!x;});
+      var photos=res[2], bytesOk=true;
+      return Promise.all(photos.map(function(ph){
+        if(!ph||!ph.full){ bytesOk=false; return null; }
+        return ph.full.arrayBuffer().then(function(ab){ var rb=new Uint8Array(ab); if(!sameBytes(rb, photoBytes[ph.id])) bytesOk=false; });
+      })).then(function(){
+        log('復活: 案件'+(projOk?'OK':'NG')+' / 帳票'+(repOk?'OK':'NG'), (projOk&&repOk)?'p':'f');
+        log('写真バイト一致: '+(bytesOk?'OK':'NG'), bytesOk?'p':'f');
+        return projOk&&repOk&&bytesOk;
+      });
+    })
+    .then(function(passed){
+      // 6) 後片付け
+      return cleanupTestRecords().then(function(){ return DB.getAll('projects'); }).then(function(ps){
+        var clean = ps.length===baseCount && ps.every(function(p){return p.id.indexOf('proj_st_')!==0;});
+        log('後片付け: '+(clean?'OK（本番データ件数そのまま）':'NG'), clean?'p':'f');
+        return passed && clean;
+      });
+    });
+  }
+
+  function setBusy(b){ ['btnRun','btn3','btnBackupFirst','btnClean'].forEach(function(id){ document.getElementById(id).disabled=b; }); }
+
+  document.getElementById('btnRun').addEventListener('click', function(){
+    logEl.innerHTML=''; setVerdict('実行中…','run'); setBusy(true);
+    runOnce(1).then(function(passed){ setVerdict(passed?'✅ PASS':'❌ FAIL', passed?'ok':'ng'); })
+      .catch(function(e){ setVerdict('❌ ERROR','ng'); log('例外: '+(e&&e.message),'f'); return cleanupTestRecords(); })
+      .then(function(){ setBusy(false); });
+  });
+  document.getElementById('btn3').addEventListener('click', function(){
+    logEl.innerHTML=''; setVerdict('実行中…（3回）','run'); setBusy(true);
+    var allPass=true;
+    runOnce(1).then(function(p){ allPass=allPass&&p; return runOnce(2); })
+      .then(function(p){ allPass=allPass&&p; return runOnce(3); })
+      .then(function(p){ allPass=allPass&&p; setVerdict(allPass?'✅ PASS ×3':'❌ FAIL', allPass?'ok':'ng'); })
+      .catch(function(e){ setVerdict('❌ ERROR','ng'); log('例外: '+(e&&e.message),'f'); return cleanupTestRecords(); })
+      .then(function(){ setBusy(false); });
+  });
+  document.getElementById('btnBackupFirst').addEventListener('click', function(){
+    setBusy(true); log('本番の .irbk を書き出し中…','i');
+    REC.backupIrbk({ includeMedia:true }).then(function(zip){
+      var url=URL.createObjectURL(new Blob([zip],{type:'application/zip'}));
+      var a=document.createElement('a'); a.href=url; a.download='iraka-field-full-'+new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)+'.irbk';
+      document.body.appendChild(a); a.click(); setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+      log('本番バックアップ書き出し: '+(zip.length/1024).toFixed(1)+' KB','p');
+    }).catch(function(e){ log('失敗: '+(e&&e.message),'f'); }).then(function(){ setBusy(false); });
+  });
+  document.getElementById('btnClean').addEventListener('click', function(){
+    setBusy(true);
+    cleanupTestRecords().then(function(n){ log('テスト残骸を掃除: '+n+' 件','i'); }).then(function(){ setBusy(false); });
+  });
+})();
+</script>
+</body>
+</html>
