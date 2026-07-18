@@ -446,6 +446,10 @@ body {
   }
   .pg.fixed:last-child { page-break-after:avoid !important; break-after:avoid !important; }
   #p-summary { break-before:page !important; page-break-before:always !important; }
+  /* iPhone(Safari)印刷対策（Phase1.1 バグ修正）:
+     点検結果ページを必ず改ページから開始し、見出しの前ページ食い込みを防ぐ。
+     影響範囲は #p-inspection のみ。Android/iOS 双方で安全。 */
+  #p-inspection { break-before:page !important; page-break-before:always !important; }
 
   /* ===== 可変ページ（点検・間取り図） ===== */
   .pg.flex-pg {
