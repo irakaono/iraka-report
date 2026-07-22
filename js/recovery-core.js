@@ -235,11 +235,56 @@
     return backupIrbkFiles(opts).then(function (files) { return IRBK.zip(files); });
   }
 
+  /* ---- 汎用DB復元（IRAKA_DB_NAME 以外。例: iraka_media_db の写真） -------
+   * media ストア等は out-of-line キー（put(value, key)）。存在しなければ作成する。
+   * これが無いと復元時に写真(iraka_media_db)が skipped されて戻らない（不具合修正）。 */
+  function restoreGenericDB(dbName, storesObj, reviveFn) {
+    var I = idb();
+    if (!I || !storesObj) return Promise.resolve(0);
+    var storeNames = Object.keys(storesObj);
+    if (storeNames.length === 0) return Promise.resolve(0);
+    return new Promise(function (resolve) {
+      var openReq = I.open(dbName);
+      openReq.onupgradeneeded = function () { // DBが存在しない場合: 必要ストアを作成
+        var d = openReq.result;
+        storeNames.forEach(function (sn) { if (!d.objectStoreNames.contains(sn)) d.createObjectStore(sn); });
+      };
+      openReq.onsuccess = function () {
+        var db = openReq.result;
+        var missing = storeNames.filter(function (sn) { return !db.objectStoreNames.contains(sn); });
+        if (missing.length === 0) { resolve(db); return; }
+        var v = db.version + 1; db.close();
+        var up = I.open(dbName, v);
+        up.onupgradeneeded = function () { var d = up.result; missing.forEach(function (sn) { if (!d.objectStoreNames.contains(sn)) d.createObjectStore(sn); }); };
+        up.onsuccess = function () { resolve(up.result); };
+        up.onerror = function () { resolve(null); };
+      };
+      openReq.onerror = function () { resolve(null); };
+    }).then(function (db) {
+      if (!db) return 0;
+      var count = 0;
+      return storeNames.reduce(function (chain, sn) {
+        return chain.then(function () {
+          if (!db.objectStoreNames.contains(sn)) return;
+          var rows = storesObj[sn]; if (!Array.isArray(rows) || rows.length === 0) return;
+          return new Promise(function (res) {
+            var tx = db.transaction(sn, 'readwrite');
+            var store = tx.objectStore(sn);
+            rows.forEach(function (row) { try { store.put(reviveFn(row.value), row.key); count++; } catch (e) {} });
+            tx.oncomplete = function () { res(); };
+            tx.onerror = function () { res(); };
+            tx.onabort = function () { res(); };
+          });
+        });
+      }, Promise.resolve()).then(function () { db.close(); return count; });
+    });
+  }
+
   /* ---- 復元（JSON payload） -------------------------------------------- */
   function restore(payload, opts) {
     opts = opts || {};
     if (!payload || typeof payload !== 'object') return Promise.reject(new Error('復元データが不正です。'));
-    var report = { localStorageKeys: 0, irakaRecords: 0, skipped: [] };
+    var report = { localStorageKeys: 0, irakaRecords: 0, media: 0, skipped: [] };
     if (opts.restoreLocalStorage !== false && payload.localStorage) {
       var L = ls();
       if (L) Object.keys(payload.localStorage).forEach(function (k) { try { L.setItem(k, payload.localStorage[k]); report.localStorageKeys++; } catch (e) {} });
@@ -252,7 +297,11 @@
         rows.forEach(function (row) { chain = chain.then(function () { var val = reviveValue(row.value); return DB.put(sn, val).then(function () { report.irakaRecords++; }, function () {}); }); });
       });
     }
-    if (payload.indexeddb) Object.keys(payload.indexeddb).forEach(function (n) { if (n !== IRAKA_DB_NAME) report.skipped.push(n); });
+    // IRAKA_DB_NAME 以外（iraka_media_db の写真など）も復元する
+    if (payload.indexeddb) Object.keys(payload.indexeddb).forEach(function (n) {
+      if (n === IRAKA_DB_NAME) return;
+      chain = chain.then(function () { return restoreGenericDB(n, payload.indexeddb[n], reviveValue).then(function (c) { report.media += c; }); });
+    });
     return chain.then(function () { return report; });
   }
 
@@ -288,7 +337,18 @@
         });
       });
     }
-    if (manifest.indexeddb) Object.keys(manifest.indexeddb).forEach(function (n) { if (n !== IRAKA_DB_NAME) report.skipped.push(n); });
+    // IRAKA_DB_NAME 以外（iraka_media_db の写真など）も .irbk の実体から復元する
+    if (manifest.indexeddb) Object.keys(manifest.indexeddb).forEach(function (n) {
+      if (n === IRAKA_DB_NAME) return;
+      chain = chain.then(function () {
+        return restoreGenericDB(n, manifest.indexeddb[n], function (v) {
+          var counter = { n: 0 };
+          var out = reviveBlobs(v, map, counter);
+          report.media += counter.n;
+          return out;
+        });
+      });
+    });
     return chain.then(function () { return report; });
   }
 
