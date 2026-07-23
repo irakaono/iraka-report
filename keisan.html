@@ -50,6 +50,8 @@
   .result-row2:first-of-type{border-top:none;}
   .result-row2 .lbl{font-size:13px;color:var(--sub);}
   .result-row2 .num{font-size:19px;font-weight:700;color:var(--txt);}
+  .name-input{width:100%;margin-top:8px;background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:10px;height:40px;padding:0 12px;font-size:14px;}
+  .name-input::placeholder{color:var(--sub);}
   .save-all{width:100%;margin-top:8px;background:var(--ok);color:#08331d;border:none;border-radius:11px;height:42px;font-size:14px;font-weight:700;cursor:pointer;}
   .save-all:active{filter:brightness(1.2);}
 
@@ -58,16 +60,19 @@
   .hist-head h2{font-size:12px;margin:0;color:var(--sub);font-weight:700;letter-spacing:.5px;}
   .hist-head button{background:var(--panel2);border:1px solid var(--line);color:var(--sub);border-radius:9px;font-size:12px;padding:6px 10px;cursor:pointer;}
   .hist-scroll{flex:1;min-height:0;overflow-y:auto;padding-bottom:20px;}
-  .hist-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px;}
-  .hist-item{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:11px 13px;box-shadow:0 2px 8px rgba(0,0,0,.16);}
-  .hist-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
-  .hist-pitch{font-size:12px;color:var(--blue);font-weight:700;background:#152438;border-radius:7px;padding:3px 8px;}
+  .hist-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;}
+  .hist-item{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:8px 11px;box-shadow:0 1px 5px rgba(0,0,0,.14);}
+  .hist-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+  .hist-name{font-size:12px;color:var(--txt);font-weight:700;margin:0 0 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .hist-pitch{font-size:12px;color:var(--blue);font-weight:700;background:#152438;border-radius:7px;padding:2px 8px;}
   .hist-mode{font-size:11px;color:var(--sub);}
-  .btn-del{background:var(--panel2);color:var(--danger);border:1px solid var(--line);border-radius:8px;font-size:11px;padding:5px 9px;cursor:pointer;}
-  .hist-vals{display:flex;gap:14px;}
-  .hist-vals div{flex:1;}
+  .btn-del{background:var(--panel2);color:var(--danger);border:1px solid var(--line);border-radius:8px;font-size:11px;padding:4px 8px;cursor:pointer;}
+  .hist-vals{display:flex;gap:10px;}
+  .hist-vals div{flex:1;background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:5px 8px;cursor:pointer;}
+  .hist-vals div:active{filter:brightness(1.35);}
   .hist-vals .lbl{font-size:10px;color:var(--sub);}
-  .hist-vals .num{font-size:17px;font-weight:700;color:var(--txt);}
+  .hist-vals .num{font-size:16px;font-weight:700;color:var(--txt);}
+  .hist-vals .tap{font-size:9px;color:var(--blue);float:right;margin-top:2px;}
   .empty{color:var(--sub);text-align:center;font-size:13px;padding:24px 10px;opacity:.75;line-height:1.7;}
 
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;justify-content:center;z-index:30;}
@@ -123,6 +128,7 @@
       <div class="meta" id="resultMeta"></div>
       <div class="result-row2"><span class="lbl">流れ</span><span class="num" id="valNagare">0</span></div>
       <div class="result-row2"><span class="lbl">隅棟</span><span class="num" id="valSumi">0</span></div>
+      <input class="name-input" id="gradName" type="text" placeholder="名前（例：南面 屋根 ／ 空欄でもOK）" />
       <button class="save-all" id="btnSaveGrad">💾 この結果を保存</button>
     </div>
   </div>
@@ -180,7 +186,7 @@
     elResult.textContent = fallback==="" ? "0" : fmtNum(fallback);
   }
   function press(key){
-    if(key==="clear"){ expr=""; render(); return; }
+    if(key==="clear"){ expr=""; hideResult(); render(); return; }
     if(key==="back"){ expr=expr.slice(0,-1); render(); return; }
     if(key==="pct"){ expr+="%"; render(); return; }
     if(key==="eq"||key==="eq2"){
@@ -301,6 +307,10 @@
     valSumi.textContent = fmtLen(sumi);
     resultPanel.classList.add("show");
   }
+  // AC（クリア）で結果パネルも消す
+  function hideResult(){ if(resultPanel){ resultPanel.classList.remove("show"); } lastCalc=null; }
+  // 保存した結果の数値を、次の計算の式へ入れる（整数mmで挿入）
+  function insertValue(v){ if(v===""||v===null||!isFinite(v)) return; expr+=String(Math.round(v)); render(); toast("式に入れました"); }
 
   // ================= 履歴（保存） =================
   var history=[];
@@ -314,8 +324,10 @@
 
   document.getElementById("btnSaveGrad").onclick=function(){
     if(!lastCalc){ toast("保存できません"); return; }
-    history.unshift({ id:"g"+(idc++), pitch:lastCalc.pitch, mode:lastCalc.mode, base:lastCalc.base, nagare:lastCalc.nagare, sumi:lastCalc.sumi });
+    var nm=(document.getElementById("gradName").value||"").trim();
+    history.unshift({ id:"g"+(idc++), name:nm, pitch:lastCalc.pitch, mode:lastCalc.mode, base:lastCalc.base, nagare:lastCalc.nagare, sumi:lastCalc.sumi });
     if(history.length>200) history.pop();
+    document.getElementById("gradName").value="";
     persist(); renderHistory();
     toast("保存しました");
   };
@@ -332,6 +344,7 @@
     elEmpty.style.display="none";
     history.forEach(function(item){
       var li=document.createElement("li"); li.className="hist-item";
+      if(item.name){ var nm=document.createElement("div"); nm.className="hist-name"; nm.textContent=item.name; li.appendChild(nm); }
       var top=document.createElement("div"); top.className="hist-top";
       var pitchTag=document.createElement("span"); pitchTag.className="hist-pitch"; pitchTag.textContent=item.pitch+"寸";
       var modeTag=document.createElement("span"); modeTag.className="hist-mode";
@@ -343,8 +356,12 @@
       top.appendChild(left); top.appendChild(dl);
 
       var vals=document.createElement("div"); vals.className="hist-vals";
-      var vN=document.createElement("div"); vN.innerHTML='<div class="lbl">流れ</div><div class="num">'+fmtLen(item.nagare)+'</div>';
-      var vS=document.createElement("div"); vS.innerHTML='<div class="lbl">隅棟</div><div class="num">'+fmtLen(item.sumi)+'</div>';
+      var vN=document.createElement("div"); vN.title="タップで式へ入れる";
+      vN.innerHTML='<div class="lbl">流れ<span class="tap">式へ＋</span></div><div class="num">'+fmtLen(item.nagare)+'</div>';
+      vN.onclick=function(){ insertValue(item.nagare); };
+      var vS=document.createElement("div"); vS.title="タップで式へ入れる";
+      vS.innerHTML='<div class="lbl">隅棟<span class="tap">式へ＋</span></div><div class="num">'+fmtLen(item.sumi)+'</div>';
+      vS.onclick=function(){ insertValue(item.sumi); };
       vals.appendChild(vN); vals.appendChild(vS);
 
       li.appendChild(top); li.appendChild(vals);
