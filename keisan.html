@@ -168,6 +168,8 @@
     var intp=parts[0].replace(/\B(?=(\d{3})+(?!\d))/g,",");
     return (neg?"-":"")+intp+(parts.length>1?"."+parts[1]:"");
   }
+  // 距離（流れ・隅棟）は現場向けに整数mmで表示（値は丸めず表示のみ）
+  function fmtLen(n){ if(n===""||n===null||typeof n==="undefined"||!isFinite(n)) return fmtNum(n); return fmtNum(Math.round(n)); }
 
   var elExpr=document.getElementById("expr"), elResult=document.getElementById("result");
   function render(){
@@ -295,8 +297,8 @@
     }
     lastCalc = { pitch:pitch, mode:mode, base:base, nagare:nagare, sumi:sumi };
     resultMeta.textContent = pitch+"寸勾配 ／ 基準: "+(mode==="horizontal"?"水平 "+fmtNum(base):"流れ "+fmtNum(base));
-    valNagare.textContent = fmtNum(nagare);
-    valSumi.textContent = fmtNum(sumi);
+    valNagare.textContent = fmtLen(nagare);
+    valSumi.textContent = fmtLen(sumi);
     resultPanel.classList.add("show");
   }
 
@@ -341,8 +343,8 @@
       top.appendChild(left); top.appendChild(dl);
 
       var vals=document.createElement("div"); vals.className="hist-vals";
-      var vN=document.createElement("div"); vN.innerHTML='<div class="lbl">流れ</div><div class="num">'+fmtNum(item.nagare)+'</div>';
-      var vS=document.createElement("div"); vS.innerHTML='<div class="lbl">隅棟</div><div class="num">'+fmtNum(item.sumi)+'</div>';
+      var vN=document.createElement("div"); vN.innerHTML='<div class="lbl">流れ</div><div class="num">'+fmtLen(item.nagare)+'</div>';
+      var vS=document.createElement("div"); vS.innerHTML='<div class="lbl">隅棟</div><div class="num">'+fmtLen(item.sumi)+'</div>';
       vals.appendChild(vN); vals.appendChild(vS);
 
       li.appendChild(top); li.appendChild(vals);
