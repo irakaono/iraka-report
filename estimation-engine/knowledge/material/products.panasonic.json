@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "kind": "material/product-rules",
+  "id": "products-panasonic",
+  "maker": "Panasonic",
+  "title": "製品ルール（Rule Engine: IF Intent THEN Product）★例示・実SKUは要 甍 確認",
+  "note": "maker を差し替えても Material IR(Intent) は不変（Panasonic→セキスイ→タニタ）。ここは Intent→Product の写像だけ。",
+  "DO_NOT": "歩掛/人工/単価は書かない（Cost層）。付属部材(支持金具/接着剤/ビス/ジョイント)の自動展開はAssembly層。",
+  "rules": [
+    { "when": { "kind": "vertical_drain",  "match": { "diameter": 60 } }, "product": { "maker": "Panasonic", "series": "PC50", "sku": "PC50-60-BK",     "name": "丸竪樋 φ60 ブラック",  "unit": "m" } },
+    { "when": { "kind": "connector_drain", "match": { "diameter": 60 } }, "product": { "maker": "Panasonic", "series": "PC50", "sku": "PC50-60-YOB-BK", "name": "呼び樋 φ60 ブラック",  "unit": "m" } },
+    { "when": { "kind": "eave_gutter" },                                  "product": { "maker": "Panasonic", "series": "PC50", "sku": "PC50-EAVE-105-BK", "name": "軒樋 105 ブラック",    "unit": "m" } },
+    { "when": { "kind": "outlet" },                                       "product": { "maker": "Panasonic", "series": "PC50", "sku": "PC50-OUT-BK",     "name": "集水器 ブラック",      "unit": "個" } },
+    { "when": { "kind": "elbow",           "match": { "diameter": 60 } }, "product": { "maker": "Panasonic", "series": "PC50", "sku": "PC50-ELB-60-BK",  "name": "エルボ φ60 ブラック",  "unit": "個" } },
+    { "when": { "kind": "drain_outlet" },                                 "product": { "maker": "Panasonic", "series": "PC50", "sku": "PC50-DR-BK",      "name": "排水ドレン ブラック",  "unit": "個" } },
+    { "when": { "kind": "support_bracket" },                              "product": { "maker": "Panasonic", "series": "PC50", "sku": "PC50-DEN-BK",     "name": "でんでん φ60 ブラック", "unit": "個" } },
+    { "when": { "kind": "pipe_joint" },                                   "product": { "maker": "Panasonic", "series": "PC50", "sku": "PC50-JNT-60-BK",  "name": "ジョイント φ60 ブラック", "unit": "個" } },
+    { "when": { "kind": "adhesive" },                                     "product": { "maker": "Panasonic", "series": "PC50", "sku": "PC50-ADH",        "name": "塩ビ用接着剤",         "unit": "本" } },
+    { "when": { "kind": "screw" },                                        "product": { "maker": "Panasonic", "series": "PC50", "sku": "PC50-SCR",        "name": "ステンビス",           "unit": "本" } }
+  ]
+}

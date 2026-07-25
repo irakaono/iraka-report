@@ -8,8 +8,8 @@
  *
  *  ARCHITECTURE_V2（憲法）確定事項：
  *    - DB名        : irakafieldDB
- *    - DB Version  : 3   （v2: 初期スキーマ / v3: projects.kind インデックス追加）
- *    - stores      : projects / reports / photos / settings
+ *    - DB Version  : 4   （v2: 初期スキーマ / v3: projects.kind / v4: estimations ストア追加）
+ *    - stores      : projects / reports / photos / settings / estimations
  *    - 最上位構造  : 案件 → 帳票 → 写真 → AI
  *    - 原則:
  *        (1) reports に写真本体を持たせない（写真は photos ストアに独立）
@@ -32,7 +32,7 @@
 
   /* ---- 定数（憲法の固定条件） ------------------------------------------- */
   var DB_NAME = 'irakafieldDB';
-  var DB_VERSION = 3;
+  var DB_VERSION = 4;
 
   // ストア定義。keyPath とインデックスのみを宣言。レコードの中身は縛らない。
   var SCHEMA = {
@@ -64,6 +64,15 @@
     settings: {
       keyPath: 'key',
       indexes: []
+    },
+    // v4: 積算（案件配下の Model 保存）。中身の構造は縛らない（Evidence First：Model=幾何+属性の JSON）。
+    estimations: {
+      keyPath: 'id',
+      indexes: [
+        { name: 'projectId',     keyPath: 'projectId',     options: { unique: false } },
+        { name: 'schemaVersion', keyPath: 'schemaVersion', options: { unique: false } },
+        { name: 'updatedAt',     keyPath: 'updatedAt',     options: { unique: false } }
+      ]
     }
   };
 
@@ -107,8 +116,18 @@
       if (!projects.indexNames.contains('kind')) {
         projects.createIndex('kind', 'kind', { unique: false });
       }
+    },
+
+    // v4: estimations ストア追加（積算＝案件配下の Model 保存。構造のみ・既存データは触らない）
+    4: function (db, tx) {
+      var est = db.objectStoreNames.contains('estimations')
+        ? tx.objectStore('estimations')
+        : db.createObjectStore('estimations', { keyPath: 'id' });
+      ['projectId', 'schemaVersion', 'updatedAt'].forEach(function (name) {
+        if (!est.indexNames.contains(name)) est.createIndex(name, name, { unique: false });
+      });
     }
-    // 4: function (db, tx) { /* migrate3to4 */ }
+    // 5: function (db, tx) { /* migrate4to5 */ }
   };
 
   function registerMigration(version, fn) {

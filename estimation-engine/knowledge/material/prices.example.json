@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "kind": "material/price-book",
+  "id": "prices-example",
+  "title": "単価表（例・★要 甍 確認）",
+  "note": "sku → 単価。Cost Projection の Knowledge。ここは Compiler ではない（Execution を読むだけ）。実単価は甍が確定。",
+  "unitPrice": {
+    "PC50-60-BK": 1200,
+    "PC50-60-YOB-BK": 1100,
+    "PC50-EAVE-105-BK": 1500,
+    "PC50-OUT-BK": 800,
+    "PC50-ELB-60-BK": 350,
+    "PC50-DR-BK": 1200,
+    "PC50-DEN-BK": 180,
+    "PC50-JNT-60-BK": 220,
+    "PC50-ADH": 900,
+    "PC50-SCR": 15
+  }
+}

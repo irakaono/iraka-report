@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "kind": "material/intent-taxonomy",
+  "id": "intent-default",
+  "title": "Material IR 施工意図タクソノミー（Compiler Boundary・一部暫定=要 甍 確認）",
+  "ROLE": "数量key → 施工意図(kind) と既定属性(attrs)・単位。Geometry世界はここまで（製品名を一切知らない）。",
+  "note": "attrs(diameter/color/size/style)は暫定の既定値。将来 Model要素属性(Element.extensions)で要素ごとに上書きできる（属性=保存する決定）。製品への解決は products.*.json(Rule Engine)。",
+  "DO_NOT": "ここに maker/series/sku(製品)を書かない＝製品はCatalog(Rule Engine)の責務。歩掛/人工/単価はCost層。付属部材の展開はAssembly層。",
+  "TAXONOMY_NOTE": "鎖樋/化粧樋/内樋/ドレン管 は Graph上の役割が同じ縦排水なので kind='vertical_drain' のまま attrs.style で分岐し、Product が変わる想定（要 甍 確認）。分類感覚が違えば別kindにする。",
+  "specs": [
+    { "quantityKey": "gutterLength",    "kind": "eave_gutter",      "unit": "m", "attrs": { "size": 105 } },
+    { "quantityKey": "outletCount",     "kind": "outlet",           "unit": "個", "attrs": {} },
+    { "quantityKey": "downspoutLength", "kind": "vertical_drain",   "unit": "m", "attrs": { "diameter": 60, "style": "standard" } },
+    { "quantityKey": "connectorLength", "kind": "connector_drain",  "unit": "m", "attrs": { "diameter": 60 } },
+    { "quantityKey": "elbowCount",      "kind": "elbow",            "unit": "個", "attrs": { "diameter": 60 } },
+    { "quantityKey": "drainCount",      "kind": "drain_outlet",     "unit": "個", "attrs": {} },
+    { "quantityKey": "roofArea",        "kind": "roof_field",       "unit": "㎡", "attrs": {} },
+    { "quantityKey": "ridgeLength",     "kind": "ridge_cap",        "unit": "m", "attrs": {} },
+    { "quantityKey": "hipLength",       "kind": "hip_cap",          "unit": "m", "attrs": {} },
+    { "quantityKey": "valleyLength",    "kind": "valley_flashing",  "unit": "m", "attrs": {} },
+    { "quantityKey": "gableLength",     "kind": "gable_flashing",   "unit": "m", "attrs": {} },
+    { "quantityKey": "eaveLength",      "kind": "eave_flashing",    "unit": "m", "attrs": {} }
+  ]
+}

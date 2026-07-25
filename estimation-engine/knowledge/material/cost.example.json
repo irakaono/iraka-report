@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "kind": "material/cost-knowledge",
+  "id": "cost-example",
+  "title": "Cost Compiler 知識：労務・間接（例・★要 甍 確認）",
+  "note": "Domain 知識（Construction ではない）。労務費=人工×労務単価、間接費=直接費×経費率。Execution を読むだけ・施工の決定は足さない。",
+  "DO_NOT": "ここで部材や施工を決めない（それは Execution=Construction Compiler の責務）。単価は prices.example.json。",
+  "wagePerLabor": 20000,
+  "indirectRate": 0.15,
+  "laborPerUnit": {
+    "vertical_drain": 0.02,
+    "connector_drain": 0.02,
+    "eave_gutter": 0.03,
+    "outlet": 0.15,
+    "elbow": 0.1,
+    "drain_outlet": 0.15,
+    "roof_field": 0.12,
+    "ridge_cap": 0.05,
+    "hip_cap": 0.06,
+    "valley_flashing": 0.06,
+    "gable_flashing": 0.04,
+    "eave_flashing": 0.04
+  }
+}

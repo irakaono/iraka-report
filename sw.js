@@ -5,13 +5,14 @@
  *   - precache は耐性版（allSettled）。1ファイル欠けても SW 更新ごと止めない（原則10）。
  *   - リリースのたびに CACHE_NAME を上げること（RELEASE_CHECKLIST 参照）。
  */
-const CACHE_NAME = 'iraka-field-v2.0.1';
+const CACHE_NAME = 'iraka-field-v2.1.0'; // v2.1.0: 積算(estimation)接続・DB v4
 const ASSETS = [
   './portal.html',
   './index.html',
   './completion.html',
   './projects.html',
   './project.html',
+  './estimation.html',
   './recovery.html',
   './recovery-selftest.html',
   './manifest.json',
@@ -22,6 +23,7 @@ const ASSETS = [
   './js/project-api.js',
   './js/report-api.js',
   './js/report-bridge.js',
+  './js/estimation-bridge.js',
   './js/recovery-core.js',
   './js/irbk.js',
   './js/media-manager.js'

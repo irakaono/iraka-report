@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "kind": "material/qa-knowledge",
+  "id": "qa-example",
+  "title": "QA/Inspection Compiler 知識（Program・★要 甍 確認）",
+  "note": "検査規則（Rule Engine）。Execution を metric×op×threshold で判定。計画検査。出来形(as-built)は将来 field data を別入力に。",
+  "DO_NOT": "ここで施工を決めない（Execution）。Reducer/Validator（Model妥当性）とは別＝業務要件の検査。",
+  "rules": [
+    { "id": "outlet-min",    "label": "集水器 1個以上",     "kind": "outlet",        "metric": "kind_count",     "op": ">=", "threshold": 1,  "severity": "error" },
+    { "id": "drain-min",     "label": "排水 1個以上",       "kind": "drain_outlet",  "metric": "kind_count",     "op": ">=", "threshold": 1,  "severity": "error" },
+    { "id": "downspout-max", "label": "竪樋 1系統30m以下",  "kind": "vertical_drain","metric": "kind_total_qty", "op": "<=", "threshold": 30, "severity": "warning" }
+  ]
+}

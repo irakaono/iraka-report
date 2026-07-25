@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "kind": "material/assembly-rules",
+  "id": "assembly-default",
+  "title": "付属部材 展開ルール（Assembly Knowledge・★歩掛は例示=要 甍 確認）",
+  "note": "主部材ごとに付属消耗品を展開。basis: spacing=ピッチ切上げ / stock=定尺分割の継手数 / per_ancillary=別付属依存。",
+  "IMPORTANT": "エルボは Graph 由来（Node kind='elbow'）で独立 Execution item になる＝ここで展開しない（二重計上を避ける）。",
+  "DO_NOT": "単価/人工はここに書かない（Cost Projection）。定尺の本数化(竪樋本体を m→本)は別 Transform。",
+  "rules": [
+    {
+      "when": { "kind": "vertical_drain" },
+      "operation": "竪樋取付",
+      "ancillaries": [
+        { "kind": "support_bracket", "label": "でんでん",   "unit": "個", "basis": "spacing", "spacingM": 0.9 },
+        { "kind": "pipe_joint",      "label": "ジョイント", "unit": "個", "basis": "stock",   "stockM": 2.7 },
+        { "kind": "adhesive",        "label": "接着剤",     "unit": "本", "basis": "per_ancillary", "ofKind": "pipe_joint",     "factor": 1 },
+        { "kind": "screw",           "label": "ビス",       "unit": "本", "basis": "per_ancillary", "ofKind": "support_bracket", "factor": 2 }
+      ]
+    }
+  ]
+}

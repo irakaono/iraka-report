@@ -1,0 +1,29 @@
+{
+  "name": "iraka-estimation-engine",
+  "private": true,
+  "version": "0.5.0",
+  "type": "module",
+  "description": "甍AI Estimation Engine — Building Compiler / Domain Compiler（iraka-report の estimation.html を生成）",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:estimation": "vite build --config vite.studio.config.ts && node scripts/build-estimation.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "esbuild tests/geometry.test.ts --bundle --platform=node --outfile=.geometry.test.cjs && node .geometry.test.cjs && esbuild tests/roofModel.test.ts --bundle --platform=node --outfile=.roofmodel.test.cjs && node .roofmodel.test.cjs && esbuild tests/roofEngine.test.ts --bundle --platform=node --outfile=.roofengine.test.cjs && node .roofengine.test.cjs && esbuild tests/roofQuantities.test.ts --bundle --platform=node --outfile=.roofquantities.test.cjs && node .roofquantities.test.cjs && esbuild tests/roofDrawing.test.ts --bundle --platform=node --outfile=.roofdrawing.test.cjs && node .roofdrawing.test.cjs && esbuild tests/drainModel.test.ts --bundle --platform=node --outfile=.drainmodel.test.cjs && node .drainmodel.test.cjs && esbuild tests/drainCommands.test.ts --bundle --platform=node --outfile=.draincommands.test.cjs && node .draincommands.test.cjs && esbuild tests/drainValidator.test.ts --bundle --platform=node --outfile=.drainvalidator.test.cjs && node .drainvalidator.test.cjs && esbuild tests/engineBoundary.test.ts --bundle --platform=node --outfile=.engineboundary.test.cjs && node .engineboundary.test.cjs && esbuild tests/persistence.test.ts --bundle --platform=node --outfile=.persistence.test.cjs && node .persistence.test.cjs && esbuild tests/materialAdapter.test.ts --bundle --platform=node --outfile=.materialadapter.test.cjs && node .materialadapter.test.cjs && esbuild tests/executionProjection.test.ts --bundle --platform=node --outfile=.executionprojection.test.cjs && node .executionprojection.test.cjs && esbuild tests/assemblySlice.test.ts --bundle --platform=node --outfile=.assemblyslice.test.cjs && node .assemblyslice.test.cjs && esbuild tests/costCompiler.test.ts --bundle --platform=node --outfile=.costcompiler.test.cjs && node .costcompiler.test.cjs && esbuild tests/presentationAdapter.test.ts --bundle --platform=node --outfile=.presentationadapter.test.cjs && node .presentationadapter.test.cjs && esbuild tests/scheduleCompiler.test.ts --bundle --platform=node --outfile=.schedulecompiler.test.cjs && node .schedulecompiler.test.cjs && esbuild tests/qaCarbonCompiler.test.ts --bundle --platform=node --outfile=.qacarboncompiler.test.cjs && node .qacarboncompiler.test.cjs && esbuild tests/resourceCompiler.test.ts --bundle --platform=node --outfile=.resourcecompiler.test.cjs && node .resourcecompiler.test.cjs"
+  },
+  "dependencies": {
+    "konva": "^9.3.16",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-konva": "^18.2.10"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11",
+    "vite-plugin-singlefile": "^2.3.3"
+  }
+}

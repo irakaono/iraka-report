@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "kind": "material/schedule-knowledge",
+  "id": "schedule-example",
+  "title": "Schedule Compiler 知識（Program・★要 甍 確認）",
+  "note": "Domain Program（Construction ではない）。durationPerUnit=単位あたり工数(人日)、precedence=施工順序制約。Execution を読むだけ。",
+  "DO_NOT": "ここで何を施工するかを決めない（それは Execution）。班編成/機械はまだ扱わない（Resource Compiler）。",
+  "durationPerUnit": {
+    "eave_gutter": 0.03,
+    "vertical_drain": 0.02,
+    "connector_drain": 0.02,
+    "outlet": 0.1,
+    "elbow": 0.05,
+    "drain_outlet": 0.1,
+    "roof_field": 0.05,
+    "ridge_cap": 0.04,
+    "hip_cap": 0.05,
+    "valley_flashing": 0.05,
+    "gable_flashing": 0.03,
+    "eave_flashing": 0.03
+  },
+  "precedence": [
+    { "before": "eave_gutter",  "after": "vertical_drain" },
+    { "before": "outlet",       "after": "vertical_drain" },
+    { "before": "vertical_drain","after": "drain_outlet" },
+    { "before": "roof_field",   "after": "ridge_cap" },
+    { "before": "roof_field",   "after": "eave_flashing" }
+  ]
+}

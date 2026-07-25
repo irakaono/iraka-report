@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "kind": "material/resource-knowledge",
+  "id": "resource-example",
+  "title": "Resource Compiler 知識（Program・★要 甍 確認）",
+  "note": "職種/歩掛/班編成/機材の割付ルール。Cost・Schedule の Program とは独立（同じ値でも別管理）。",
+  "tradeOfKind": {
+    "eave_gutter": "樋工", "vertical_drain": "樋工", "connector_drain": "樋工", "outlet": "樋工", "elbow": "樋工", "drain_outlet": "樋工",
+    "roof_field": "屋根工", "ridge_cap": "板金工", "hip_cap": "板金工", "valley_flashing": "板金工", "gable_flashing": "板金工", "eave_flashing": "板金工"
+  },
+  "laborPerUnit": {
+    "eave_gutter": 0.03, "vertical_drain": 0.02, "connector_drain": 0.02, "outlet": 0.1, "elbow": 0.05, "drain_outlet": 0.1,
+    "roof_field": 0.05, "ridge_cap": 0.04, "hip_cap": 0.05, "valley_flashing": 0.05, "gable_flashing": 0.03, "eave_flashing": 0.03
+  },
+  "crewSize": { "樋工": 2, "屋根工": 3, "板金工": 2 },
+  "equipmentOfKind": {
+    "vertical_drain": ["脚立"], "eave_gutter": ["脚立", "足場"], "roof_field": ["安全帯", "足場"], "drain_outlet": ["脚立"]
+  }
+}

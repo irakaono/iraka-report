@@ -1,0 +1,298 @@
+{
+  "schemaVersion": 1,
+  "kind": "geometry/pitch-stretch",
+  "title": "勾配伸び率表（Canonical Knowledge）",
+  "ROLE": "辞書のみ ── (1)表示順  (2)呼称(尺貫法/分数)  (3)UI用。★このファイルで計算しない・実行時の計算ソースにしない。",
+  "DO_NOT": "table 内の伸び率/面積などの数値を、アプリのロジックから読んで計算に使わないこと。計算は必ず式（src/geometry/stretch.ts）。ここの数値は業界標準の検算 fixture（テストが engine と突き合わせる対象）であり、値を増やしたり engine の代わりに参照したりしない。半年後の自分へ：『ここに伸び率も書こう/読もう』はしない。",
+  "note": "値は式から算出（表を転記しない＝常に正確）。engine=src/geometry/stretch.ts が唯一の実装、本ファイルは呼称辞書＋検算 fixture。",
+  "formulas": {
+    "areaStretch": "√(1+m²)",
+    "hip_planDiagonal": "√(1+m²/2)",
+    "hip_vsHorizontal": "√(2+m²)",
+    "hip_vsSlope": "√(2+m²)/√(1+m²)",
+    "m": "勾配/10（例 3寸→0.3）"
+  },
+  "basisNote": "隅棟は基準が3種。engine.stretch.hip() は planDiagonal（図面で測る隅棟の投影長に掛ける値）。業界表の対水平/対流れは planDiagonal×√2 / planDiagonal×√2/√(1+m²) と一致する（別表記・同一物）。",
+  "correctionsFromSource": [
+    {
+      "name": "3寸5分",
+      "column": "areaStretch(勾配伸び率)",
+      "source": 1.05,
+      "correct": 1.059,
+      "reason": "√(1.1225)=1.0595 の転記誤り"
+    },
+    {
+      "name": "6寸5分",
+      "column": "hip.vsHorizontal(隅棟対水平)",
+      "source": 1.566,
+      "correct": 1.556,
+      "reason": "√(2.4225)=1.5564 の転記誤り"
+    }
+  ],
+  "table": [
+    {
+      "name": "5分",
+      "fraction": "0.5/10",
+      "m": 0.05,
+      "angleDeg": 2.862,
+      "areaStretch": 1.001,
+      "hip": {
+        "planDiagonal": 1.001,
+        "vsHorizontal": 1.415,
+        "vsSlope": 1.413
+      }
+    },
+    {
+      "name": "1寸",
+      "fraction": "1.0/10",
+      "m": 0.1,
+      "angleDeg": 5.711,
+      "areaStretch": 1.005,
+      "hip": {
+        "planDiagonal": 1.002,
+        "vsHorizontal": 1.418,
+        "vsSlope": 1.411
+      }
+    },
+    {
+      "name": "1寸5分",
+      "fraction": "1.5/10",
+      "m": 0.15,
+      "angleDeg": 8.531,
+      "areaStretch": 1.011,
+      "hip": {
+        "planDiagonal": 1.006,
+        "vsHorizontal": 1.422,
+        "vsSlope": 1.406
+      }
+    },
+    {
+      "name": "2寸",
+      "fraction": "2.0/10",
+      "m": 0.2,
+      "angleDeg": 11.31,
+      "areaStretch": 1.02,
+      "hip": {
+        "planDiagonal": 1.01,
+        "vsHorizontal": 1.428,
+        "vsSlope": 1.401
+      }
+    },
+    {
+      "name": "2寸5分",
+      "fraction": "2.5/10",
+      "m": 0.25,
+      "angleDeg": 14.036,
+      "areaStretch": 1.031,
+      "hip": {
+        "planDiagonal": 1.016,
+        "vsHorizontal": 1.436,
+        "vsSlope": 1.393
+      }
+    },
+    {
+      "name": "3寸",
+      "fraction": "3.0/10",
+      "m": 0.3,
+      "angleDeg": 16.699,
+      "areaStretch": 1.044,
+      "hip": {
+        "planDiagonal": 1.022,
+        "vsHorizontal": 1.446,
+        "vsSlope": 1.385
+      }
+    },
+    {
+      "name": "3寸5分",
+      "fraction": "3.5/10",
+      "m": 0.35,
+      "angleDeg": 19.29,
+      "areaStretch": 1.059,
+      "hip": {
+        "planDiagonal": 1.03,
+        "vsHorizontal": 1.457,
+        "vsSlope": 1.375
+      }
+    },
+    {
+      "name": "4寸",
+      "fraction": "4.0/10",
+      "m": 0.4,
+      "angleDeg": 21.801,
+      "areaStretch": 1.077,
+      "hip": {
+        "planDiagonal": 1.039,
+        "vsHorizontal": 1.47,
+        "vsSlope": 1.365
+      }
+    },
+    {
+      "name": "4寸5分",
+      "fraction": "4.5/10",
+      "m": 0.45,
+      "angleDeg": 24.228,
+      "areaStretch": 1.097,
+      "hip": {
+        "planDiagonal": 1.049,
+        "vsHorizontal": 1.484,
+        "vsSlope": 1.353
+      }
+    },
+    {
+      "name": "5寸",
+      "fraction": "5.0/10",
+      "m": 0.5,
+      "angleDeg": 26.565,
+      "areaStretch": 1.118,
+      "hip": {
+        "planDiagonal": 1.061,
+        "vsHorizontal": 1.5,
+        "vsSlope": 1.342
+      }
+    },
+    {
+      "name": "5寸5分",
+      "fraction": "5.5/10",
+      "m": 0.55,
+      "angleDeg": 28.811,
+      "areaStretch": 1.141,
+      "hip": {
+        "planDiagonal": 1.073,
+        "vsHorizontal": 1.517,
+        "vsSlope": 1.33
+      }
+    },
+    {
+      "name": "6寸",
+      "fraction": "6.0/10",
+      "m": 0.6,
+      "angleDeg": 30.964,
+      "areaStretch": 1.166,
+      "hip": {
+        "planDiagonal": 1.086,
+        "vsHorizontal": 1.536,
+        "vsSlope": 1.317
+      }
+    },
+    {
+      "name": "6寸5分",
+      "fraction": "6.5/10",
+      "m": 0.65,
+      "angleDeg": 33.024,
+      "areaStretch": 1.193,
+      "hip": {
+        "planDiagonal": 1.101,
+        "vsHorizontal": 1.556,
+        "vsSlope": 1.305
+      }
+    },
+    {
+      "name": "7寸",
+      "fraction": "7.0/10",
+      "m": 0.7,
+      "angleDeg": 34.992,
+      "areaStretch": 1.221,
+      "hip": {
+        "planDiagonal": 1.116,
+        "vsHorizontal": 1.578,
+        "vsSlope": 1.293
+      }
+    },
+    {
+      "name": "7寸5分",
+      "fraction": "7.5/10",
+      "m": 0.75,
+      "angleDeg": 36.87,
+      "areaStretch": 1.25,
+      "hip": {
+        "planDiagonal": 1.132,
+        "vsHorizontal": 1.601,
+        "vsSlope": 1.281
+      }
+    },
+    {
+      "name": "8寸",
+      "fraction": "8.0/10",
+      "m": 0.8,
+      "angleDeg": 38.66,
+      "areaStretch": 1.281,
+      "hip": {
+        "planDiagonal": 1.149,
+        "vsHorizontal": 1.625,
+        "vsSlope": 1.269
+      }
+    },
+    {
+      "name": "8寸5分",
+      "fraction": "8.5/10",
+      "m": 0.85,
+      "angleDeg": 40.365,
+      "areaStretch": 1.312,
+      "hip": {
+        "planDiagonal": 1.167,
+        "vsHorizontal": 1.65,
+        "vsSlope": 1.257
+      }
+    },
+    {
+      "name": "9寸",
+      "fraction": "9.0/10",
+      "m": 0.9,
+      "angleDeg": 41.987,
+      "areaStretch": 1.345,
+      "hip": {
+        "planDiagonal": 1.185,
+        "vsHorizontal": 1.676,
+        "vsSlope": 1.246
+      }
+    },
+    {
+      "name": "9寸5分",
+      "fraction": "9.5/10",
+      "m": 0.95,
+      "angleDeg": 43.531,
+      "areaStretch": 1.379,
+      "hip": {
+        "planDiagonal": 1.205,
+        "vsHorizontal": 1.704,
+        "vsSlope": 1.235
+      }
+    },
+    {
+      "name": "矩勾配",
+      "fraction": "10.0/10",
+      "m": 1,
+      "angleDeg": 45,
+      "areaStretch": 1.414,
+      "hip": {
+        "planDiagonal": 1.225,
+        "vsHorizontal": 1.732,
+        "vsSlope": 1.225
+      }
+    },
+    {
+      "name": "9寸返し",
+      "fraction": "11.0/10",
+      "m": 1.1,
+      "angleDeg": 47.726,
+      "areaStretch": 1.487,
+      "hip": {
+        "planDiagonal": 1.267,
+        "vsHorizontal": 1.792,
+        "vsSlope": 1.205
+      }
+    },
+    {
+      "name": "8寸返し",
+      "fraction": "12.0/10",
+      "m": 1.2,
+      "angleDeg": 50.194,
+      "areaStretch": 1.562,
+      "hip": {
+        "planDiagonal": 1.311,
+        "vsHorizontal": 1.855,
+        "vsSlope": 1.187
+      }
+    }
+  ]
+}

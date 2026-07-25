@@ -1,0 +1,211 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Yu Gothic', 'Hiragino Kaku Gothic ProN', 'Segoe UI', sans-serif; color: #222; }
+.app { display: flex; flex-direction: column; height: 100vh; }
+.main { flex: 1; display: flex; min-height: 0; }
+.canvas-wrap { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 8px; background: #eef1f4; min-width: 0; }
+.canvas-box { background: #fff; border: 1px solid #d7dee6; border-radius: 8px; overflow: hidden; align-self: flex-start; }
+.hint { font-size: 12px; color: #66707a; }
+.sidebar { width: 320px; border-left: 1px solid #dde3ea; padding: 12px; overflow: auto; background: #fafbfc; }
+
+/* 左: 案件エクスプローラー（e0.3.2） */
+.explorer { width: 240px; border-right: 1px solid #dde3ea; padding: 12px; overflow: auto; background: #fafbfc; display: flex; flex-direction: column; }
+.explorer h3 { margin: 0 0 10px; font-size: 13px; color: #1f4e79; letter-spacing: .03em; }
+.explorer .proj { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.explorer .proj-ico { font-size: 14px; }
+.explorer .proj-name { flex: 1; min-width: 0; padding: 5px 7px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-weight: bold; color: #1f4e79; }
+.dwg-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.dwg-item { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.dwg-item:hover { border-color: #2e74b5; }
+.dwg-item.sel { border-color: #e8590c; background: #fff4ec; }
+.dwg-ico { font-size: 13px; flex: none; }
+.dwg-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dwg-count { flex: none; margin-left: auto; min-width: 18px; text-align: center; font-size: 11px; color: #1f4e79; background: #e7eef6; border-radius: 9px; padding: 1px 6px; }
+/* 一覧: 所属図面バッジ・別図面の拾いは薄く */
+.dwg-tag { display: inline-block; margin-left: 6px; font-size: 10px; color: #2e74b5; background: #eaf2fb; border-radius: 4px; padding: 1px 5px; vertical-align: middle; }
+.list-item.other { opacity: 0.6; }
+.dwg-nav { display: flex; gap: 6px; margin-bottom: 10px; }
+.dwg-nav button { flex: 1; font-size: 12px; padding: 6px 4px; background: #fff; border: 1px solid #cbd5e1; color: #33414f; border-radius: 6px; cursor: pointer; }
+.dwg-nav button:hover:not(:disabled) { border-color: #2e74b5; color: #1f4e79; }
+.dwg-nav button:disabled { color: #b7c0cb; cursor: not-allowed; }
+.explorer .add { width: 100%; background: #fff; border: 1px solid #1f4e79; color: #1f4e79; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.explorer .add:hover { background: #1f4e79; color: #fff; }
+.proj-actions { display: flex; gap: 6px; margin-bottom: 4px; }
+.proj-actions button { flex: 1; font-size: 12px; padding: 6px 4px; background: #fff; border: 1px solid #cbd5e1; color: #33414f; border-radius: 6px; cursor: pointer; }
+.proj-actions button:hover { border-color: #2e74b5; color: #1f4e79; }
+.autosave { font-size: 11px; color: #8a95a1; margin-bottom: 10px; min-height: 14px; }
+.backups { margin-top: 12px; font-size: 12px; }
+.backups summary { cursor: pointer; color: #1f4e79; padding: 4px 0; }
+.backup-item { display: flex; justify-content: space-between; gap: 6px; padding: 5px 8px; border: 1px solid #e2e8f0; border-radius: 6px; margin-top: 4px; cursor: pointer; }
+.backup-item:hover { border-color: #2e74b5; background: #f3f8fd; }
+.backup-time { color: #33414f; }
+.backup-name { color: #8a95a1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 集計（Result Envelope）e0.3.5② */
+.summary .sum-row { border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 6px; }
+.summary .sum-row > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; }
+.summary .sum-row > summary::-webkit-details-marker { display: none; }
+.sum-head { display: flex; flex-direction: column; min-width: 0; }
+.sum-trade { font-size: 11px; color: #66707a; }
+.sum-item { font-size: 13px; font-weight: bold; color: #1f4e79; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sum-qty { font-size: 18px; font-weight: bold; color: #1f4e79; flex: none; }
+.sum-qty small { font-size: 11px; font-weight: normal; color: #66707a; }
+.sum-child { display: flex; justify-content: space-between; gap: 8px; padding: 5px 10px 5px 22px; font-size: 12px; color: #33414f; cursor: pointer; border-top: 1px dashed #eef2f6; }
+.sum-child:hover { background: #f3f8fd; color: #1f4e79; }
+.sum-child-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sum-child-qty { flex: none; color: #e8590c; }
+
+.toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #1f4e79; color: #fff; flex-wrap: wrap; }
+.toolbar .sp { flex: 1; }
+.toolbar label { font-size: 12px; display: flex; align-items: center; gap: 4px; }
+.toolbar input[type=number] { width: 64px; padding: 4px; border-radius: 4px; border: none; }
+.toolbar button { background: #2e74b5; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.toolbar button:hover { background: #3a86d0; }
+.toolbar button.ghost { background: transparent; border: 1px solid #ffffff66; }
+.toolbar .file { background: #ffffff22; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+
+.panel { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+.panel h3 { margin: 0 0 10px; font-size: 13px; color: #1f4e79; letter-spacing: .03em; }
+.kv { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+.kv b { color: #1f4e79; }
+.area { font-size: 30px; font-weight: bold; color: #1f4e79; margin: 6px 0 4px; }
+.area small { font-size: 14px; font-weight: normal; color: #66707a; }
+.area-actual { font-size: 22px; font-weight: bold; color: #e8590c; margin: 0 0 12px; }
+.area-actual small { font-size: 12px; font-weight: normal; color: #66707a; }
+.area-actual .ratio { display: block; font-size: 11px; font-weight: normal; color: #8a95a1; margin-top: 2px; }
+.field { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; font-size: 12px; color: #55606a; }
+.field input { padding: 7px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; }
+.save { width: 100%; background: #1f4e79; color: #fff; border: none; padding: 9px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+.save:disabled { background: #a7b3c0; cursor: not-allowed; }
+
+.list-item { padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 6px; margin-bottom: 6px; cursor: pointer; font-size: 13px; display: flex; justify-content: space-between; }
+.list-item:hover { border-color: #2e74b5; }
+.list-item.sel { border-color: #e8590c; background: #fff4ec; }
+.list-item .id { color: #66707a; font-size: 11px; }
+.list-empty { font-size: 12px; color: #99a; padding: 8px 0; }
+.exp { width: 100%; margin-top: 6px; background: #fff; border: 1px solid #1f4e79; color: #1f4e79; padding: 7px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+
+/* e0.3.5④ Export Adapters */
+.panel.export .export-actions { display: flex; flex-direction: column; gap: 6px; }
+.panel.export .export-actions button {
+  width: 100%; padding: 8px 10px; border: 1px solid #1f4e79; border-radius: 6px;
+  background: #fff; color: #1f4e79; cursor: pointer; font-size: 13px; text-align: left;
+}
+.panel.export .export-actions button:hover:not(:disabled) { background: #eef4fb; }
+.panel.export .export-actions button:disabled { opacity: .45; cursor: not-allowed; }
+
+/* e0.3.7① Geometry Tools */
+.panel.geomtools .gt-tool > summary { cursor: pointer; font-weight: 600; color: #1f4e79; padding: 4px 0; }
+.panel.geomtools .gt-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; font-size: 13px; }
+.panel.geomtools .gt-row > span:first-child { color: #55606a; }
+.panel.geomtools .gt-row b { font-variant-numeric: tabular-nums; }
+.panel.geomtools .gt-row b small { color: #99a; font-weight: 400; }
+.panel.geomtools .gt-input select,
+.panel.geomtools .gt-input input { padding: 5px 7px; border: 1px solid #cbd3db; border-radius: 5px; font-size: 13px; }
+.panel.geomtools .gt-input input { width: 90px; text-align: right; }
+.panel.geomtools .gt-inwrap { display: inline-flex; align-items: center; gap: 4px; }
+.panel.geomtools .gt-inwrap small { color: #99a; }
+.panel.geomtools .gt-readouts { border-top: 1px solid #eef1f4; border-bottom: 1px solid #eef1f4; margin: 6px 0; padding: 2px 0; }
+.panel.geomtools .gt-readouts.gt-result b { color: #1f4e79; font-size: 15px; }
+
+/* e0.3.7② Geometry Tools — selection + apply */
+.panel.geomtools .gt-selected { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; background: #f2f7fc; border: 1px solid #dce6f0; border-radius: 6px; padding: 6px 8px; margin-bottom: 6px; }
+.panel.geomtools .gt-selected.gt-none { color: #8a94a0; background: #f6f7f8; border-color: #e9ecef; }
+.panel.geomtools .gt-sel-tag { color: #fff; background: #1f4e79; border-radius: 4px; padding: 1px 6px; font-size: 11px; }
+.panel.geomtools .gt-sel-id { color: #1f4e79; }
+.panel.geomtools .gt-sel-label { color: #55606a; }
+.panel.geomtools .gt-sel-pitch { margin-left: auto; color: #1f4e79; font-weight: 600; }
+.panel.geomtools .gt-apply-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.panel.geomtools .gt-apply { flex: 1; padding: 7px 10px; border: 1px solid #1f7a3d; border-radius: 6px; background: #eafaf0; color: #1f7a3d; font-size: 13px; cursor: pointer; }
+.panel.geomtools .gt-apply:hover:not(:disabled) { background: #dcf5e6; }
+.panel.geomtools .gt-apply:disabled { opacity: .45; cursor: not-allowed; border-color: #cbd3db; color: #8a94a0; background: #f6f7f8; }
+.panel.geomtools .gt-dirty { color: #b26a00; white-space: nowrap; }
+
+/* e0.3.7 勾配電卓（standalone calc.html） */
+.calc-page { min-height: 100vh; background: #eef1f4; }
+.calc-header { display: flex; align-items: baseline; gap: 8px; padding: 12px 16px; background: #1f4e79; color: #fff; }
+.calc-header strong { font-size: 16px; }
+.calc-header span { opacity: 0.6; font-size: 12px; }
+.calc-body { max-width: 420px; margin: 0 auto; padding: 14px; }
+.calc-body .panel.geomtools { margin-bottom: 10px; }
+.calc-note { font-size: 12px; color: #66707a; line-height: 1.6; padding: 0 4px; }
+
+/* e0.3.7 保存済み削除 + 概算数量合計 */
+.list-item .li-right { display: flex; align-items: center; gap: 8px; flex: none; }
+.list-item .li-del { border: 1px solid #f0c9c2; background: #fff; color: #d9480f; border-radius: 6px; width: 24px; height: 24px; line-height: 1; font-size: 13px; cursor: pointer; padding: 0; }
+.list-item .li-del:hover { background: #ffe9e2; border-color: #e8590c; }
+.summary .sum-total { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: #f2f7fc; border: 1px solid #cfe0f0; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+.summary .sum-total-label { font-size: 12px; color: #1f4e79; font-weight: 700; }
+.summary .sum-total-vals { display: flex; gap: 10px; }
+.summary .sum-total-vals b { font-size: 18px; color: #1f4e79; font-variant-numeric: tabular-nums; }
+.summary .sum-total-vals b small { font-size: 11px; font-weight: 400; color: #66707a; }
+
+/* e0.3.7 削除ボタン（二段階・ダイアログ不使用） */
+.del-measure { width: 100%; margin-top: 8px; background: #fff; color: #d9480f; border: 1px solid #f0c9c2; border-radius: 6px; padding: 8px; font-size: 13px; cursor: pointer; }
+.del-measure:hover { background: #ffe9e2; border-color: #e8590c; }
+.del-measure.confirm { background: #d9480f; color: #fff; border-color: #d9480f; font-weight: 700; }
+.list-item .li-del.confirm { width: auto; padding: 0 8px; background: #d9480f; color: #fff; border-color: #d9480f; font-size: 12px; font-weight: 700; }
+
+/* Roof Studio（Phase 1・A / Roof Engine 検証UI） */
+.rs { display: flex; flex-direction: column; height: 100vh; background: #eef1f4; }
+.rs-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #1f4e79; color: #fff; flex-wrap: wrap; }
+.rs-head strong { font-size: 15px; }
+.rs-head > span { font-size: 12px; opacity: .85; }
+.rs-head .rs-type b { color: #ffd8a8; }
+.rs-head .rs-sp { flex: 1; }
+.rs-head button { background: #2e74b5; color: #fff; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.rs-head button:hover:not(:disabled) { background: #3a86d0; }
+.rs-head button.on { background: #e8590c; }
+.rs-head button:disabled { opacity: .5; cursor: not-allowed; }
+.rs-body { flex: 1; display: flex; min-height: 0; }
+.rs-left { width: 270px; border-right: 1px solid #dde3ea; background: #fafbfc; overflow: auto; padding: 10px; }
+.rs-right { width: 330px; border-left: 1px solid #dde3ea; background: #fafbfc; overflow: auto; padding: 10px; }
+.rs-left h4, .rs-right h4 { margin: 6px 0 8px; font-size: 12px; color: #1f4e79; letter-spacing: .03em; }
+.rs-canvas { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 10px; min-width: 0; }
+.rs-canvas .konvajs-content { background: #fff; border: 1px solid #d7dee6; border-radius: 8px; }
+.rs-hint { font-size: 12px; color: #66707a; }
+.rs-item { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 7px; border: 1px solid #e6ebf1; border-radius: 6px; margin-bottom: 4px; font-size: 12px; cursor: pointer; background: #fff; }
+.rs-item.hi { border-color: #e8590c; background: #fff4ec; }
+.rs-item .rs-row-r { display: inline-flex; align-items: center; gap: 4px; color: #55606a; }
+.rs-item input { width: 48px; padding: 3px 5px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 12px; text-align: right; }
+.rs-item .rs-del { border: 1px solid #f0c9c2; background: #fff; color: #d9480f; border-radius: 5px; width: 22px; height: 22px; cursor: pointer; padding: 0; }
+.rs-contrib { margin-top: 8px; padding: 8px; border: 1px solid #cfe0f0; background: #f2f7fc; border-radius: 6px; font-size: 12px; color: #33414f; }
+.rs-contrib b { color: #1f4e79; }
+.rs-qty { width: 100%; border-collapse: collapse; font-size: 13px; }
+.rs-qty th, .rs-qty td { border-bottom: 1px solid #eef1f4; padding: 7px 6px; text-align: left; }
+.rs-qty th { font-size: 11px; color: #66707a; font-weight: 600; }
+.rs-qty tr.hi { background: #fff4ec; }
+.rs-qty .rs-val { text-align: right; font-weight: 700; color: #1f4e79; font-variant-numeric: tabular-nums; }
+.rs-qty .rs-val small { font-weight: 400; color: #66707a; }
+.rs-qty .rs-basis { color: #2e74b5; }
+.rs-qty .rs-empty { color: #99a; text-align: center; }
+.rs-note { margin-top: 10px; font-size: 11px; color: #8a95a1; line-height: 1.6; }
+
+/* Roof Studio — 屋根伏図（再構築・右下） */
+.rs-right .rs-fuzu-h { margin-top: 16px; }
+.rs-fuzu { width: 100%; height: 230px; background: #fff; border: 1px solid #d7dee6; border-radius: 8px; display: block; }
+
+/* Engine Studio — modes / sub-toolbar / validator */
+.rs-head .rs-modes button { margin-left: 4px; }
+.rs-head .rs-modes button.on { background: #e8590c; }
+.rs-head .rs-doc { display: flex; align-items: center; gap: 6px; margin-left: 10px; }
+.rs-head .rs-doc button { background: #14532d; }
+.rs-head .rs-doc button:hover:not(:disabled) { background: #1a6b3a; }
+.rs-head .rs-saved { font-size: 11px; opacity: .9; white-space: nowrap; }
+.rs-loaderr { display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #fff0f0; color: #c2255c; border-bottom: 1px solid #f0c0cc; font-size: 12px; }
+.rs-loaderr button { margin-left: auto; background: none; border: none; color: #c2255c; cursor: pointer; font-size: 15px; }
+.rs-sub { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 12px; background: #eaf0f6; border-bottom: 1px solid #dde3ea; }
+.rs-sub button { background: #fff; border: 1px solid #cbd5e1; color: #33414f; padding: 5px 9px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+.rs-sub button:hover:not(:disabled) { border-color: #2e74b5; color: #1f4e79; }
+.rs-sub button.on { background: #1f4e79; color: #fff; border-color: #1f4e79; }
+.rs-sub button:disabled { opacity: .45; cursor: not-allowed; }
+.rs-sub .rs-lbl { font-size: 12px; color: #55606a; }
+.rs-sub .rs-sp2 { flex: 1; }
+.rs-right .rs-mt { margin-top: 16px; }
+.rs-right .rs-mt small { color: #8a95a1; font-weight: 400; }
+.rs-err { color: #d9480f; font-size: 11px; }
+.rs-ok { color: #2f9e44; font-size: 11px; }
+.rs-valid { display: flex; flex-direction: column; gap: 4px; }
+.rs-iss { font-size: 11px; padding: 5px 7px; border-radius: 5px; border: 1px solid; cursor: default; }
+.rs-iss.error { color: #b02a1a; background: #fff0ee; border-color: #f3c0b8; }
+.rs-iss.warning { color: #9a6a00; background: #fff8e8; border-color: #f0dfae; }
+.rs-iss b { font-family: monospace; }

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "kind": "material/carbon-knowledge",
+  "id": "carbon-example",
+  "title": "Carbon Compiler 知識（Program・★要 甍 確認）",
+  "note": "CO₂原単位（kg-CO₂/単位）。材料→輸送→施工の多段。輸送は材料CO₂×率の近似（将来 重量×距離）。",
+  "transportRate": 0.1,
+  "co2PerUnit": {
+    "PC50-60-BK": 2.5,
+    "PC50-60-YOB-BK": 2.3,
+    "PC50-EAVE-105-BK": 3.0,
+    "PC50-OUT-BK": 1.5,
+    "PC50-ELB-60-BK": 0.8,
+    "PC50-DR-BK": 2.0,
+    "PC50-DEN-BK": 0.3,
+    "PC50-JNT-60-BK": 0.4,
+    "PC50-ADH": 1.2,
+    "PC50-SCR": 0.05
+  },
+  "constructionCO2PerUnit": {
+    "vertical_drain": 0.5,
+    "connector_drain": 0.5,
+    "eave_gutter": 0.6,
+    "outlet": 0.3,
+    "elbow": 0.2,
+    "drain_outlet": 0.3,
+    "roof_field": 0.8
+  }
+}
