@@ -1,6 +1,6 @@
 // 見積書エクスポート（行組み立て）のテスト。Roof/Gutter Domain Program で価格化・甍見積書式AOA。
 import { readFileSync } from 'fs';
-import { buildEstimate, buildQuotation } from '../src/geometry/estimateExport';
+import { buildEstimate, buildQuotation, buildQuotationGrid } from '../src/geometry/estimateExport';
 import type { GutterProgram } from '../src/geometry/acceptance';
 import type { QuantityResult } from '../src/geometry/roofModel';
 
@@ -45,4 +45,23 @@ ok(quo.aoa.some((r) => r[3] === '株式会社　甍'), '発行者 甍');
 ok(quo.aoa.some((r) => r[3] === '合　計' && r[4] === doc.total), '合計行');
 ok(quo.cols.length === 6 && quo.merges.length >= 2, '列幅6・結合');
 
-console.log(`✅ EstimateExport test: 全 ${n} 件合格（Roof/Gutter Domain Program 価格化・甍見積書式）`);
+// ── 4) 甍 見積書「書式」完全一致 GridSpec（35列テンプレ） ──
+const grid = buildQuotationGrid(doc, { customer: '水上 智紀', title: '屋根・雨樋工事', site: '東松山市', date: '2025-09-24' });
+ok(grid.colCount === 35, '35列グリッド');
+ok(grid.cells.find((c) => c.r === 0 && c.c === 11)!.v === '御　見　積　書', '御見積書 (0,11)');
+ok(grid.cells.find((c) => c.r === 2 && c.c === 15)!.v === '7年', '令和7年 (2,15)'); // 2025→令和7
+ok(grid.cells.find((c) => c.r === 4 && c.c === 1)!.v === '水上 智紀', '宛名 (4,1)');
+ok(grid.cells.find((c) => c.r === 4 && c.c === 21)!.v === '株式会社　甍', '発行者 甍 (4,21)');
+ok(grid.cells.some((c) => c.c === 8 && c.v === doc.total && c.numFmt && /¥/.test(c.numFmt)), '税込合計金額 ¥書式');
+// 見出し行(16) に 品名/数量/単位/単価/金額/摘要 が各ブロック左端に
+ok([[0, '品名'], [15, '数量'], [18, '単位'], [20, '単価'], [23, '金額'], [28, '摘要']].every(([c, lbl]) => grid.cells.some((x) => x.r === 16 && x.c === c && x.v === lbl)), '見出し6ブロック');
+// 明細：デコルーフ金額が金額列(23)に数値で入る
+ok(grid.cells.some((c) => c.c === 23 && c.v === Math.round(108.2 * 4900)), 'デコルーフ金額を金額列(23)に');
+// 合計行：ラベルは右寄せ・金額列23に doc.total
+ok(grid.cells.some((c) => c.c === 0 && c.v === '合　計' && c.align === 'right'), '合計ラベル 右寄せ');
+ok(grid.cells.some((c) => c.c === 23 && c.v === doc.total && c.numFmt === '#,##0_;'), '合計 金額 (23)');
+// テンプレ最低13明細行の枠：見出し(16)＋13＝29 まで、totalは30以降
+ok(grid.tableBox.r1 === 16 && grid.tableBox.r2 >= 32, `明細表 外枠 r1=16..r2=${grid.tableBox.r2}`);
+ok(grid.merges.some((m) => m[0] === 0 && m[1] === 11 && m[2] === 0 && m[3] === 23), '御見積書 結合 単一行 c11-23');
+
+console.log(`✅ EstimateExport test: 全 ${n} 件合格（Roof/Gutter Domain Program 価格化・甍見積書式・書式完全一致GridSpec）`);

@@ -27,13 +27,29 @@ import { serializeDocument, parseDocument, maxIdSuffix } from '../geometry/persi
 import { calibrateFrom2Points, DEV_PX_PER_METER } from '../geometry/calibration';
 import type { Calibration } from '../geometry/calibration';
 import AcceptancePanel from './AcceptancePanel';
-import { buildEstimate, buildQuotation } from '../geometry/estimateExport';
+import { buildEstimate } from '../geometry/estimateExport';
 import type { GutterProgram } from '../geometry/acceptance';
+import { buildQuotationWorkbook } from '../geometry/quotationXlsx';
 import { autoProposeGutter } from '../geometry/autoPropose';
 import withdomGutter from '../../knowledge/programs/withdom-saitama.gutter.json';
 import withdomRoof from '../../knowledge/programs/withdom-saitama.roof.json';
 
-const SHEETJS_CDN = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
+// 見積書 Excel は会社書式に完全一致させるため ExcelJS を使用（罫線/結合/数値書式）。必要時だけ CDN から読む。
+const EXCELJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+// UMD スクリプトを一度だけ読み込み、window.ExcelJS を返す（単一HTMLビルドでも動く）。
+function loadExcelJS(): Promise<any> {
+  const w = window as any;
+  if (w.ExcelJS) return Promise.resolve(w.ExcelJS);
+  return new Promise((resolve, reject) => {
+    const exist = document.querySelector('script[data-exceljs]') as HTMLScriptElement | null;
+    const done = () => (w.ExcelJS ? resolve(w.ExcelJS) : reject(new Error('ExcelJS 読み込み失敗')));
+    if (exist) { exist.addEventListener('load', done); exist.addEventListener('error', () => reject(new Error('ExcelJS 読み込み失敗'))); return; }
+    const s = document.createElement('script');
+    s.src = EXCELJS_CDN; s.async = true; s.setAttribute('data-exceljs', '1');
+    s.onload = done; s.onerror = () => reject(new Error('ExcelJS 読み込み失敗（オフライン時は不可）'));
+    document.head.appendChild(s);
+  });
+}
 
 // iraka-report 埋め込み時のホスト（js/estimation-bridge.js が ?projectId 連携で window にセット）。無ければ standalone。
 interface EstimationHost {
@@ -299,19 +315,21 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
     const file = e.target.files?.[0]; if (!file) return;
     try { loadFromJson(await file.text()); } finally { e.target.value = ''; }
   };
-  // 見積 Excel 出力（SheetJS は必要時だけ CDN）。雨樋=WITH DOM価格、屋根=数量（単価は屋根Program確定後）。
+  // 見積 Excel 出力：会社の「見積書書式」に完全一致（ExcelJS・罫線/結合/数値書式）。雨樋=WITH DOM価格、屋根=Roof Program価格。
   const exportExcel = async () => {
     try {
-      const spec = SHEETJS_CDN;
-      const XLSX = await import(/* @vite-ignore */ spec) as any;
+      const ExcelJS = await loadExcelJS();
+      const today = new Date().toISOString().slice(0, 10);
+      const customer = (window.prompt('宛名（お客様名）を入力（空欄可）', '') ?? '').trim();
+      const site = (window.prompt('現場住所を入力（空欄可）', '') ?? '').trim();
       const doc = buildEstimate(rq, dq, withdomGutter as unknown as GutterProgram, withdomRoof as unknown as GutterProgram, 0);
-      const q = buildQuotation(doc, { date: new Date().toISOString().slice(0, 10) });
-      const ws = XLSX.utils.aoa_to_sheet(q.aoa);
-      ws['!cols'] = q.cols;
-      ws['!merges'] = q.merges.map((m: any) => ({ s: m.s, e: m.e }));
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, '見積書');
-      XLSX.writeFile(wb, `甍AI-見積-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      const wb = buildQuotationWorkbook(ExcelJS, doc, {
+        customer, site, title: '屋根・雨樋工事', work: '屋根・雨樋工事', validUntil: '発行後30日', date: today,
+      });
+      const buf = await wb.xlsx.writeBuffer();
+      const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      const a = document.createElement('a'); a.href = url; a.download = `甍AI-見積-${today}.xlsx`; a.click();
+      URL.revokeObjectURL(url);
       setLoadError(null);
     } catch (err) {
       setLoadError('Excel出力に失敗（オフライン時は不可）: ' + (err instanceof Error ? err.message : String(err)));

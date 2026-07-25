@@ -101,3 +101,116 @@ export function buildQuotation(doc: EstimateDoc, meta: QuotationMeta): SheetSpec
   const cols = [{ wch: 34 }, { wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 14 }, { wch: 22 }];
   return { aoa: a, merges, cols, headerRow } as SheetSpec & { headerRow: number };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 甍 見積書「書式」完全一致版（会社テンプレ 見積書書式.xls の 35列グリッドを再現）。
+//   ★純関数：ExcelJS 非依存の GridSpec（セル/結合/罫線/列幅/行高）を返す＝テスト可。
+//   ★描画は Studio 側で ExcelJS(CDN) が GridSpec を適用するだけ。テンプレの座標・結合・罫線・数値書式に一致。
+// ─────────────────────────────────────────────────────────────────────────────
+export type HAlign = 'left' | 'center' | 'right';
+export interface Border4 { top?: boolean; bottom?: boolean; left?: boolean; right?: boolean; style?: 'thin' | 'medium' | 'double' }
+export interface GridCell {
+  r: number; c: number; v: string | number;
+  size?: number; bold?: boolean; align?: HAlign; numFmt?: string; border?: Border4;
+}
+export interface GridSpec {
+  colCount: number;
+  colWidth: number[];                 // ExcelJS 文字幅（列ごと）
+  rowHeight: { r: number; h: number }[]; // pt
+  merges: [number, number, number, number][]; // [r1,c1,r2,c2]（0基点・両端含む）
+  cells: GridCell[];
+  tableBox: { r1: number; c1: number; r2: number; c2: number }; // 明細表の外枠（全セル thin 罫線）
+  vSeps: number[];                    // 明細表の縦罫線を入れる列境界（左側に線）
+}
+
+const YEN_FMT = '_ "¥"#,##0\\-';
+const NUM_FMT = '#,##0_;';
+
+// 35列テンプレの完全一致グリッド。明細は doc.rows の行数に合わせて可変（最低13行＝テンプレ枠を確保）。
+export function buildQuotationGrid(doc: EstimateDoc, meta: QuotationMeta): GridSpec {
+  const I = IRAKA_ISSUER;
+  const COLS = 35;
+  const cells: GridCell[] = [];
+  const merges: [number, number, number, number][] = [];
+  const put = (c: GridCell) => cells.push(c);
+  const m = (r1: number, c1: number, r2: number, c2: number) => merges.push([r1, c1, r2, c2]);
+  const rd = reiwaDate(meta.date); // 令和N年M月D日（無ければ空）
+  const ry = rd ? rd.match(/令和(\d+)年(\d+)月(\d+)日/) : null;
+
+  // ── ヘッダ（罫線なし・テンプレ座標。結合は全て単一行の横結合＝xlrd の [rlo,rhi) に一致） ──
+  m(0, 11, 0, 23); put({ r: 0, c: 11, v: '御　見　積　書', size: 20, align: 'center', border: { bottom: true, style: 'double' } });
+  put({ r: 2, c: 12, v: '令和' });
+  put({ r: 2, c: 15, v: ry ? `${ry[1]}年` : '年' });
+  put({ r: 2, c: 18, v: ry ? `${ry[2]}月` : '月' });
+  put({ r: 2, c: 21, v: ry ? `${ry[3]}日` : '日' });
+  m(4, 1, 4, 14); put({ r: 4, c: 1, v: `${meta.customer ?? ''}`, align: 'center', border: { bottom: true, style: 'thin' } });
+  put({ r: 4, c: 15, v: '様' });
+  m(4, 21, 4, 34); put({ r: 4, c: 21, v: I.company, align: 'center' });
+  put({ r: 5, c: 21, v: I.office });
+  put({ r: 6, c: 21, v: I.zip });
+  put({ r: 7, c: 21, v: I.addr });
+  put({ r: 8, c: 1, v: `　件名　${meta.title ?? ''}` });
+  put({ r: 8, c: 21, v: I.tel });
+  put({ r: 9, c: 1, v: `現場住所　${meta.site ?? ''}` });
+  put({ r: 10, c: 1, v: `工事名　${meta.work ?? ''}` });
+  put({ r: 10, c: 21, v: '担当者　' }); put({ r: 10, c: 25, v: I.staff });
+  put({ r: 11, c: 1, v: `有効期限　${meta.validUntil ?? ''}` });
+  put({ r: 11, c: 22, v: '携帯電話', align: 'center' }); put({ r: 11, c: 25, v: I.mobile });
+  put({ r: 12, c: 21, v: 'mail' }); put({ r: 12, c: 25, v: I.mail });
+  put({ r: 14, c: 1, v: '税込合計金額', size: 14, border: { bottom: true, style: 'thin' } });
+  m(14, 8, 14, 18); put({ r: 14, c: 8, v: doc.total, size: 18, align: 'right', numFmt: YEN_FMT, border: { bottom: true, style: 'thin' } });
+  put({ r: 14, c: 19, v: '（消費税込み）', border: { bottom: true, style: 'thin' } });
+
+  // ── 明細表 ──（16=見出し / 17..=明細 / 続けて 小計・消費税・合計）
+  const HEAD = 16;
+  // 6ブロックの列境界（左端c, 右端は次境界-1）：品名0-14, 数量15-17, 単位18-19, 単価20-22, 金額23-27, 摘要28-34
+  const blocks: [number, number, HAlign][] = [[0, 14, 'left'], [15, 17, 'right'], [18, 19, 'center'], [20, 22, 'right'], [23, 27, 'right'], [28, 34, 'left']];
+  const vSeps = [15, 18, 20, 23, 28]; // 各ブロック左に縦線
+  const headLabels = ['品名', '数量', '単位', '単価', '金額', '摘要'];
+  const mergeRow = (r: number) => { for (const [c1, c2] of blocks) if (c2 > c1) m(r, c1, r, c2); };
+  mergeRow(HEAD);
+  blocks.forEach(([c1], i) => put({ r: HEAD, c: c1, v: headLabels[i], align: 'center' }));
+
+  const nDetail = Math.max(13, doc.rows.length); // テンプレは13行枠。超過時は表を伸ばす。
+  let r = HEAD + 1;
+  for (let i = 0; i < nDetail; i++, r++) {
+    mergeRow(r);
+    const row = doc.rows[i];
+    if (!row) continue;
+    put({ r, c: 0, v: row.name, align: 'left' });
+    put({ r, c: 15, v: row.qty, align: 'right' });
+    put({ r, c: 18, v: row.unit, align: 'center' });
+    if (row.unitPrice != null) put({ r, c: 20, v: row.unitPrice, align: 'right', numFmt: NUM_FMT });
+    if (row.amount != null) put({ r, c: 23, v: row.amount, align: 'right', numFmt: NUM_FMT });
+    if (row.note) put({ r, c: 28, v: row.note, align: 'left' });
+  }
+  const detailEnd = r - 1;
+  // 小計 / 消費税等 / 合計（ラベル c0-22 右寄せ・金額 c23-27・摘要 c28-34）
+  const totalRows: [string, number, string][] = [['小　計', doc.subtotal, ''], ['消費税等', doc.tax, '１０％'], ['合　計', doc.total, '']];
+  for (const [label, amount, note] of totalRows) {
+    m(r, 0, r, 22); m(r, 23, r, 27); m(r, 28, r, 34);
+    put({ r, c: 0, v: label, align: 'right' });
+    put({ r, c: 23, v: amount, align: 'right', numFmt: NUM_FMT });
+    if (note) put({ r, c: 28, v: note, size: 9, align: 'left' });
+    r++;
+  }
+  const tableEnd = r - 1;
+  put({ r, c: 0, v: `備考：　${doc.pricedNote}` });
+
+  // 列幅（テンプレ 682/256≒2.66文字。要所だけ広め）
+  const colWidth = Array.from({ length: COLS }, () => 2.66);
+  colWidth[0] = 2.78; colWidth[8] = 3.33; colWidth[21] = 3.44;
+  // 行高（テンプレ準拠）
+  const rowHeight: { r: number; h: number }[] = [
+    { r: 0, h: 30 }, { r: 1, h: 12 }, { r: 2, h: 18 }, { r: 3, h: 12 },
+    { r: 4, h: 18 }, { r: 5, h: 18 }, { r: 6, h: 18 }, { r: 7, h: 18 }, { r: 8, h: 18 },
+    { r: 9, h: 18 }, { r: 10, h: 18 }, { r: 11, h: 18 }, { r: 12, h: 18 }, { r: 14, h: 18 }, { r: 16, h: 18 },
+  ];
+  for (let rr = HEAD + 1; rr <= tableEnd; rr++) rowHeight.push({ r: rr, h: 24.9 });
+
+  return {
+    colCount: COLS, colWidth, rowHeight, merges, cells,
+    tableBox: { r1: HEAD, c1: 0, r2: tableEnd, c2: 34 },
+    vSeps: vSeps.concat([0, 35]), // 外枠含む縦線位置（描画側で使用）
+  };
+}
