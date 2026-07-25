@@ -123,3 +123,12 @@
 - 実装上の切り分け：Baseline Diff は **数量/role 層では即安定**（軒樋長・集水器数…）。**辺ごと Diff は Provider 間で edge id が不一致**のため辺対応付け（role＋位置順）が要る＝後段課題。辺内訳は Baseline に記録して参照に残す。
 - Alternatives: 常に cases.json を基準にする／Baseline を持たず最新 Run 同士で比較。
 - Rejected because: cases.json は最終数量(aggregate)のみで辺分解を持たない＝Baseline の方が診断が細かい。最新同士比較は基準が動いて回帰を検出できない。
+
+## 2026-07-25 — Baseline は IMMUTABLE（不変）。改善は上書きでなく新版を積む。Run に基準を埋め込む
+- Reason: Baseline を後から更新すると**過去の評価が全部変わる**（例：2026年 Recognizer v1=98% が、2027年に Baseline を変えた瞬間 95% になる）＝測定器として致命的。∴ Baseline は **編集不可・修正不可・削除不可（IMMUTABLE）**。改善版は `Human Baseline v1.0` を書き換えず **`v1.1`** を新規作成、測定方法が大きく変われば **`v2.0`**。系譜 `v1.0→v1.1→v2.0` を積む。
+- **Run に基準を埋め込む**：各 Run に `Compared Against: Human Baseline v1.0` を必ず保存。Baseline が増えても「その Run がどの標準器で評価されたか」は永久に失われない。
+- **ADR 類似**：ADR は Decision を、Baseline は Measurement Truth を残す。役割は違うが「過去を書き換えず新版を積む」哲学は同じ。
+- **Verification は4層**：**Baseline（何を真実とするか）→ Run（今回何を測ったか）→ Diff（どこが違ったか）→ Decision（どう判断したか）**。この4つで、数年後に Recognizer/Program が大きく進化しても「なぜ当時その評価だったか」を完全再現できる。
+- **適用範囲**：Drawing Intelligence だけでなく KKai・今後の甍AI 全体に展開できる検証アーキテクチャ（汎用の測定基盤）。
+- Alternatives: Baseline を可変にして常に最新へ更新／Run に基準を残さない。
+- Rejected because: 可変 Baseline は過去評価を破壊し回帰・進歩の履歴が消える。基準未記録だと後年 Diff の意味が復元不能。

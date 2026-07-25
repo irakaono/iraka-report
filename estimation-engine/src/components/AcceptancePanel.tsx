@@ -18,16 +18,20 @@ const stColor = (s: St): string => s === 'PASS' ? G : s === 'FAIL' ? R : GRAY;
 const stBg = (s: St): string => s === 'PASS' ? '#ebfbee' : s === 'FAIL' ? '#fff5f5' : '#f8f9fa';
 
 // 保存する Run（失敗も成果）。case・L0〜L3・Reason・内訳を残し Failure→Cause→Fix→PASS を追える。
+type Decision = 'adopt' | 'hold' | 'reject';
 interface AcceptanceRun {
   n: number; at: string; caseId: string; statuses: St[]; note: string;
+  comparedAgainst: string | null;   // Run 自身に埋め込む標準器の version（後年も基準が失われない）
+  decision: Decision | null;        // 4層目：どう判断したか
   l2: DeltaRow[]; l3: DeltaRow[]; breakdown: QuantityBreakdown[];
 }
-// Baseline（標準器・ゴールデンサンプル）。合格 Run を LOCK＝真実。以後すべてこの不変基準と比較する。
+// Baseline（標準器・ゴールデンサンプル）。合格 Run を固定＝真実。★IMMUTABLE：編集/修正/削除不可、改善は新版を積む。
 interface BaselineQ { key: string; label: string; unit: string; value: number }
 interface Baseline {
-  version: string; caseId: string; provider: 'human' | 'recognizer'; at: string; status: 'LOCKED';
+  version: string; caseId: string; provider: 'human' | 'recognizer'; at: string; status: 'IMMUTABLE';
   quantities: BaselineQ[]; breakdown: QuantityBreakdown[];
 }
+const decisionLabel: Record<Decision, string> = { adopt: '採用', hold: '保留', reject: '却下' };
 const round3 = (x: number): number => Math.round(x * 1000) / 1000;
 
 function breakdownToCSV(bd: QuantityBreakdown[]): string {
@@ -71,13 +75,24 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, on
   const L2reached = L0 && L05 && L1;   // Quantity を見てよい
   const L3reached = L2reached && L2;   // Program を見てよい
 
-  // Run 記録（失敗も成果として保存）
+  // Baseline（標準器・IMMUTABLE）：ALL PASS を固定。編集/修正/削除不可、改善は新版(v1.1/v2.0)を積む。
+  const [baseline, setBaseline] = useState<Baseline | null>(null);
+  const [baselineVer, setBaselineVer] = useState<string>('Human Baseline v1.0');
+  const baselineForCase = baseline && baseline.caseId === caseId ? baseline : null;
+
+  // Run 記録（失敗も成果）。Compared Against（基準の version）と Decision を Run 自身に埋め込む＝後年も基準・判断が失われない。
   const [runs, setRuns] = useState<AcceptanceRun[]>([]);
   const [note, setNote] = useState<string>('');
+  const [decision, setDecision] = useState<Decision | ''>('');
   const recordRun = () => {
     if (!report) return;
-    const run: AcceptanceRun = { n: runs.length + 1, at: new Date().toISOString(), caseId, statuses, note, l2: report.l2, l3: report.l3, breakdown };
-    setRuns((rs) => [...rs, run]); setNote('');
+    const run: AcceptanceRun = {
+      n: runs.length + 1, at: new Date().toISOString(), caseId, statuses, note,
+      comparedAgainst: baselineForCase ? baselineForCase.version : null,
+      decision: decision || null,
+      l2: report.l2, l3: report.l3, breakdown,
+    };
+    setRuns((rs) => [...rs, run]); setNote(''); setDecision('');
   };
   const exportRuns = () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify(runs, null, 2)], { type: 'application/json' }));
@@ -85,20 +100,21 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, on
     URL.revokeObjectURL(url);
   };
 
-  // Baseline（標準器）：ALL PASS の結果を LOCK。以後 Recognizer/Program/Geometry 更新は「Baseline との Diff」だけ見る。
-  const [baseline, setBaseline] = useState<Baseline | null>(null);
-  const [baselineVer, setBaselineVer] = useState<string>('Human Baseline v1.0');
-  const lockBaseline = () => setBaseline({
-    version: baselineVer || 'Human Baseline v1.0', caseId, provider: 'human', at: new Date().toISOString(), status: 'LOCKED',
-    quantities: quantities.map((x) => ({ key: x.key, label: x.label, unit: x.unit, value: round3(x.value) })), breakdown,
-  });
+  // IMMUTABLE：同一 version での上書き固定は不可（改善版は version を上げる）。
+  const canLock = allPass && (!baselineForCase || baselineForCase.version !== (baselineVer || 'Human Baseline v1.0'));
+  const lockBaseline = () => {
+    if (!canLock) return;
+    setBaseline({
+      version: baselineVer || 'Human Baseline v1.0', caseId, provider: 'human', at: new Date().toISOString(), status: 'IMMUTABLE',
+      quantities: quantities.map((x) => ({ key: x.key, label: x.label, unit: x.unit, value: round3(x.value) })), breakdown,
+    });
+  };
   const exportBaseline = () => {
     if (!baseline) return;
     const url = URL.createObjectURL(new Blob([JSON.stringify(baseline, null, 2)], { type: 'application/json' }));
-    const a = document.createElement('a'); a.href = url; a.download = `iraka-baseline-${baseline.caseId}.json`; a.click(); URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = url; a.download = `iraka-baseline-${baseline.caseId}-${baseline.version.replace(/[^\w.]+/g, '_')}.json`; a.click(); URL.revokeObjectURL(url);
   };
   const importBaseline = (file: File) => { file.text().then((t) => { try { setBaseline(JSON.parse(t) as Baseline); } catch { /* 無視 */ } }); };
-  const baselineForCase = baseline && baseline.caseId === caseId ? baseline : null;
   const baselineDiff = baselineForCase
     ? quantities.map((cur) => { const bl = baselineForCase.quantities.find((b) => b.key === cur.key); return { key: cur.key, label: cur.label, base: bl ? bl.value : null, current: round3(cur.value), delta: bl ? round3(cur.value - bl.value) : null }; })
     : null;
@@ -155,13 +171,17 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, on
         {allPass ? '✅ L0〜L3 ALL PASS' : '実証中…（測定器：PASSより「なぜFAILか」を見る）'}
       </div>
 
-      {/* Run 記録：失敗も成果として保存 */}
-      <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 8, background: '#f8f9fa', padding: 6, borderRadius: 6 }}>
+      {/* Run 記録：失敗も成果として保存（基準version・Decisionを埋め込む） */}
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 3, background: '#f8f9fa', padding: 6, borderRadius: 6 }}>
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Reason/メモ（例: E-014 role=eave should=keraba）"
           style={{ flex: 1, fontSize: 11, minWidth: 0 }} />
-        <button onClick={recordRun} title="この状態を Run として記録">記録</button>
+        <select value={decision} onChange={(e) => setDecision(e.target.value as Decision | '')} title="Decision：どう判断したか（4層目）" style={{ fontSize: 11 }}>
+          <option value="">判断</option><option value="adopt">採用</option><option value="hold">保留</option><option value="reject">却下</option>
+        </select>
+        <button onClick={recordRun} title="Run として記録（基準versionも埋め込む）">記録</button>
         {runs.length > 0 && <button onClick={exportRuns} title="全RunをJSONで保存">保存({runs.length})</button>}
       </div>
+      <div style={{ fontSize: 10, color: '#adb5bd', marginBottom: 6 }}>Compared Against: {baselineForCase ? baselineForCase.version : '未固定（Baseline無し）'}</div>
       {runs.length > 0 && (
         <div style={{ maxHeight: 90, overflowY: 'auto', marginBottom: 8, fontSize: 10.5 }}>
           {runs.slice().reverse().map((r) => (
@@ -169,44 +189,44 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, on
               <span style={{ color: '#868e96', width: 34 }}>#{String(r.n).padStart(3, '0')}</span>
               <span style={{ width: 34, color: '#868e96' }}>{r.caseId.slice(0, 4)}</span>
               <span style={{ display: 'flex', gap: 2 }}>{r.statuses.map((s, i) => <span key={i} title={base[i].k} style={{ color: stColor(s), fontWeight: 700 }}>{s === 'PASS' ? '✓' : s === 'FAIL' ? '✗' : '–'}</span>)}</span>
-              <span style={{ flex: 1, color: '#495057', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.note}</span>
+              {r.decision && <span style={{ color: r.decision === 'adopt' ? G : r.decision === 'reject' ? R : '#f08c00', fontWeight: 700 }}>{decisionLabel[r.decision]}</span>}
+              <span style={{ flex: 1, color: '#495057', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                title={(r.comparedAgainst ? 'vs ' + r.comparedAgainst : '基準なし') + (r.note ? ' — ' + r.note : '')}>{r.note}</span>
             </div>
           ))}
         </div>
       )}
 
-      {/* Baseline（標準器）：ALL PASSを固定→以後この不変基準と比較。Phase A の成果物＝Human Baseline v1.0 LOCKED */}
+      {/* Baseline（標準器・IMMUTABLE）：ALL PASSを固定→不変基準と比較。改善は上書きでなく新版(v1.1/v2.0)。Phase A 成果物＝Human Baseline v1.0 */}
       <div style={{ background: '#f3f0ff', padding: 6, borderRadius: 6, marginBottom: 8 }}>
-        {!baselineForCase ? (
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-            <span style={{ fontWeight: 700, color: '#5f3dc4' }}>Baseline</span>
-            <input value={baselineVer} onChange={(e) => setBaselineVer(e.target.value)} style={{ flex: 1, fontSize: 11, minWidth: 0 }} />
-            <button onClick={lockBaseline} disabled={!allPass} title={allPass ? 'この合格結果を標準器として固定' : 'ALL PASS 後に固定できます'}>固定</button>
-            <label style={{ fontSize: 11, cursor: 'pointer', color: '#5f3dc4' }}>読込<input type="file" accept="application/json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importBaseline(f); e.target.value = ''; }} /></label>
+        {baselineForCase && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
+            <span style={{ fontWeight: 700, color: '#5f3dc4' }}>🔒 {baselineForCase.version}</span>
+            <span style={{ fontSize: 10, color: '#868e96' }}>{baselineForCase.provider} / IMMUTABLE</span>
+            <span style={{ flex: 1 }} />
+            <button onClick={exportBaseline} title="標準器をJSON保存（永続・不変）">保存</button>
+            <button onClick={() => setBaseline(null)} title="表示から外す（切替用。保存済JSONは削除されない）">外す</button>
           </div>
-        ) : (
-          <>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
-              <span style={{ fontWeight: 700, color: '#5f3dc4' }}>🔒 {baselineForCase.version}</span>
-              <span style={{ fontSize: 10, color: '#868e96' }}>{baselineForCase.provider} / LOCKED</span>
-              <span style={{ flex: 1 }} />
-              <button onClick={exportBaseline}>保存</button>
-              <button onClick={() => setBaseline(null)}>解除</button>
-            </div>
-            {baselineDiff && (
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>Baseline</th><th style={{ ...th, textAlign: 'right' }}>Current</th><th style={{ ...th, textAlign: 'right' }}>Δ</th></tr></thead>
-                <tbody>{baselineDiff.map((d) => (
-                  <tr key={d.key}>
-                    <td style={td}>{d.label}</td>
-                    <td style={num}>{d.base ?? '—'}</td>
-                    <td style={num}>{d.current}</td>
-                    <td style={{ ...num, color: d.delta === 0 ? G : d.delta == null ? GRAY : R }}>{d.delta == null ? '—' : d.delta}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
-            )}
-          </>
+        )}
+        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+          <span style={{ fontWeight: 700, color: '#5f3dc4', fontSize: 11 }}>Baseline</span>
+          <input value={baselineVer} onChange={(e) => setBaselineVer(e.target.value)} style={{ flex: 1, fontSize: 11, minWidth: 0 }} />
+          <button onClick={lockBaseline} disabled={!canLock}
+            title={!allPass ? 'ALL PASS 後に固定できます' : (baselineForCase && baselineForCase.version === baselineVer ? '同一versionは上書き不可。改善版は v1.1 等に' : 'この合格結果を標準器として固定（IMMUTABLE）')}>固定</button>
+          <label style={{ fontSize: 11, cursor: 'pointer', color: '#5f3dc4' }}>読込<input type="file" accept="application/json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importBaseline(f); e.target.value = ''; }} /></label>
+        </div>
+        {baselineDiff && (
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 4 }}>
+            <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>Baseline</th><th style={{ ...th, textAlign: 'right' }}>Current</th><th style={{ ...th, textAlign: 'right' }}>Δ</th></tr></thead>
+            <tbody>{baselineDiff.map((d) => (
+              <tr key={d.key}>
+                <td style={td}>{d.label}</td>
+                <td style={num}>{d.base ?? '—'}</td>
+                <td style={num}>{d.current}</td>
+                <td style={{ ...num, color: d.delta === 0 ? G : d.delta == null ? GRAY : R }}>{d.delta == null ? '—' : d.delta}</td>
+              </tr>
+            ))}</tbody>
+          </table>
         )}
       </div>
 
