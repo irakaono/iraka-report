@@ -19,18 +19,27 @@ function readAsDataURL(file: File): Promise<string> {
   });
 }
 
-// PDF 1枚目を PNG dataURL に。pdfjs は初回だけ CDN から動的 import（バンドルに含めない）。
+// pdfjs は初回だけ CDN から動的 import（バンドルに含めない・画像はオフラインでも動く）。
 const PDFJS_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
 const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
 
-async function pdfFirstPageToDataURL(file: File): Promise<string> {
-  const spec = PDFJS_CDN; // 変数経由にして TS のモジュール解決(TS2307)を回避。実行時に URL から動的 import。
-  const pdfjs: any = await import(/* @vite-ignore */ spec);
-  pdfjs.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+let _pdfjs: any = null;
+async function getPdfjs(): Promise<any> {
+  if (_pdfjs) return _pdfjs;
+  const spec = PDFJS_CDN; // 変数経由で TS のモジュール解決(TS2307)を回避。実行時に URL から動的 import。
+  const mod: any = await import(/* @vite-ignore */ spec);
+  mod.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+  _pdfjs = mod;
+  return mod;
+}
+async function loadPdfDoc(file: File): Promise<any> {
+  const pdfjs = await getPdfjs();
   const data = await file.arrayBuffer();
-  const doc = await pdfjs.getDocument({ data }).promise;
-  const page = await doc.getPage(1);
-  const viewport = page.getViewport({ scale: 2 });
+  return pdfjs.getDocument({ data }).promise;
+}
+async function renderDocPage(doc: any, pageNum: number, scale = 2): Promise<string> {
+  const page = await doc.getPage(pageNum);
+  const viewport = page.getViewport({ scale });
   const canvas = document.createElement('canvas');
   canvas.width = Math.ceil(viewport.width);
   canvas.height = Math.ceil(viewport.height);
@@ -40,9 +49,33 @@ async function pdfFirstPageToDataURL(file: File): Promise<string> {
   return canvas.toDataURL('image/png');
 }
 
+// ── 複数ページPDFから 平面図/立面図 を自動抽出：各ページのテキスト層からタイトルを読み分類する ──
+export type PageCategory = 'plan' | 'elevation' | 'roofplan' | 'other';
+export interface PageInfo { n: number; category: PageCategory; title: string }
+function classifyPage(text: string): { category: PageCategory; title: string } {
+  const t = text.replace(/\s+/g, '');
+  const title = (t.match(/((?:[0-9０-９]{1,2}階|[東西南北]|小屋|基礎|地下|各階|R)?(?:平面詳細図|平面図|立面図|屋根伏図|小屋伏図|床伏図|基礎伏図|伏図|配置図|断面図|矩計図|展開図|面積表|求積図))/) || [])[1] || '';
+  let category: PageCategory = 'other';
+  if (/立面図/.test(t)) category = 'elevation';
+  else if (/屋根伏図/.test(t)) category = 'roofplan';
+  else if (/平面図|平面詳細図/.test(t)) category = 'plan';
+  return { category, title: title || (category === 'other' ? 'その他' : category) };
+}
+async function analyzeDoc(doc: any): Promise<PageInfo[]> {
+  const pages: PageInfo[] = [];
+  for (let n = 1; n <= doc.numPages; n++) {
+    const page = await doc.getPage(n);
+    const tc = await page.getTextContent();
+    const text = (tc.items as any[]).map((i) => (i.str || '')).join(' ');
+    const { category, title } = classifyPage(text);
+    pages.push({ n, category, title });
+  }
+  return pages;
+}
+
 async function fileToImageSrc(file: File): Promise<string> {
   const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-  if (isPdf) return pdfFirstPageToDataURL(file);
+  if (isPdf) { const doc = await loadPdfDoc(file); return renderDocPage(doc, 1); }
   if (file.type.startsWith('image/') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name)) return readAsDataURL(file);
   throw new Error('対応形式は PDF / 画像（PNG・JPG 等）です');
 }
@@ -101,6 +134,45 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
   const [elev, setElev] = useState<{ src: string | null; name: string | null }>({ src: null, name: null });
   const [busy, setBusy] = useState<{ plan: boolean; elev: boolean }>({ plan: false, elev: false });
   const [err, setErr] = useState<{ plan: string | null; elev: string | null }>({ plan: null, elev: null });
+  // 複数ページPDFからの自動抽出
+  const [extract, setExtract] = useState<{ fileName: string; pages: PageInfo[]; doc: any } | null>(null);
+  const [extractBusy, setExtractBusy] = useState(false);
+  const [extractErr, setExtractErr] = useState<string | null>(null);
+  const [planPage, setPlanPage] = useState<number | null>(null);
+  const [elevPage, setElevPage] = useState<number | null>(null);
+  const extractInputRef = useRef<HTMLInputElement>(null);
+
+  // 指定ページを描画して 平面図/立面図 スロットへ。
+  const selectPage = async (which: 'plan' | 'elev', doc: any, fileName: string, page: PageInfo) => {
+    setBusy((b) => ({ ...b, [which]: true }));
+    try {
+      const src = await renderDocPage(doc, page.n);
+      const name = `${fileName} p${page.n}${page.title && page.title !== 'その他' ? '（' + page.title + '）' : ''}`;
+      if (which === 'plan') { setPlan({ src, name }); setPlanPage(page.n); } else { setElev({ src, name }); setElevPage(page.n); }
+    } catch {
+      setErr((prev) => ({ ...prev, [which]: '該当ページの描画に失敗' }));
+    } finally { setBusy((b) => ({ ...b, [which]: false })); }
+  };
+
+  // 複数ページPDFを解析→平面図・立面図を自動検出して割り当て。
+  const onExtractFile = async (file: File) => {
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    if (!isPdf) { setExtractErr('自動抽出はPDFのみ対応（画像は左の枠へ）'); return; }
+    setExtractBusy(true); setExtractErr(null);
+    try {
+      const doc = await loadPdfDoc(file);
+      const pages = await analyzeDoc(doc);
+      setExtract({ fileName: file.name, pages, doc });
+      const planCand = pages.find((p) => p.category === 'plan') || pages.find((p) => p.category === 'roofplan');
+      const elevCand = pages.find((p) => p.category === 'elevation');
+      if (planCand) await selectPage('plan', doc, file.name, planCand);
+      if (elevCand) await selectPage('elev', doc, file.name, elevCand);
+      if (!planCand && !elevCand) setExtractErr('平面図・立面図を自動検出できませんでした。下でページを手動選択してください');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setExtractErr(/import/i.test(msg) ? 'PDF解析に失敗（オフライン時は自動抽出不可）' : msg);
+    } finally { setExtractBusy(false); }
+  };
 
   const pick = async (which: 'plan' | 'elev', file: File) => {
     setBusy((b) => ({ ...b, [which]: true }));
@@ -130,9 +202,47 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         <DropZone label="平面図" src={plan.src} name={plan.name} busy={busy.plan} error={err.plan}
-          onPick={(f) => pick('plan', f)} onClear={() => { setPlan({ src: null, name: null }); setErr((e) => ({ ...e, plan: null })); }} />
+          onPick={(f) => pick('plan', f)} onClear={() => { setPlan({ src: null, name: null }); setErr((e) => ({ ...e, plan: null })); setPlanPage(null); }} />
         <DropZone label="立面図" src={elev.src} name={elev.name} busy={busy.elev} error={err.elev}
-          onPick={(f) => pick('elev', f)} onClear={() => { setElev({ src: null, name: null }); setErr((e) => ({ ...e, elev: null })); }} />
+          onPick={(f) => pick('elev', f)} onClear={() => { setElev({ src: null, name: null }); setErr((e) => ({ ...e, elev: null })); setElevPage(null); }} />
+      </div>
+
+      {/* 複数ページPDFから自動抽出 */}
+      <div style={{ marginTop: 14 }}>
+        <div
+          onDragOver={(e) => { e.preventDefault(); }}
+          onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) onExtractFile(f); }}
+          onClick={() => extractInputRef.current?.click()}
+          style={{ border: '2px dashed #b9a3e3', borderRadius: 10, background: '#faf8ff', padding: '12px 16px', cursor: 'pointer', textAlign: 'center' }}
+        >
+          <input ref={extractInputRef} type="file" accept="application/pdf,.pdf" style={{ display: 'none' }}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) onExtractFile(f); e.target.value = ''; }} />
+          {extractBusy
+            ? <span style={{ color: '#5f3dc4', fontWeight: 600 }}>解析中…（各ページのタイトルを読んでいます）</span>
+            : <span style={{ color: '#5f3dc4', fontWeight: 700 }}>📄 確認申請図面など（複数ページPDF）をドロップ → 平面図・立面図を自動抽出</span>}
+          {extractErr && <div style={{ marginTop: 6, fontSize: 12, color: '#e03131' }}>⚠ {extractErr}</div>}
+        </div>
+        {extract && (
+          <div style={{ marginTop: 10, padding: '10px 14px', background: '#f5f2ff', borderRadius: 10, fontSize: 12 }}>
+            <div style={{ color: '#5f3dc4', fontWeight: 700, marginBottom: 8 }}>
+              {extract.fileName}：{extract.pages.length}ページ解析（平面{extract.pages.filter((p) => p.category === 'plan').length}・立面{extract.pages.filter((p) => p.category === 'elevation').length}・屋根伏図{extract.pages.filter((p) => p.category === 'roofplan').length} 検出）
+            </div>
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+              <label style={{ color: '#495057' }}>平面図ページ：{' '}
+                <select value={planPage ?? ''} onChange={(e) => { const n = Number(e.target.value); const pg = extract.pages.find((p) => p.n === n); if (pg) selectPage('plan', extract.doc, extract.fileName, pg); }}>
+                  <option value="">選択</option>
+                  {extract.pages.map((p) => <option key={p.n} value={p.n}>p{p.n} {p.title}</option>)}
+                </select>
+              </label>
+              <label style={{ color: '#495057' }}>立面図ページ：{' '}
+                <select value={elevPage ?? ''} onChange={(e) => { const n = Number(e.target.value); const pg = extract.pages.find((p) => p.n === n); if (pg) selectPage('elev', extract.doc, extract.fileName, pg); }}>
+                  <option value="">選択</option>
+                  {extract.pages.map((p) => <option key={p.n} value={p.n}>p{p.n} {p.title}</option>)}
+                </select>
+              </label>
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ textAlign: 'center', marginTop: 24 }}>
