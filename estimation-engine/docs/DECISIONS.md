@@ -58,3 +58,39 @@
 - Reason: ユーザーの本当の要求は「図面を入れてボタンを押すと積算が出る」。核心は図面を理解する能力で、屋根/雨樋積算・排水経路・伏図・換気棟は全部その上に載る。
 - Alternatives: 「積算ソフト」として個別機能を積む。
 - Rejected because: 図面理解を核に据えると全機能が同じ土台で一貫する。Phase 1 の Compiler は「図面理解の後(Geometry→Estimate)」の半分＝AI認識結果を信頼できる積算に変える下半分。Recognizer(図面→Geometry IR/Model)が新しい入口で、既存パイプラインにそのまま繋がる。
+
+## 2026-07-25 — 甍AI の中核技術は Recognizer。Compiler は「十分」＝これ以上育てない
+- Reason: 7棟の実見積(cases.json)を並べて確信。Compiler は5計算モデルが同一契約に収束＝証明済み。Program も実データが入り始めた（単価はほぼ一定で確度高）。いま最大の価値／技術課題は「図面から、その Program へ渡す数量をどう作るか」＝Recognizer。甍AI の定義を「屋根・雨樋の積算AI」→「**建築図面を理解し数量を導く Recognizer**」に更新。
+- Alternatives: 引き続き Compiler / 抽象化を育てる。
+- Rejected because: Compiler は完成。抽象化を増やしても現場価値は増えない。図面→数量が通らない限り、どんな Compiler も机上のまま。
+
+## 2026-07-25 — Phase 2 を「Programs」から「Recognizer」へリネーム
+- Reason: Phase 2 の重心は「Program を磨く」より「図面理解を作る」。Program の実データ化は始まっており、Program改善の自動化は Phase 3（AIがProgramを育てる）へ送る。Project doc は `PHASE2-PROGRAMS.md` → `PHASE2-RECOGNIZER.md`。
+- Alternatives: Phase 2 = Programs のまま、Recognizer は一機能として内包。
+- Rejected because: 名前が優先順位を決める。「Recognizer が Phase 2」と明言しないと、また Compiler/抽象化に手が戻る。Program 作業は消えず Phase 2 内・Phase 3 で継続。
+
+## 2026-07-25 — cases.json は Program Validation 兼 Recognizer の評価データ（アクセプタンス・ゲート）
+- Reason: `図面 → Recognizer → 数量` を cases.json の数量と突き合わせれば、Recognizer の精度を客観測定できる。7棟で v1.0 の達成判定と精度測定に十分。
+- Alternatives: cases.json を Program(単価/歩掛)の検証専用に閉じる。
+- Rejected because: 同じ7棟が「入力(図面, project内)＋出力(数量, cases.json)」の対になっており、Recognizer の答え合わせに直結。ただし現状は最終数量のみ＝訓練データではなくアクセプタンス・ゲート。中間正解（数量の拾い根拠）は積算資料PDF(画像・未数値化)にあり、その数値化が図面→Geometry の教師を完成させる＝次の恒久抽出ターゲット。
+
+## 2026-07-25 — 取引先ごとに Program。Recognizer(数量)は全社共通。WITH DOM saitama ＝ Program #1
+- Reason: Recognizer が出すのは建物の事実（面積・役割別エッジ長・本数）＝取引先に依存しない。取引先ごとに変わるのは Program（商品＋単価＋拾いルール）だけ。∴ 構造は「1 Recognizer × N Programs（取引先ごと）」。cases.json の7棟は最初の取引先 WITH DOM saitama のパターン＝Program #1。まずこの1社を固め、数量が拾えたら2社目以降は商品表(Program)を足すだけで広がる。
+- Alternatives: 取引先ごとに Recognizer/積算ロジックを分ける。最初から複数取引先を並行で作る。
+- Rejected because: Recognizer を分けると価値が分散し、投資回収が1社に閉じる。数量は全社共通なので Recognizer は1本で足りる。並行着手は #1 が固まる前に拡散する。まず WITH DOM で「図面→数量→答え合わせ」を一周させるのが最速で全社に効く。「Compiler は取引先中立／変わるのは Program だけ」の実地証明でもある。
+
+## 2026-07-25 — 甍AI の定義（確定版・一文）／Recognizer は主役でなくパイプラインの一部
+> 甍AIは、建築図面から「建物の事実（Geometry・Quantity）」を抽出し、それを取引先ごとの Program へ適用して積算を生成するシステムである。
+- Reason: この一文に 図面理解・数量抽出・Program・取引先ごとの差し替え が全部入り、将来の伏図生成/排水経路生成/換気棟計算 を足しても定義を変えずに済む。「Recognizer」は技術名（開発者の言葉）で、プロジェクトの目的＝屋根・雨樋積算OS の主役ではない。上記2件（『中核技術は Recognizer』『Phase2をRecognizerへ』）を**精緻化・上書き**する。
+- Alternatives: 「甍AI＝Recognizer」を看板に据え続ける。
+- Rejected because: 技術名を目的に昇格させると視野が図面認識に狭まる。目的は「事実を抽出→Programで積算」という OS。Recognizer はその入口の一部。
+
+## 2026-07-25 — Phase 2 ＝ Drawing Intelligence（図面理解）。Recognizer はその構成要素
+- Reason: Phase 2 の器を「Recognizer」より広い **Drawing Intelligence** にする。中に Recognizer / Geometry生成 / Quantity抽出 が入り、将来の 屋根伏図生成 / 排水経路生成 / 換気棟配置 も同じ器に収まる。Project doc は `PHASE2-RECOGNIZER.md` → `PHASE2-DRAWING-INTELLIGENCE.md`。
+- Alternatives: Phase 2 = Recognizer のまま個別機能を積む。
+- Rejected because: 器が狭いと伏図・排水経路・換気棟が「別物」に見えてしまう。全部「図面から事実を作る」で一貫させる。
+
+## 2026-07-25 — 資産は Quantity（建物の事実）。ただし保存する正は Geometry(Model)
+- Reason: 数量は一度だけ拾い、その1つの Quantity から WITH DOM向け／他社向け／メーカーA・B仕様… を何通りでも生成できる（商品・単価は変わっても 軒先37.4m・谷8.2m・面積143.77㎡ は不変）。∴ 甍AIが作る資産＝Quantity＝クライアント中立の分岐点(fork)。分岐キーは取引先でも販売ルートでもメーカー仕様でもよい（＝『Program は甍の積算ルール、メーカーそのものではない』と一致）。
+- Alternatives: Quantity を保存の正にする。
+- Rejected because: Quantity を保存すると今日の taxonomy で凍結（将来の伏図・排水経路は数量一覧でなく「形」から引く）。Geometry(Model) を保存すれば今 taxonomy に無い数量も後から derive できる。Evidence First と矛盾せず両立：**保存＝Geometry、資産(fork)＝Quantity(その Projection)**。「一度だけ拾う」の“一度”を支えるのが Geometry。実装も `Geometry → roof/drainQuantities(=Quantity) → Material IR＋Program → 積算`。

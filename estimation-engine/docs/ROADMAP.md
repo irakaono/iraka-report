@@ -3,17 +3,26 @@
 > 設計はクローズ。ここに書くのは「設計」ではなく **どこがゴールか**。
 > 判断に迷ったら「これは v1.0 に必要か？」をこの旗に照らす。
 
-## 甍AI の正体 ＝ 図面理解AI（積算はその最初の成果物）
-甍AI は「積算ソフト」ではない。**図面を理解する能力**が核心で、積算はそこから生まれる最初の出力。
-図面理解が強くなれば、屋根積算・雨樋積算・排水経路・排水能力判定・屋根伏図生成・換気棟設計 は**すべて同じ土台の上**に積み上がる。
+## 甍AI の定義（ミッション・確定版）
+> **甍AIは、建築図面から「建物の事実（Geometry・Quantity）」を抽出し、それを取引先ごとの Program へ適用して積算を生成するシステムである。**
+
+この一文に、図面理解・数量抽出・Program・取引先ごとの差し替え が全部入る。将来「屋根伏図生成」「排水経路生成」「換気棟計算」を足しても、この定義は変えなくていい。
+- **Recognizer は技術名（開発者の言葉）であって、プロジェクトの主役ではない。** 図面→Geometry→Quantity を作るパイプラインの一部。
+- 甍AI が作る資産＝**Quantity（建物の事実：軒先37.4m・谷8.2m・面積143.77㎡…）**。取引先や商品が変わっても建物の事実は変わらない。
+- **数量は一度だけ拾う。** その1つの Quantity から、WITH DOM向け／他社向け／メーカーA仕様／B仕様… を何通りでも生成できる。
 
 ```
 図面(平面図/立面図)
-   → [図面理解 / Recognizer]   ← ★これから育てる核心（＝AIが図面から Geometry を作る）
-   → Geometry IR (Model)         ← 人が確認・修正できる真実（Evidence First）
-   → Execution → Domain Compiler → Estimate   ← Phase 1 で完成済み
+   ├─ Drawing Intelligence（図面理解 = Phase 2）─────────────┐
+   │    Recognizer → Geometry IR(Model) → Quantity(建物の事実)  │  ここまで 100% 共通
+   └──────────────────────────────────────────────┘
+   → ×N Program（取引先/販売ルート/メーカー仕様の積算ルール）    ← ここで初めて分岐
+   → Execution → Domain Compiler → 積算（見積は何通りでも）      ← Phase 1 完成済み
 ```
-Phase 1（Compiler）は「図面が理解できた後」の半分。v1.0 で作るのは「図面 → Geometry」の手前の半分。
+※ **保存する正は Geometry(Model)**（Evidence First）。Quantity はその Projection＝クライアント中立の分岐点(fork)。
+Quantity そのものを保存すると今日の taxonomy で凍結してしまう（将来の伏図・排水経路は数量一覧でなく「形」から引く）。
+Geometry を持つ限り、今 taxonomy に無い数量も後から derive できる。**資産は Quantity、それを生み続ける源として Geometry を保存する。**
+「数量は一度だけ拾う」の“一度”を成立させているのが Geometry。コード上も `Geometry → roof/drainQuantities(=Quantity・fork点) → Material IR＋Program → 積算`。
 
 ## ユーザー体験（v1.0）
 ユーザーがやるのは2つだけ：**① 図面を入れる ② ボタンを押す**。
@@ -40,8 +49,13 @@ Phase 1（Compiler）は「図面が理解できた後」の半分。v1.0 で作
 
 ## Phase の対応
 - Phase 1（Architecture Validation）✅ CLOSED：Compiler を証明（`ARCHITECTURE.md`）。
-- Phase 2（Reality Validation）：図面理解を作り、実案件1棟を図面→積算まで通す（＝v1.0）。評価は Program Validation（現場で使えるか）。
+- **Phase 2（Drawing Intelligence / 図面理解）**：中核＝図面から建物の事実(Quantity)を作る。構成要素＝**Recognizer / Geometry生成 / Quantity抽出**（将来の屋根伏図生成・排水経路生成・換気棟配置もこの器に入る）。実案件1棟を図面→積算まで通す（＝v1.0）。評価は `knowledge/validation/cases.json`（7棟の実見積）で数量を答え合わせ＝**アクセプタンス・ゲート**。詳細は Project doc `claude/PHASE2-DRAWING-INTELLIGENCE.md`。
 - Phase 3（Program Improvement）：Compiler は触らない。**甍の積算知識(Program)を育てる**。AI の役割 = Compiler を書くのでなく Program を育てる（実績→歩掛分析→更新案＋Evidence＋CHANGELOG→承認→採用）。
+
+## cases.json ＝ Drawing Intelligence の評価データ（教師の半分）
+`knowledge/validation/cases.json` は Program Validation 兼 **図面理解（Recognizer→Quantity）の答え合わせ**。`図面 → Quantity` が cases.json の数量と一致するかで精度を測る。
+- 今あるのは「入力(図面)＋最終数量」の対（7棟・最終数量のみ）＝**アクセプタンス・ゲート**（訓練データというより回帰テスト。7棟で v1.0 を証明・精度測定はできる）。
+- 欠けている中間＝「その数量が図面のどの辺から来たか」は **積算資料PDF（画像・未数値化）** の中。**次の恒久抽出ターゲット**＝積算資料の数値化で、図面→Geometry の中間正解が付き学習ループが閉じる。
 
 ## 将来ほしい機能（雨樋 / 屋根）
 - 雨樋：排水経路の自動作図 / 排水能力チェック / 必要部材の自動拾い（甍の積算ルールで PC50 → 軒樋◯本・集水器◯個・縦樋◯m）。
