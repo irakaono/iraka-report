@@ -153,3 +153,10 @@
 - 最終フロー：`Drawing→Geometry→Evidence→Quantity→[Human/AI/GT]→Review→Decision→Knowledge{Project,Company}→Learning→Export`。同一データ基盤で「案件管理OS／会社知識OS／AI育成OS」の3つを実現。詳細 `claude/VER1-OS-ARCHITECTURE.md`。
 - Alternatives: Learning と Knowledge を同一視／Review を挟まず AI/GT から直接 Decision。
 - Rejected because: データと知識を混ぜると「AIが読むべき蒸留知識」と「学習素材」が分離できない。Review 無しだと承認責任の履歴が残らず、公共工事や監査で通らない。
+
+## 2026-07-25 — ゴール＝Digital Twin（建物の一生を支えるOS）。「AI積算ソフト」ではない
+- Reason: 甍AI の最終目標は **建築会社の知識と建物のライフサイクルを支える OS**。`図面→Geometry→屋根→雨樋→排水経路→材料→施工→実績→点検→修繕→次回積算`（建物の一生）。屋根伏図生成・雨樋経路計画・Excel・Knowledge・Learning・Recognizer は全部この一本の線へ向かう。詳細ロードマップは Project doc `claude/BACKLOG-yaritai.md`。
+- ★価値の変曲点：一番価値があるのは屋根伏図生成そのものでなく**その次**＝`屋根伏図→AIが排水経路を書く→集水器位置→縦樋位置→排水能力計算→必要部材を全部拾う`＝**設計支援AI**（市場にほぼ無い領域）。
+- フェーズ＝別プロジェクト：Ver.1 Excel/積算保存 → Ver.1.x 雨樋排水経路(AIが"考える"最初) → Ver.2 屋根伏図生成(図面生成AIの入口) → Ver.3 Company Knowledge → 最終 Digital Twin。
+- Alternatives: 「AI積算ソフト」として機能を積む。
+- Rejected because: 積算はライフサイクルの一断面。Digital Twin を北極星に置くと、既存の 案件→Geometry→Evidence→Provider→Review→Decision→Knowledge がそのまま一生の管理へ拡張でき、途中で設計を作り直さない。
