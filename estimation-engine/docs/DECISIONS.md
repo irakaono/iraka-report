@@ -94,3 +94,9 @@
 - Reason: 数量は一度だけ拾い、その1つの Quantity から WITH DOM向け／他社向け／メーカーA・B仕様… を何通りでも生成できる（商品・単価は変わっても 軒先37.4m・谷8.2m・面積143.77㎡ は不変）。∴ 甍AIが作る資産＝Quantity＝クライアント中立の分岐点(fork)。分岐キーは取引先でも販売ルートでもメーカー仕様でもよい（＝『Program は甍の積算ルール、メーカーそのものではない』と一致）。
 - Alternatives: Quantity を保存の正にする。
 - Rejected because: Quantity を保存すると今日の taxonomy で凍結（将来の伏図・排水経路は数量一覧でなく「形」から引く）。Geometry(Model) を保存すれば今 taxonomy に無い数量も後から derive できる。Evidence First と矛盾せず両立：**保存＝Geometry、資産(fork)＝Quantity(その Projection)**。「一度だけ拾う」の“一度”を支えるのが Geometry。実装も `Geometry → roof/drainQuantities(=Quantity) → Material IR＋Program → 積算`。
+
+## 2026-07-25 — 雨樋検証＝Drawing Intelligence の最初の Acceptance（雨樋エンジンの検証ではない）
+- Reason: 雨樋は `Quantity→Program→見積` が単純なので、図面→Geometry→Quantity を純粋に測れる。ゴール＝「図面から生成した Geometry が cases.json と一致する Quantity を導けることを証明する」。測定ラダー L0図面が読める / L1 Geometry(正解Geometryが無いので辺内訳ログで診断) / L2 Quantity(合格=max(±0.1m,±1%)、自動化目標±20mm) / L3 Program=cases.json と100%一致。各段でΔを残す。詳細は Project doc `claude/ACCEPTANCE-drawing-intelligence.md`。
+- Alternatives: 合計 Quantity だけ見て合否。トレランスを一律 ±20mm。
+- Rejected because: 合計だけだと「どの辺を間違えたか」が追えず教師データにもならない→辺ごと内訳ログ(edgeId/role/length/total)をロック。cases.json は0.1m丸め＝精度上限0.1m、手トレース＋raster図面で±20mmは非現実的→トレランスは2段階(手トレース期 max(±0.1m,1%) / 自動化期 目標±20mm)。前提：スケール較正(px→m を既知寸法2点で確定)が隠れたL0.5で必須。L3にはWITH DOM雨樋Program(単価はcases.jsonに既存)の実配線が要る。この局面のΔは主に人トレース精度＝将来Recognizerを同じハーネスで差し替えて測るためのベースライン。
+- 上位原則（ロック）: **Acceptance の閾値は Ground Truth(cases.json)の測定粒度を超えてはならない。** 今の Δ には〔人トレース＋較正＋raster解像度＋0.1m丸め〕が混在し、±20mmを合否にすると Drawing Intelligence の良否と測定系の良否を分離できない。より高精度なGround Truth(レーザースキャン/CAD/BIM)が入れば閾値を自然に tightening する。Phase A=max(±0.1m,±1%) を正式Acceptanceにロック、Phase B(Recognizer)で±20mmへ引き締め。

@@ -1,0 +1,11 @@
+{
+  "client": "WITH DOM saitama",
+  "domain": "gutter",
+  "note": "甍が取引先 WITH DOM saitama 向けに雨樋を積算するルール（Iraka Program #1・雨樋）。単価は cases.json の実見積から。Quantity→Estimate だけを見る（Geometryには触れない）。諸経費は案件ごとの入力（Programの定数ではない）。",
+  "taxRate": 0.1,
+  "lines": [
+    { "quantityKey": "gutterLength", "name": "軒とい ファインスケアNF-1型", "unit": "m", "unitPrice": 3850 },
+    { "quantityKey": "outletCount", "name": "集水器 F型", "unit": "ヶ所", "unitPrice": 2950 },
+    { "quantityKey": "downspoutLength", "name": "たてとい", "unit": "m", "unitPrice": 2200 }
+  ]
+}
