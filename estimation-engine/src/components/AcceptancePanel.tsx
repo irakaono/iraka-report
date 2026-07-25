@@ -22,6 +22,13 @@ interface AcceptanceRun {
   n: number; at: string; caseId: string; statuses: St[]; note: string;
   l2: DeltaRow[]; l3: DeltaRow[]; breakdown: QuantityBreakdown[];
 }
+// Baseline（標準器・ゴールデンサンプル）。合格 Run を LOCK＝真実。以後すべてこの不変基準と比較する。
+interface BaselineQ { key: string; label: string; unit: string; value: number }
+interface Baseline {
+  version: string; caseId: string; provider: 'human' | 'recognizer'; at: string; status: 'LOCKED';
+  quantities: BaselineQ[]; breakdown: QuantityBreakdown[];
+}
+const round3 = (x: number): number => Math.round(x * 1000) / 1000;
 
 function breakdownToCSV(bd: QuantityBreakdown[]): string {
   const header = ['quantityKey', 'label', 'unit', 'refId', 'role', 'value', 'source', 'confidence'].join(',');
@@ -77,6 +84,24 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, on
     const a = document.createElement('a'); a.href = url; a.download = `iraka-acceptance-runs-${caseId}.json`; a.click();
     URL.revokeObjectURL(url);
   };
+
+  // Baseline（標準器）：ALL PASS の結果を LOCK。以後 Recognizer/Program/Geometry 更新は「Baseline との Diff」だけ見る。
+  const [baseline, setBaseline] = useState<Baseline | null>(null);
+  const [baselineVer, setBaselineVer] = useState<string>('Human Baseline v1.0');
+  const lockBaseline = () => setBaseline({
+    version: baselineVer || 'Human Baseline v1.0', caseId, provider: 'human', at: new Date().toISOString(), status: 'LOCKED',
+    quantities: quantities.map((x) => ({ key: x.key, label: x.label, unit: x.unit, value: round3(x.value) })), breakdown,
+  });
+  const exportBaseline = () => {
+    if (!baseline) return;
+    const url = URL.createObjectURL(new Blob([JSON.stringify(baseline, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = `iraka-baseline-${baseline.caseId}.json`; a.click(); URL.revokeObjectURL(url);
+  };
+  const importBaseline = (file: File) => { file.text().then((t) => { try { setBaseline(JSON.parse(t) as Baseline); } catch { /* 無視 */ } }); };
+  const baselineForCase = baseline && baseline.caseId === caseId ? baseline : null;
+  const baselineDiff = baselineForCase
+    ? quantities.map((cur) => { const bl = baselineForCase.quantities.find((b) => b.key === cur.key); return { key: cur.key, label: cur.label, base: bl ? bl.value : null, current: round3(cur.value), delta: bl ? round3(cur.value - bl.value) : null }; })
+    : null;
 
   const exportCSV = () => {
     const csv = breakdownToCSV(breakdown);
@@ -149,6 +174,41 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, on
           ))}
         </div>
       )}
+
+      {/* Baseline（標準器）：ALL PASSを固定→以後この不変基準と比較。Phase A の成果物＝Human Baseline v1.0 LOCKED */}
+      <div style={{ background: '#f3f0ff', padding: 6, borderRadius: 6, marginBottom: 8 }}>
+        {!baselineForCase ? (
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <span style={{ fontWeight: 700, color: '#5f3dc4' }}>Baseline</span>
+            <input value={baselineVer} onChange={(e) => setBaselineVer(e.target.value)} style={{ flex: 1, fontSize: 11, minWidth: 0 }} />
+            <button onClick={lockBaseline} disabled={!allPass} title={allPass ? 'この合格結果を標準器として固定' : 'ALL PASS 後に固定できます'}>固定</button>
+            <label style={{ fontSize: 11, cursor: 'pointer', color: '#5f3dc4' }}>読込<input type="file" accept="application/json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importBaseline(f); e.target.value = ''; }} /></label>
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
+              <span style={{ fontWeight: 700, color: '#5f3dc4' }}>🔒 {baselineForCase.version}</span>
+              <span style={{ fontSize: 10, color: '#868e96' }}>{baselineForCase.provider} / LOCKED</span>
+              <span style={{ flex: 1 }} />
+              <button onClick={exportBaseline}>保存</button>
+              <button onClick={() => setBaseline(null)}>解除</button>
+            </div>
+            {baselineDiff && (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>Baseline</th><th style={{ ...th, textAlign: 'right' }}>Current</th><th style={{ ...th, textAlign: 'right' }}>Δ</th></tr></thead>
+                <tbody>{baselineDiff.map((d) => (
+                  <tr key={d.key}>
+                    <td style={td}>{d.label}</td>
+                    <td style={num}>{d.base ?? '—'}</td>
+                    <td style={num}>{d.current}</td>
+                    <td style={{ ...num, color: d.delta === 0 ? G : d.delta == null ? GRAY : R }}>{d.delta == null ? '—' : d.delta}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Geometry：辺ごと内訳ログ */}
       <div style={{ fontWeight: 700, color: '#343a40', margin: '6px 0 2px' }}>Geometry（辺ごと内訳・source/confidence）</div>

@@ -116,3 +116,10 @@
 - Reason: 評価系が壊れないための運用規約。②③は診断の速さと正しさ、①④は Recognizer(Phase B) を同じ物差しで測るための土台。
 - Alternatives: PASSだけ記録／一度PASSで完了とする。
 - Rejected because: 失敗を捨てると Cause→Fix の学習が消える。一度PASSは再現性を保証しない（操作依存の偶然PASSを完了と誤認する）。
+
+## 2026-07-25 — Baseline（標準器）を固定する／Phase A の成果物＝「Human Baseline v1.0 LOCKED」
+- Reason: 案件×Provider×更新(Program/Geometry/Calibration) で Run が増えると「どの Run を基準に比較するか」が必ず崩れる。そこで **Baseline を LOCK**（例: `mizukami / Human / Run#018 / LOCKED`）＝これが真実。以後は `Recognizer v1 → Baseline との Diff` だけ見る。Verification は3層 `Baseline → Run → Diff` になり、Diff だけで原因が分かる。Provider思想と一致：Human で Baseline を作り、Recognizer/Program更新は**同じ不変の Baseline** に対してのみ比較＝比較対象が永遠に変わらない。
+- ★v1.0 の定義（更新）：**「Human Baseline v1.0 が LOCKED された瞬間」＝ Drawing Intelligence が本当の意味で Version 1.0**。単なる「一度PASS」でも「Human Provider Completed」でもなく、水上で**再現性をもって**ALL PASS した Run を標準器として固定できた時。
+- 実装上の切り分け：Baseline Diff は **数量/role 層では即安定**（軒樋長・集水器数…）。**辺ごと Diff は Provider 間で edge id が不一致**のため辺対応付け（role＋位置順）が要る＝後段課題。辺内訳は Baseline に記録して参照に残す。
+- Alternatives: 常に cases.json を基準にする／Baseline を持たず最新 Run 同士で比較。
+- Rejected because: cases.json は最終数量(aggregate)のみで辺分解を持たない＝Baseline の方が診断が細かい。最新同士比較は基準が動いて回帰を検出できない。

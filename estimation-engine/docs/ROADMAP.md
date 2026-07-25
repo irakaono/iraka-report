@@ -44,10 +44,11 @@ Geometry を持つ限り、今 taxonomy に無い数量も後から derive で�
 | v1.4 | 屋根伏図を平面図＋立面図から自動生成（目玉機能） |
 | v1.5 | 換気棟 自動設計（小屋裏容積→必要換気量→換気棟能力→必要本数） |
 
-**v1.0 の線引き**：「**一度**、実案件1棟が図面→積算まで通った」で達成。毎日の堅牢性・複数棟スケール・見積書テンプレ精緻化は v1.x。
-**位置づけ**：v1.0 ＝ 甍AI 最初の正式版。**v0.5.0 ＝ その土台（Compiler 完成＋業務OS統合）**。
+**v1.0 の線引き（確定）**：単なる「一度PASS」ではなく **「Human Baseline v1.0 が LOCKED された瞬間」**＝水上で**再現性をもって** L0〜L3 ALL PASS した Run を標準器（ゴールデンサンプル）として固定できた時。これを以て Drawing Intelligence が本当の意味で v1.0。毎日の堅牢性・複数棟スケール・見積書テンプレ精緻化は v1.x。
+**位置づけ**：v1.0 ＝ 甍AI 最初の正式版（Human Baseline v1.0）。**v0.5.0 ＝ その土台（Compiler 完成＋業務OS統合）**。以後の Recognizer / Geometry / Program 更新は、すべてこの Baseline に対して評価する（比較対象は不変）。
 
 ## Phase の対応
+- Verification は3層：**Baseline → Run → Diff**。Baseline（Human Baseline v1.0・LOCKED）を標準器に固定し、以後は Baseline との Diff だけ見る。Recognizer/Program/Geometry 更新は比較対象（Baseline）が不変。実装：Acceptance Panel に Baseline 固定/保存/読込＋Baseline vs Current Diff。
 - Phase 1（Architecture Validation）✅ CLOSED：Compiler を証明（`ARCHITECTURE.md`）。
 - **Phase 2（Drawing Intelligence / 図面理解）**：中核＝図面から建物の事実(Quantity)を作る。構成要素＝**Recognizer / Geometry生成 / Quantity抽出**（将来の屋根伏図生成・排水経路生成・換気棟配置もこの器に入る）。実案件1棟を図面→積算まで通す（＝v1.0）。評価は `knowledge/validation/cases.json`（7棟の実見積）で数量を答え合わせ＝**アクセプタンス・ゲート**。詳細は Project doc `claude/PHASE2-DRAWING-INTELLIGENCE.md`。
 - Phase 3（Program Improvement）：Compiler は触らない。**甍の積算知識(Program)を育てる**。AI の役割 = Compiler を書くのでなく Program を育てる（実績→歩掛分析→更新案＋Evidence＋CHANGELOG→承認→採用）。
