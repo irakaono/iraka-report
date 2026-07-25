@@ -1,0 +1,15 @@
+{
+  "client": "WITH DOM saitama",
+  "domain": "roof",
+  "note": "甍の Roof Domain Program #1（屋根）。単価は cases.json の実見積から。屋根面積・役割別エッジ長から主要項目を価格化。面積由来(下葺・屋根材)は確度が高い。エッジ由来(桟鼻/雪止め/唐草/破風)はロール対応の近似で、精度は Acceptance の Diff で検証する。換気棟・雨押え・通気部材・唐草60・諸経費など数量詳細/現場判断が要る項目は別途手入力。",
+  "taxRate": 0.1,
+  "lines": [
+    { "quantityKey": "roofArea", "name": "下葺ルーフィング（タディスセルフアーマー）", "unit": "㎡", "unitPrice": 1350 },
+    { "quantityKey": "roofArea", "name": "屋根工事 ビルトマテリアル デコルーフ フラットH-30-455 0.4", "unit": "㎡", "unitPrice": 4900 },
+    { "quantityKey": "eaveLength", "name": "桟鼻（後付け）", "unit": "m", "unitPrice": 750 },
+    { "quantityKey": "eaveLength", "name": "雪止め金具（シングル）", "unit": "m", "unitPrice": 2400 },
+    { "quantityKey": "gableLength", "name": "捨て唐草45", "unit": "m", "unitPrice": 900 },
+    { "quantityKey": "gableLength", "name": "破風板金 特注加工", "unit": "m", "unitPrice": 2800 },
+    { "quantityKey": "ridgeLength", "name": "棟", "unit": "m", "unitPrice": 2500 }
+  ]
+}

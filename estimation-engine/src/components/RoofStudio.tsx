@@ -29,6 +29,7 @@ import AcceptancePanel from './AcceptancePanel';
 import { buildEstimate, buildQuotation } from '../geometry/estimateExport';
 import type { GutterProgram } from '../geometry/acceptance';
 import withdomGutter from '../../knowledge/programs/withdom-saitama.gutter.json';
+import withdomRoof from '../../knowledge/programs/withdom-saitama.roof.json';
 
 const SHEETJS_CDN = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
 
@@ -291,7 +292,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
     try {
       const spec = SHEETJS_CDN;
       const XLSX = await import(/* @vite-ignore */ spec) as any;
-      const doc = buildEstimate(rq, dq, withdomGutter as unknown as GutterProgram, 0);
+      const doc = buildEstimate(rq, dq, withdomGutter as unknown as GutterProgram, withdomRoof as unknown as GutterProgram, 0);
       const q = buildQuotation(doc, { date: new Date().toISOString().slice(0, 10) });
       const ws = XLSX.utils.aoa_to_sheet(q.aoa);
       ws['!cols'] = q.cols;
@@ -312,7 +313,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
       savedAt: stamp,
       model: JSON.parse(modelJson),
       roofQuantities: rq, drainQuantities: dq,
-      estimate: buildEstimate(rq, dq, withdomGutter as unknown as GutterProgram, 0),
+      estimate: buildEstimate(rq, dq, withdomGutter as unknown as GutterProgram, withdomRoof as unknown as GutterProgram, 0),
     };
     const host = estimationHost();
     if (host?.projectId && typeof host.saveModel === 'function') host.saveModel(modelJson).catch(() => {});

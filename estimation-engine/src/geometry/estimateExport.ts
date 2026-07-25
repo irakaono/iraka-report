@@ -2,8 +2,10 @@
 //   ★ここは行データを作るだけ（副作用なし・テスト可）。xlsx 書き出しは Studio 側で SheetJS(必要時CDN)。
 //   雨樋は WITH DOM Program で価格つき。屋根は数量のみ（屋根Program確定後に単価が入る＝正直に空欄）。
 import type { QuantityResult } from './roofModel';
-import { applyGutterProgram } from './acceptance';
 import type { GutterProgram } from './acceptance';
+
+// Domain Program（Roof / Gutter 共通の価格つき明細プログラム）。quantityKey→品名/単位/単価。
+export type DomainProgram = GutterProgram;
 
 const round3 = (x: number): number => Math.round(x * 1000) / 1000;
 
@@ -24,16 +26,36 @@ export interface EstimateDoc {
   pricedNote: string;         // 価格の範囲の注記
 }
 
-// 屋根数量(rq) と 雨樋数量(dq) → 見積書式の行。overhead=諸経費（案件入力）。
-export function buildEstimate(roofQ: QuantityResult[], drainQ: QuantityResult[], program: GutterProgram, overhead = 0): EstimateDoc {
+// 屋根数量(rq) と 雨樋数量(dq) → 見積書式の行。屋根＝Roof Domain Program（無ければ数量のみ）、雨樋＝Gutter Domain Program。overhead=諸経費。
+export function buildEstimate(
+  roofQ: QuantityResult[], drainQ: QuantityResult[], gutterProgram: DomainProgram,
+  roofProgram?: DomainProgram | null, overhead = 0,
+): EstimateDoc {
   const rows: EstimateRow[] = [];
-  // 雨樋（WITH DOM Program の単価つき）
-  const est = applyGutterProgram(drainQ, program, overhead);
-  for (const l of est.lines) rows.push({ section: '雨樋', name: l.name, qty: round3(l.qty), unit: l.unit, unitPrice: l.unitPrice, amount: l.amount, note: '' });
-  if (overhead) rows.push({ section: '雨樋', name: '諸経費', qty: 1, unit: '式', unitPrice: overhead, amount: overhead, note: '' });
-  // 屋根（数量のみ・単価は屋根Program確定後）
-  for (const q of roofQ) rows.push({ section: '屋根', name: q.label, qty: round3(q.value), unit: q.unit, unitPrice: null, amount: null, note: '数量（単価は屋根Program確定後）' });
-  return { rows, subtotal: est.subtotal, tax: est.tax, total: est.total, pricedNote: '価格は雨樋(WITH DOM)のみ。屋根は数量。' };
+  let sum = 0;
+  const priceLines = (quantities: QuantityResult[], program: DomainProgram, section: string) => {
+    for (const spec of program.lines) {
+      const qv = quantities.find((q) => q.key === spec.quantityKey)?.value;
+      if (qv == null || qv <= 0) continue;             // 数量が無い項目は出さない
+      const qty = round3(qv);
+      const amount = Math.round(qty * spec.unitPrice);
+      rows.push({ section, name: spec.name, qty, unit: spec.unit, unitPrice: spec.unitPrice, amount, note: '' });
+      sum += amount;
+    }
+  };
+  // 屋根（Roof Domain Program。無ければ数量のみ・単価空欄）
+  if (roofProgram) priceLines(roofQ, roofProgram, '屋根');
+  else for (const q of roofQ) rows.push({ section: '屋根', name: q.label, qty: round3(q.value), unit: q.unit, unitPrice: null, amount: null, note: '数量（単価は屋根Program確定後）' });
+  // 雨樋（Gutter Domain Program）
+  priceLines(drainQ, gutterProgram, '雨樋');
+  // 諸経費
+  if (overhead) { rows.push({ section: '諸経費', name: '諸経費', qty: 1, unit: '式', unitPrice: overhead, amount: overhead, note: '' }); sum += overhead; }
+  const subtotal = sum;
+  const tax = Math.round(subtotal * (gutterProgram.taxRate ?? 0.1));
+  const pricedNote = roofProgram
+    ? '屋根＋雨樋 価格つき（換気棟・雨押え・通気部材・唐草60 等の詳細項目は別途手入力）'
+    : '価格は雨樋(WITH DOM)のみ。屋根は数量。';
+  return { rows, subtotal, tax, total: subtotal + tax, pricedNote };
 }
 
 // 甍の見積書 発行者情報（会社テンプレート 見積書書式.xls より）。
