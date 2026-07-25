@@ -3,50 +3,47 @@
 > 設計はクローズ。ここに書くのは「設計」ではなく **どこがゴールか**。
 > 判断に迷ったら「これは v1.0 に必要か？」をこの旗に照らす。
 
-## 成熟度（2026-07-25 時点）
-| 領域 | 状態 |
+## 甍AI の正体 ＝ 図面理解AI（積算はその最初の成果物）
+甍AI は「積算ソフト」ではない。**図面を理解する能力**が核心で、積算はそこから生まれる最初の出力。
+図面理解が強くなれば、屋根積算・雨樋積算・排水経路・排水能力判定・屋根伏図生成・換気棟設計 は**すべて同じ土台の上**に積み上がる。
+
+```
+図面(平面図/立面図)
+   → [図面理解 / Recognizer]   ← ★これから育てる核心（＝AIが図面から Geometry を作る）
+   → Geometry IR (Model)         ← 人が確認・修正できる真実（Evidence First）
+   → Execution → Domain Compiler → Estimate   ← Phase 1 で完成済み
+```
+Phase 1（Compiler）は「図面が理解できた後」の半分。v1.0 で作るのは「図面 → Geometry」の手前の半分。
+
+## ユーザー体験（v1.0）
+ユーザーがやるのは2つだけ：**① 図面を入れる ② ボタンを押す**。
+- STEP1: 平面図・立面図をドロップ
+- STEP2:「解析開始」ボタン1つ
+- STEP3: 屋根を認識（形状 / 面積 / 勾配 / 棟 / 隅棟 / 谷 / 軒先 / ケラバ）
+- STEP4: 雨樋を拾う（軒樋長 / 縦樋本数 / 集水器 / 曲がり / 呼び樋 / 支持金具）
+- STEP5: 屋根積算・雨樋積算を表示
+
+> **現実的な作り方（半自動→自動）**：まず「図面を背景表示 → AI提案 or 人がトレースで屋根確定 → 積算」を通す。完全自動の 図面→Geometry は最難関R&D なので段階的に精度を上げる。Model は編集可能な真実なので、AIが間違えても人が直せる＝実務で使える。
+
+## バージョンの旗（実装はこれから）
+| Ver | 内容 |
 |---|---|
-| Project（案件） | ✅ 完成 |
-| Persistence（保存） | ✅ 完成 |
-| Geometry Runtime | ✅ 完成 |
-| Building Compiler | ✅ 完成 |
-| Domain Compiler（5種） | ✅ 完成 |
-| Program Framework | ✅ 完成 |
-| Program Validation | 🔜 これから |
-| PDF → Geometry | 🔜 これから |
-| Presentation Adapter（見積書） | 🔜 これから |
+| **v1.0** | 図面を入れるだけで屋根・雨樋の積算が出る（平面図＋立面図 → 積算）。＝実案件1棟が図面から積算まで甍AIだけで通った最初のリリース |
+| v1.1 | PDF から Geometry を（ほぼ）完全自動生成 |
+| v1.2 | 雨樋 排水経路を立面図へ自動作図 |
+| v1.3 | 排水能力チェック（屋根面積 vs 縦樋能力） |
+| v1.4 | 屋根伏図を平面図＋立面図から自動生成（目玉機能） |
+| v1.5 | 換気棟 自動設計（小屋裏容積→必要換気量→換気棟能力→必要本数） |
 
-→ **残るは「設計」ではなく「機能」と「実証」**。
+**v1.0 の線引き**：「**一度**、実案件1棟が図面→積算まで通った」で達成。毎日の堅牢性・複数棟スケール・見積書テンプレ精緻化は v1.x。
+**位置づけ**：v1.0 ＝ 甍AI 最初の正式版。**v0.5.0 ＝ その土台（Compiler 完成＋業務OS統合）**。
 
-## Phase 1 — Architecture Validation ✅（CLOSED）
-5つの異なる計算モデルが同一契約に収束＝アーキテクチャを証明した。詳細 `ARCHITECTURE.md`。
+## Phase の対応
+- Phase 1（Architecture Validation）✅ CLOSED：Compiler を証明（`ARCHITECTURE.md`）。
+- Phase 2（Reality Validation）：図面理解を作り、実案件1棟を図面→積算まで通す（＝v1.0）。評価は Program Validation（現場で使えるか）。
+- Phase 3（Program Improvement）：Compiler は触らない。**甍の積算知識(Program)を育てる**。AI の役割 = Compiler を書くのでなく Program を育てる（実績→歩掛分析→更新案＋Evidence＋CHANGELOG→承認→採用）。
 
-## Phase 2 — Reality Validation（現在地）
-> **Goal: A real project can be completed from drawing to estimate inside Iraka AI.**
-> （1件の実案件を、甍AIだけで最後まで完了できることを証明する）
-
-### Definition of Done（これが全部通れば Phase 2 成功）
-- [ ] 実案件を1件登録できる
-- [ ] PDF図面を読み込める
-- [ ] Geometry を作成できる
-- [ ] Execution を生成できる
-- [ ] Domain IR を生成できる
-- [ ] Program で積算できる
-- [ ] 案件へ保存できる
-- [ ] 翌日に再開できる
-- [ ] 見積書を出力できる
-
-（今日すでに通るのは Geometry〔手描き〕→Execution→Estimate→保存→翌日再開。残りは PDF読込 と 見積書 Adapter。）
-
-## v1.0 の定義（旗・実装はまだ）
-> **v1.0 = 実案件1棟を、図面から見積書まで甍AIだけで完結できた最初のリリース。**
-- **線引き**：v1.0 は「**一度**、実案件1棟が最後まで通った」で達成。毎日の堅牢性・複数棟スケール・多メーカー Program は **v1.x** へ回す。これで v1.0 は到達可能なまま、スコープが膨らまない。
-- 位置づけ：v1.0 ＝ 甍AI の最初の正式版。**v0.5.0 ＝ その土台（業務OSへの移行を完了したマイルストーン）**。
-
-## Phase 3 — Program Improvement（見えている先）
-Compiler は触らない。育てるのは Program だけ。
-```
-過去300棟 → 歩掛分析 → Program更新案 → CHANGELOG生成 → 承認 → Program採用
-```
-- Panasonic / LIXIL / KMEW / IG / 甍標準 … の Program 更新・歩掛補正・実測差分・施工会社別 Program。
-- **AI の役割 = Compiler を書くのではなく Program を育てる**（更新案＋Evidence＋CHANGELOG 生成 → 人が承認）。今回の設計思想と完全に一致。
+## 将来ほしい機能（雨樋 / 屋根）
+- 雨樋：排水経路の自動作図 / 排水能力チェック / 必要部材の自動拾い（甍の積算ルールで PC50 → 軒樋◯本・集水器◯個・縦樋◯m）。
+- 屋根：屋根伏図生成 / 換気棟能力に基づく必要数量 / 役物（棟板金・雪止め・唐草・ケラバ・谷・水切り）の数量。
+すべて「Geometry(Model) を作る/注釈する → 既存 Compiler で拾う」＝図面理解の上に載る。

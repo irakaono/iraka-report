@@ -48,3 +48,13 @@
 - Reason: Program 自体の自動生成（実績/カタログ/AI→Program）は自然だが、まず人が Program を十分磨いた後に価値が出る。
 - Alternatives: 今から二階建てを設計に入れる。
 - Rejected because: 未実証の抽象化を増やす。現契約「Program は外から与えられる」で十分（Phase 3〜4 で扱う）。
+
+## 2026-07-25 — Program ＝ 甍の積算知識（Iraka Program）。メーカー名の Program とは呼ばない
+- Reason: このプロジェクトは甍の屋根・雨樋積算エンジン。Compiler は共通で、変わるのは Program だけ。Program は「甍がそのメーカー製品をどう施工・積算するか」。
+- Alternatives: 「Panasonic Program / LIXIL Program」とメーカー単位で呼ぶ。
+- Rejected because: 甍AIが扱うのはメーカーそのものでなく甍の積算ロジック。メーカー仕様は Program の知識源の一つ。呼称は一貫して Iraka Program。
+
+## 2026-07-25 — 甍AI は「図面理解AI」。積算はその最初の成果物
+- Reason: ユーザーの本当の要求は「図面を入れてボタンを押すと積算が出る」。核心は図面を理解する能力で、屋根/雨樋積算・排水経路・伏図・換気棟は全部その上に載る。
+- Alternatives: 「積算ソフト」として個別機能を積む。
+- Rejected because: 図面理解を核に据えると全機能が同じ土台で一貫する。Phase 1 の Compiler は「図面理解の後(Geometry→Estimate)」の半分＝AI認識結果を信頼できる積算に変える下半分。Recognizer(図面→Geometry IR/Model)が新しい入口で、既存パイプラインにそのまま繋がる。
