@@ -23,6 +23,8 @@ import { defaultIntentCatalog, defaultProductCatalog, defaultAssemblyCatalog, ex
 import { drainDrawing } from '../geometry/drainDrawing';
 import { validateDrainModel } from '../geometry/drainValidator';
 import { serializeDocument, parseDocument, maxIdSuffix } from '../geometry/persistence';
+import { calibrateFrom2Points, DEV_PX_PER_METER } from '../geometry/calibration';
+import type { Calibration } from '../geometry/calibration';
 
 // iraka-report 埋め込み時のホスト（js/estimation-bridge.js が ?projectId 連携で window にセット）。無ければ standalone。
 interface EstimationHost {
@@ -36,7 +38,6 @@ function estimationHost(): EstimationHost | undefined {
     : undefined;
 }
 
-const SCALE = 50;
 const W = 720, H = 560;
 const ROLE_COLOR: Record<string, string> = { ridge: '#e03131', hip: '#e8590c', valley: '#1971c2', eave: '#2f9e44', gable: '#7048e8' };
 const ROLE_LABEL: Record<string, string> = { ridge: '棟', hip: '隅棟', valley: '谷', eave: '軒', gable: 'ケラバ' };
@@ -45,7 +46,7 @@ const GUTTER = '#1971c2', DROP = '#e8590c', FLOW = '#74c0fc';
 const DOWNSPOUT = '#495057', CONNECTOR = '#0ca678', ELBOW = '#f08c00', DRAINC = '#c2255c';
 
 interface FaceInput { vertices: Point[]; pitch: number; eaveEdgeIndex: number }
-type Mode = 'select' | 'gutter' | 'measure';
+type Mode = 'select' | 'gutter' | 'measure' | 'calibrate';
 
 function preset(name: 'gable' | 'hipped' | 'shed'): FaceInput[] {
   if (name === 'gable') return [
@@ -124,20 +125,33 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
     const img = which === 'elevation' ? elevImg : planImg;
     if (img) fitImage(img);
   };
+  // ── スケール較正（L0.5）：px→m。較正が無ければ開発用 DEV_PX_PER_METER。全数量はこの scale で実寸化。 ──
+  const [scale, setScale] = useState<number>(DEV_PX_PER_METER);
+  const [calibration, setCalibration] = useState<Calibration | null>(null);
+  const [calPts, setCalPts] = useState<Point[]>([]); // 較正クリック中の2点（px）
+  const [knownLen, setKnownLen] = useState<string>('0.91'); // 既知実寸(m)。既定=通り芯1マス0.91m
+  const applyCalibration = (p1: Point, p2: Point) => {
+    const m = Number(knownLen);
+    if (!(m > 0)) { setLoadError('既知寸法(m)を正の数で入力してください'); return; }
+    try {
+      const cal = calibrateFrom2Points({ id: `cal-${idc.current++}`, drawingId: bgWhich, p1, p2, sourceLength: m });
+      setCalibration(cal); setScale(cal.pxPerMeter); setCalPts([]); setLoadError(null);
+    } catch (err) { setLoadError(err instanceof Error ? err.message : String(err)); }
+  };
   const nid = (p: string) => `${p}-${idc.current++}`;
 
   // ── Runtime を読むだけ（Studio はロジックを持たない） ──
   const model = useMemo(() => buildRoofModelFromFaces(
     faces.map((f) => ({ vertices: f.vertices, pitch: f.pitch, attrs: { trade: '屋根工事', item: '屋根材' }, eaveEdgeIndex: f.eaveEdgeIndex })),
-    { scale: SCALE },
-  ), [faces]);
-  const rq = useMemo(() => roofQuantities(model, SCALE), [model]);
+    { scale },
+  ), [faces, scale]);
+  const rq = useMemo(() => roofQuantities(model, scale), [model, scale]);
   const fuzu = useMemo(() => roofDrawing(model), [model]);
   const V = useMemo(() => new Map(model.vertices.map((v) => [v.id, v])), [model]);
 
   const [drain, setDrain] = useState<History<DrainModel>>(() => initHistory(emptyDrainModel('DR-1', model.id)));
   const dm = drain.present;
-  const dq = useMemo(() => drainQuantities(model, dm, SCALE), [model, dm]);
+  const dq = useMemo(() => drainQuantities(model, dm, scale), [model, dm, scale]);
   // STEP5 Material Adapter：数量→Material IR(Intent)→Product（Rule Engine）。evidence は数量から継承＝要素と双方向。
   const mats = useMemo(() => compileMaterials([...rq, ...dq], defaultIntentCatalog, defaultProductCatalog), [rq, dq]);
   // STEP6：Execution（付属展開）を1回作り、そこから BOM(発注) と 見積(Cost Compiler) を投影＝Compiler of Compilers。
@@ -279,6 +293,11 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
     if (bgAdjust) return; // 図面の位置調整中は屋根の作図を止める
     const p = e.target.getStage().getPointerPosition(); if (!p) return;
     const pt = { x: Math.round(p.x), y: Math.round(p.y) };
+    if (mode === 'calibrate') { // 較正：図面上で既知長さの2点をクリック
+      const npts = [...calPts, pt];
+      if (npts.length >= 2) applyCalibration(npts[0], npts[1]); else setCalPts(npts);
+      return;
+    }
     if (mode === 'select' && drawingFace) { setDraft((d) => [...d, pt]); return; }
     if (mode === 'gutter') {
       if (routeHead) { extendRoute(pt); return; }               // 経路構築中：クリックで Node+Edge
@@ -308,9 +327,9 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
         <span className="rs-sp" />
         {/* 編集モード */}
         <span className="rs-modes">
-          {(['select', 'gutter', 'measure'] as Mode[]).map((m) => (
-            <button key={m} className={mode === m ? 'on' : ''} onClick={() => { setMode(m); setActiveRun(null); setSelDrop(null); setRouteHead(null); clearHi(); }}>
-              {m === 'select' ? 'Selection' : m === 'gutter' ? 'Gutter Edit' : 'Measure'}
+          {(['select', 'gutter', 'measure', 'calibrate'] as Mode[]).map((m) => (
+            <button key={m} className={mode === m ? 'on' : ''} onClick={() => { setMode(m); setActiveRun(null); setSelDrop(null); setRouteHead(null); setCalPts([]); clearHi(); }}>
+              {m === 'select' ? 'Selection' : m === 'gutter' ? 'Gutter Edit' : m === 'measure' ? 'Measure' : '較正'}
             </button>
           ))}
         </span>
@@ -340,6 +359,21 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
           </button>
           {bgImg && <button onClick={() => fitImage(bgImg)}>枠に合わせる</button>}
           {bgAdjust && <span className="rs-lbl" style={{ color: '#1971c2' }}>図面をドラッグで移動。終わったら「終了」。</span>}
+        </div>
+      )}
+
+      {/* 較正バー（L0.5）：既知寸法(m)を入れ、図面上でその長さの2点をクリック→px/mを確定。全数量の基準。 */}
+      {mode === 'calibrate' && (
+        <div className="rs-sub" style={{ background: '#fff4e6' }}>
+          <span className="rs-lbl">スケール較正:</span>
+          <span className="rs-lbl">既知寸法(m)</span>
+          <input type="number" step="0.001" min="0" value={knownLen} onChange={(e) => setKnownLen(e.target.value)} style={{ width: 74 }} />
+          <span className="rs-lbl">→ 図面上でその長さの2点をクリック（{calPts.length}/2）</span>
+          {calPts.length > 0 && <button onClick={() => setCalPts([])}>やり直し</button>}
+          <span className="rs-sp" />
+          <span className="rs-lbl" style={{ color: calibration ? '#2f9e44' : '#e8590c' }}>
+            現在 {calibration ? `${calibration.pxPerMeter.toFixed(1)} px/m（較正済・${calibration.sourceLength}m基準）` : `${scale.toFixed(0)} px/m（未較正＝開発既定）`}
+          </span>
         </div>
       )}
 
@@ -390,7 +424,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
           <h4>Face（{model.faces.length}）</h4>
           {model.faces.map((f, i) => (
             <div key={f.id} className={'rs-item' + (hi.has(f.id) ? ' hi' : '')} onMouseEnter={() => highlightElement(f.id)} onMouseLeave={clearHi}>
-              <span>{f.id} · {(faceArea(model, f) / (SCALE * SCALE)).toFixed(2)}㎡</span>
+              <span>{f.id} · {(faceArea(model, f) / (scale * scale)).toFixed(2)}㎡</span>
               <span className="rs-row-r"><input type="number" step={0.5} min={0} value={f.slope.pitch ?? 0} onChange={(e) => setPitch(i, Number(e.target.value))} />寸
                 <button className="rs-del" onClick={() => delFace(i)}>✕</button></span>
             </div>
@@ -402,7 +436,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
               <div key={e.id} className={'rs-item' + (hi.has(e.id) ? ' hi' : '')} onMouseEnter={() => highlightElement(e.id)} onMouseLeave={clearHi}
                 onClick={() => { if (mode === 'gutter' && role === 'eave') addOrSelectRun(e.id); }}>
                 <span><b style={{ color: role ? ROLE_COLOR[role] : '#888' }}>{role ? ROLE_LABEL[role] : '—'}</b> {e.id}</span>
-                <span className="rs-row-r">{(edgeLength(model, e) / SCALE).toFixed(2)}m</span>
+                <span className="rs-row-r">{(edgeLength(model, e) / scale).toFixed(2)}m</span>
               </div>
             );
           })}
@@ -420,7 +454,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
             {ddraw.segments.map((s) => (
               <div key={s.edgeId} className={'rs-item' + (hi.has(s.edgeId) ? ' hi' : '')} onMouseEnter={() => highlightElement(s.edgeId)} onMouseLeave={clearHi}>
                 <span><b style={{ color: s.kind === 'downspout' ? DOWNSPOUT : CONNECTOR }}>{s.kind === 'downspout' ? '竪樋' : '呼び樋'}</b> {s.edgeId}</span>
-                <span className="rs-row-r">{Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) / SCALE > 0 ? (Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) / SCALE).toFixed(2) : ''}m</span>
+                <span className="rs-row-r">{Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) / scale > 0 ? (Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) / scale).toFixed(2) : ''}m</span>
               </div>
             ))}
           </>}
@@ -470,6 +504,9 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
               {routeHead && (() => { const hn = dm.graph.nodes.find((n) => n.id === routeHead); return hn
                 ? <Circle key="head" x={hn.point.x} y={hn.point.y} radius={10} stroke={ELBOW} strokeWidth={2} dash={[3, 3]} /> : null; })()}
               {draft.length > 0 && <Line points={flat(draft)} stroke="#2e74b5" strokeWidth={2} dash={[6, 4]} />}
+              {/* 較正マーカー：クリック中の点＋確定した較正線 */}
+              {mode === 'calibrate' && calPts.map((cp, i) => <Circle key={'calp' + i} x={cp.x} y={cp.y} radius={5} fill="#f08c00" stroke="#fff" strokeWidth={1} />)}
+              {calibration && <Line points={[calibration.p1.x, calibration.p1.y, calibration.p2.x, calibration.p2.y]} stroke="#f08c00" strokeWidth={2} dash={[4, 4]} />}
               {model.edges.map((e) => { const role = edgeRole(model, e); if (!role) return null; const a = V.get(e.v[0]); const b2 = V.get(e.v[1]); if (!a || !b2) return null;
                 return <Text key={'t' + e.id} x={(a.x + b2.x) / 2 - 8} y={(a.y + b2.y) / 2 - 8} text={ROLE_LABEL[role]} fontSize={11} fill={ROLE_COLOR[role]} />; })}
             </Layer>
