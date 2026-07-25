@@ -100,3 +100,19 @@
 - Alternatives: 合計 Quantity だけ見て合否。トレランスを一律 ±20mm。
 - Rejected because: 合計だけだと「どの辺を間違えたか」が追えず教師データにもならない→辺ごと内訳ログ(edgeId/role/length/total)をロック。cases.json は0.1m丸め＝精度上限0.1m、手トレース＋raster図面で±20mmは非現実的→トレランスは2段階(手トレース期 max(±0.1m,1%) / 自動化期 目標±20mm)。前提：スケール較正(px→m を既知寸法2点で確定)が隠れたL0.5で必須。L3にはWITH DOM雨樋Program(単価はcases.jsonに既存)の実配線が要る。この局面のΔは主に人トレース精度＝将来Recognizerを同じハーネスで差し替えて測るためのベースライン。
 - 上位原則（ロック）: **Acceptance の閾値は Ground Truth(cases.json)の測定粒度を超えてはならない。** 今の Δ には〔人トレース＋較正＋raster解像度＋0.1m丸め〕が混在し、±20mmを合否にすると Drawing Intelligence の良否と測定系の良否を分離できない。より高精度なGround Truth(レーザースキャン/CAD/BIM)が入れば閾値を自然に tightening する。Phase A=max(±0.1m,±1%) を正式Acceptanceにロック、Phase B(Recognizer)で±20mmへ引き締め。
+
+## 2026-07-25 — Recognizer(Phase B) は水上で Human Provider が L0〜L3 ALL PASS するまで開始しない（ゲート・ロック）
+- Reason: これを守ると不具合の切り分けが混ざらない（Recognizer / Geometry / Quantity / Program のどこが原因か）。今 PASSしているのは `Ground Truth→Engine→PASS`（＝決定的な下半分・acceptance.test）だけ。`図面→Human Trace→Geometry→Quantity→Program→PASS` を最後まで通すまで Drawing Intelligence は完成ではない。マイルストーン名：**Phase A = Human Provider（水上 ALL PASS で ✓ Completed）→ Phase B = Recognizer Provider**。
+- 実走で見るのは3つだけ：① 較正（0.91m→px/m が正しく決まるか）② Geometry（Debugger の edge/role/length で role間違い・閉じ忘れ・取りこぼしを見る）③ Δ（L2/L3 PASS）。
+- ★重要な運用ルール：実走で PASS しなくても **Geometry を数字合わせで修正しない**。「なぜ PASS しなかったか」を Debugger で見る（そのために Acceptance Panel がある）。Geometry Runtime / Quantity Runtime / Program Runtime を分離した設計を守る。
+- Alternatives: Recognizer と Human Provider を並行で進める／実走前に機能追加を続ける。
+- Rejected because: 並行だと原因が混ざる。今は機能追加でなく「Human Provider の Acceptance を100%通す」が最優先。ここを通せば Recognizer は Geometry Provider を差し替えるだけの開発になる。
+
+## 2026-07-25 — Verification 運用（4点ロック）：Acceptance Panel は「測定器」
+- ① **失敗も成果として保存する**：Run(#NNN) を PASS/FAIL 問わず残す（case・L0〜L3・Reason・内訳）。修正後の Run も残し `Failure→Cause→Fix→PASS` の履歴にする。Recognizer 導入後は `Human 98% / Recognizer 95% / v2 99%` の比較土台になる。
+- ② **Debugger は UI でなく測定器**：PASS表示よりも「**なぜFAILしたか**」が主役。この思想を最後まで崩さない。
+- ③ **見る順番を固定**：L0→L0.5→L1→L2→L3。**前段が FAIL なら後段は SKIP**（L2赤ならProgramを見ない／L1赤ならQuantityを見ない）。切り分け時間が激減。
+- ④ **Human Provider 完了条件（1行）**：「同一案件を何度トレースしても L0〜L3 が**再現性をもって**PASS することをもって完了とする」。一度PASSでなく、やり直しても・別日でも・操作者が変わっても大きく崩れない、まで確認。
+- Reason: 評価系が壊れないための運用規約。②③は診断の速さと正しさ、①④は Recognizer(Phase B) を同じ物差しで測るための土台。
+- Alternatives: PASSだけ記録／一度PASSで完了とする。
+- Rejected because: 失敗を捨てると Cause→Fix の学習が消える。一度PASSは再現性を保証しない（操作依存の偶然PASSを完了と誤認する）。

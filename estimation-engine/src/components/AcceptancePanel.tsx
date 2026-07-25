@@ -13,7 +13,15 @@ interface CaseEntry { id: string; customer: string; gutter?: CaseWork }
 const cases = (casesData as unknown as { cases: CaseEntry[] }).cases.filter((c) => !!c.gutter);
 
 const G = '#2f9e44', R = '#e03131', GRAY = '#adb5bd';
-const chip = (v: boolean | null): { t: string; c: string } => v === null ? { t: '—', c: GRAY } : v ? { t: 'PASS', c: G } : { t: 'FAIL', c: R };
+type St = 'PASS' | 'FAIL' | 'SKIP';
+const stColor = (s: St): string => s === 'PASS' ? G : s === 'FAIL' ? R : GRAY;
+const stBg = (s: St): string => s === 'PASS' ? '#ebfbee' : s === 'FAIL' ? '#fff5f5' : '#f8f9fa';
+
+// 保存する Run（失敗も成果）。case・L0〜L3・Reason・内訳を残し Failure→Cause→Fix→PASS を追える。
+interface AcceptanceRun {
+  n: number; at: string; caseId: string; statuses: St[]; note: string;
+  l2: DeltaRow[]; l3: DeltaRow[]; breakdown: QuantityBreakdown[];
+}
 
 function breakdownToCSV(bd: QuantityBreakdown[]): string {
   const header = ['quantityKey', 'label', 'unit', 'refId', 'role', 'value', 'source', 'confidence'].join(',');
@@ -38,21 +46,37 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, on
     ? runAcceptance({ caseId, domain: 'gutter', quantities, program, caseWork, overhead })
     : null, [caseId, quantities, caseWork, overhead]);
 
-  // 実証ラダー
+  // 実証ラダー（見る順番を固定：前段が FAIL なら後段は SKIP）
   const gutterQ = quantities.find((q) => q.key === 'gutterLength');
   const L0 = hasDrawing;
   const L05 = calibrated;
   const L1 = !!gutterQ && gutterQ.evidence.length > 0; // Geometry が存在し数量を生んでいる（正解Geometryは無いので内訳ログで診断）
-  const L2 = report ? report.l2.length > 0 && report.l2.every((r) => r.verdict === 'PASS') : null;
-  const L3 = report ? report.l3.length > 0 && report.l3.every((r) => r.verdict === 'PASS') : null;
-  const ladder: Array<{ k: string; label: string; v: boolean | null }> = [
-    { k: 'L0', label: '図面表示', v: L0 },
-    { k: 'L0.5', label: '較正', v: L05 },
-    { k: 'L1', label: 'Geometry', v: L1 },
-    { k: 'L2', label: 'Quantity', v: L2 },
-    { k: 'L3', label: 'Program', v: L3 },
+  const L2 = report ? report.l2.length > 0 && report.l2.every((r) => r.verdict === 'PASS') : false;
+  const L3 = report ? report.l3.length > 0 && report.l3.every((r) => r.verdict === 'PASS') : false;
+  const base = [
+    { k: 'L0', label: '図面', ok: L0 }, { k: 'L0.5', label: '較正', ok: L05 }, { k: 'L1', label: 'Geometry', ok: L1 },
+    { k: 'L2', label: 'Quantity', ok: L2 }, { k: 'L3', label: 'Program', ok: L3 },
   ];
-  const allPass = ladder.every((x) => x.v === true);
+  const statuses: St[] = [];
+  { let broken = false; for (const b of base) { if (broken) statuses.push('SKIP'); else if (b.ok) statuses.push('PASS'); else { statuses.push('FAIL'); broken = true; } } }
+  const ladder = base.map((b, i) => ({ ...b, st: statuses[i] }));
+  const allPass = statuses.every((s) => s === 'PASS');
+  const L2reached = L0 && L05 && L1;   // Quantity を見てよい
+  const L3reached = L2reached && L2;   // Program を見てよい
+
+  // Run 記録（失敗も成果として保存）
+  const [runs, setRuns] = useState<AcceptanceRun[]>([]);
+  const [note, setNote] = useState<string>('');
+  const recordRun = () => {
+    if (!report) return;
+    const run: AcceptanceRun = { n: runs.length + 1, at: new Date().toISOString(), caseId, statuses, note, l2: report.l2, l3: report.l3, breakdown };
+    setRuns((rs) => [...rs, run]); setNote('');
+  };
+  const exportRuns = () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(runs, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = `iraka-acceptance-runs-${caseId}.json`; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const exportCSV = () => {
     const csv = breakdownToCSV(breakdown);
@@ -92,19 +116,39 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, on
         </select>
       </div>
 
-      {/* Overall ラダー */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 10 }}>
-        {ladder.map((x) => { const ch = chip(x.v); return (
-          <div key={x.k} style={{ flex: 1, textAlign: 'center', border: `1px solid ${ch.c}`, borderRadius: 6, padding: '4px 2px', background: ch.c === G ? '#ebfbee' : ch.c === R ? '#fff5f5' : '#f8f9fa' }}>
+      {/* Overall ラダー（前段FAILで後段SKIP＝見る順番を固定） */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+        {ladder.map((x) => (
+          <div key={x.k} style={{ flex: 1, textAlign: 'center', border: `1px solid ${stColor(x.st)}`, borderRadius: 6, padding: '4px 2px', background: stBg(x.st) }}>
             <div style={{ fontSize: 10, color: '#868e96' }}>{x.k}</div>
             <div style={{ fontSize: 9.5, color: '#495057' }}>{x.label}</div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: ch.c }}>{ch.t}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: stColor(x.st) }}>{x.st}</div>
           </div>
-        ); })}
+        ))}
       </div>
-      <div style={{ textAlign: 'center', fontWeight: 800, marginBottom: 10, color: allPass ? G : '#868e96' }}>
-        {allPass ? '✅ L0〜L3 ALL PASS' : '実証中…（PASSしていない段でどこが原因か辿れます）'}
+      <div style={{ textAlign: 'center', fontWeight: 800, marginBottom: 8, color: allPass ? G : '#868e96' }}>
+        {allPass ? '✅ L0〜L3 ALL PASS' : '実証中…（測定器：PASSより「なぜFAILか」を見る）'}
       </div>
+
+      {/* Run 記録：失敗も成果として保存 */}
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 8, background: '#f8f9fa', padding: 6, borderRadius: 6 }}>
+        <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Reason/メモ（例: E-014 role=eave should=keraba）"
+          style={{ flex: 1, fontSize: 11, minWidth: 0 }} />
+        <button onClick={recordRun} title="この状態を Run として記録">記録</button>
+        {runs.length > 0 && <button onClick={exportRuns} title="全RunをJSONで保存">保存({runs.length})</button>}
+      </div>
+      {runs.length > 0 && (
+        <div style={{ maxHeight: 90, overflowY: 'auto', marginBottom: 8, fontSize: 10.5 }}>
+          {runs.slice().reverse().map((r) => (
+            <div key={r.n} style={{ display: 'flex', gap: 4, alignItems: 'center', padding: '1px 0', borderBottom: '1px solid #f1f3f5' }}>
+              <span style={{ color: '#868e96', width: 34 }}>#{String(r.n).padStart(3, '0')}</span>
+              <span style={{ width: 34, color: '#868e96' }}>{r.caseId.slice(0, 4)}</span>
+              <span style={{ display: 'flex', gap: 2 }}>{r.statuses.map((s, i) => <span key={i} title={base[i].k} style={{ color: stColor(s), fontWeight: 700 }}>{s === 'PASS' ? '✓' : s === 'FAIL' ? '✗' : '–'}</span>)}</span>
+              <span style={{ flex: 1, color: '#495057', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.note}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Geometry：辺ごと内訳ログ */}
       <div style={{ fontWeight: 700, color: '#343a40', margin: '6px 0 2px' }}>Geometry（辺ごと内訳・source/confidence）</div>
@@ -124,19 +168,27 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, on
         </tbody>
       </table>
 
-      {/* Quantity：Engine / GT / Δ / verdict（L2） */}
+      {/* Quantity（L2）：L1まで通っていなければ SKIP（見る順番の固定） */}
       <div style={{ fontWeight: 700, color: '#343a40', margin: '10px 0 2px' }}>Quantity（L2：max(0.1m,1%) / 個数完全一致）</div>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>Engine</th><th style={{ ...th, textAlign: 'right' }}>GT</th><th style={{ ...th, textAlign: 'right' }}>Δ</th><th style={th}>判定</th></tr></thead>
-        <tbody>{report ? report.l2.map(dRow) : <tr><td style={td} colSpan={5}>Case未選択</td></tr>}</tbody>
-      </table>
+      {!L2reached ? (
+        <div style={{ padding: '6px 8px', background: '#f8f9fa', borderRadius: 6, color: '#868e96' }}>SKIP — 先に L0/L0.5/L1 を通す（前段が赤なら後段は見ない）</div>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>Engine</th><th style={{ ...th, textAlign: 'right' }}>GT</th><th style={{ ...th, textAlign: 'right' }}>Δ</th><th style={th}>判定</th></tr></thead>
+          <tbody>{report ? report.l2.map(dRow) : <tr><td style={td} colSpan={5}>Case未選択</td></tr>}</tbody>
+        </table>
+      )}
 
-      {/* Program：Engine / GT / verdict（L3・見積） */}
+      {/* Program（L3）：L2が通っていなければ SKIP */}
       <div style={{ fontWeight: 700, color: '#343a40', margin: '10px 0 2px' }}>Program（L3：見積・完全一致）<span style={{ color: '#868e96', fontWeight: 400 }}> WITH DOM</span></div>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>Engine</th><th style={{ ...th, textAlign: 'right' }}>GT</th><th style={{ ...th, textAlign: 'right' }}>Δ</th><th style={th}>判定</th></tr></thead>
-        <tbody>{report ? report.l3.map(dRow) : <tr><td style={td} colSpan={5}>Case未選択</td></tr>}</tbody>
-      </table>
+      {!L3reached ? (
+        <div style={{ padding: '6px 8px', background: '#f8f9fa', borderRadius: 6, color: '#868e96' }}>SKIP — 先に L2(Quantity) を通す</div>
+      ) : (
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>Engine</th><th style={{ ...th, textAlign: 'right' }}>GT</th><th style={{ ...th, textAlign: 'right' }}>Δ</th><th style={th}>判定</th></tr></thead>
+          <tbody>{report ? report.l3.map(dRow) : <tr><td style={td} colSpan={5}>Case未選択</td></tr>}</tbody>
+        </table>
+      )}
 
       <div style={{ marginTop: 8, fontSize: 10.5, color: '#868e96', lineHeight: 1.6 }}>
         Δが緑になるまで「較正 → 軒樋/縦樋/集水器をトレース」。判定セルにカーソルを当てると threshold/allowed/actual を表示。
