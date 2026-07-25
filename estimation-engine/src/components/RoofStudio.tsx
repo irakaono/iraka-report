@@ -25,6 +25,7 @@ import { validateDrainModel } from '../geometry/drainValidator';
 import { serializeDocument, parseDocument, maxIdSuffix } from '../geometry/persistence';
 import { calibrateFrom2Points, DEV_PX_PER_METER } from '../geometry/calibration';
 import type { Calibration } from '../geometry/calibration';
+import AcceptancePanel from './AcceptancePanel';
 
 // iraka-report 埋め込み時のホスト（js/estimation-bridge.js が ?projectId 連携で window にセット）。無ければ standalone。
 interface EstimationHost {
@@ -130,6 +131,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
   const [calibration, setCalibration] = useState<Calibration | null>(null);
   const [calPts, setCalPts] = useState<Point[]>([]); // 較正クリック中の2点（px）
   const [knownLen, setKnownLen] = useState<string>('0.91'); // 既知実寸(m)。既定=通り芯1マス0.91m
+  const [showAcceptance, setShowAcceptance] = useState<boolean>(false); // 実証パネル（Drawing Intelligence Debugger）
   const applyCalibration = (p1: Point, p2: Point) => {
     const m = Number(knownLen);
     if (!(m > 0)) { setLoadError('既知寸法(m)を正の数で入力してください'); return; }
@@ -333,6 +335,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
             </button>
           ))}
         </span>
+        <button className={showAcceptance ? 'on' : ''} onClick={() => setShowAcceptance((v) => !v)} title="Drawing Intelligence Debugger（実証パネル）">実証</button>
         {/* 保存・開く（Persistence Standard：語彙は「保存 / 開く」のみ） */}
         <span className="rs-doc">
           <button onClick={onSave}>💾 保存</button>
@@ -342,6 +345,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
         </span>
       </header>
       {loadError && <div className="rs-loaderr">⚠ {loadError}<button onClick={() => setLoadError(null)}>×</button></div>}
+      {showAcceptance && <AcceptancePanel quantities={dq} hasDrawing={!!(planImg || elevImg)} calibrated={!!calibration} onClose={() => setShowAcceptance(false)} />}
 
       {/* 図面背景バー：図面が入っているときだけ。人が下地の図面を見ながら屋根・雨樋をトレースする。 */}
       {(planImg || elevImg) && (
