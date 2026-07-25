@@ -25,7 +25,8 @@ type Decision = 'adopt' | 'hold' | 'reject';
 interface AcceptanceRun {
   n: number; at: string; caseId: string; statuses: St[]; note: string;
   comparedAgainst: string | null;   // Run 自身に埋め込む標準器の version（後年も基準が失われない）
-  decision: Decision | null;        // 4層目：どう判断したか
+  reviewedBy: string;               // Review：誰が承認したか（at が日付）。「AIが出した」でなく承認責任を残す
+  decision: Decision | null;        // どう判断したか（採用/保留/却下）
   l2: DeltaRow[]; l3: DeltaRow[]; breakdown: QuantityBreakdown[];
 }
 // Baseline（標準器・ゴールデンサンプル）。合格 Run を固定＝真実。★IMMUTABLE：編集/修正/削除不可、改善は新版を積む。
@@ -88,11 +89,13 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
   const [runs, setRuns] = useState<AcceptanceRun[]>([]);
   const [note, setNote] = useState<string>('');
   const [decision, setDecision] = useState<Decision | ''>('');
+  const [reviewer, setReviewer] = useState<string>(''); // Review：承認者。同一人物が続くので記録後も保持。
   const recordRun = () => {
     if (!report) return;
     const run: AcceptanceRun = {
       n: runs.length + 1, at: new Date().toISOString(), caseId, statuses, note,
       comparedAgainst: baselineForCase ? baselineForCase.version : null,
+      reviewedBy: reviewer,
       decision: decision || null,
       l2: report.l2, l3: report.l3, breakdown,
     };
@@ -195,7 +198,12 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
         <button onClick={recordRun} title="Run として記録（基準versionも埋め込む）">記録</button>
         {runs.length > 0 && <button onClick={exportRuns} title="全RunをJSONで保存">保存({runs.length})</button>}
       </div>
-      <div style={{ fontSize: 10, color: '#adb5bd', marginBottom: 6 }}>Compared Against: {baselineForCase ? baselineForCase.version : '未固定（Baseline無し）'}</div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6, fontSize: 10, color: '#868e96' }}>
+        <span>Review 承認者</span>
+        <input value={reviewer} onChange={(e) => setReviewer(e.target.value)} placeholder="例: 小野哲也" style={{ fontSize: 10, width: 96 }} />
+        <span style={{ flex: 1 }} />
+        <span style={{ color: '#adb5bd' }}>Compared Against: {baselineForCase ? baselineForCase.version : '未固定'}</span>
+      </div>
       {runs.length > 0 && (
         <div style={{ maxHeight: 90, overflowY: 'auto', marginBottom: 8, fontSize: 10.5 }}>
           {runs.slice().reverse().map((r) => (
@@ -204,8 +212,9 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
               <span style={{ width: 34, color: '#868e96' }}>{r.caseId.slice(0, 4)}</span>
               <span style={{ display: 'flex', gap: 2 }}>{r.statuses.map((s, i) => <span key={i} title={base[i].k} style={{ color: stColor(s), fontWeight: 700 }}>{s === 'PASS' ? '✓' : s === 'FAIL' ? '✗' : '–'}</span>)}</span>
               {r.decision && <span style={{ color: r.decision === 'adopt' ? G : r.decision === 'reject' ? R : '#f08c00', fontWeight: 700 }}>{decisionLabel[r.decision]}</span>}
+              {r.reviewedBy && <span style={{ color: '#5f3dc4' }} title={`Reviewed by ${r.reviewedBy} / ${r.at.slice(0, 10)}`}>👤{r.reviewedBy}</span>}
               <span style={{ flex: 1, color: '#495057', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                title={(r.comparedAgainst ? 'vs ' + r.comparedAgainst : '基準なし') + (r.note ? ' — ' + r.note : '')}>{r.note}</span>
+                title={(r.comparedAgainst ? 'vs ' + r.comparedAgainst : '基準なし') + (r.reviewedBy ? ' / Reviewed by ' + r.reviewedBy + ' ' + r.at.slice(0, 10) : '') + (r.note ? ' — ' + r.note : '')}>{r.note}</span>
             </div>
           ))}
         </div>

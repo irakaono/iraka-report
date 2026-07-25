@@ -145,3 +145,11 @@
 - Comparison は `Human/AI/GT` から **`Item×Human×AI×GT×Decision`（項目ごとの採用）** へ上げる。
 - Alternatives: 積算をセッション限りのデータとして扱う／比較を全体一括の採用に留める。
 - Rejected because: 案件資産化しないと履歴・学習・トレースが消える。項目ごとDecisionでないと「どの数量を誰の値で採ったか」と学習データが取れない。
+
+## 2026-07-25 — Ver.1 最終形：Review と Knowledge(Project/Company) を正式追加してロック
+- **Learning と Knowledge は別物**（最重要の分離）：Learning＝データ（AIが学ぶ材料。例 Edge023/Human5.42/AI5.01/Decision=Human）。Knowledge＝知識（会社の資産・蒸留/統計。例 寄棟でこの納まりは集水器角共有・採用率98%）。**AIが読むのは Knowledge**（Recognizer/積算AI/将来の見積AI 全部）。
+- **Knowledge は二層**：Project Knowledge（この案件の学び）→ Company Knowledge（全案件の統計＝ノウハウ。例 住宅245件→寄棟118件→角共有91%）。全工種(外壁/基礎/木工事/設備/内装)へ広げてもアーキを作り直さない。
+- **Review（承認履歴・必須）**：`Human/AI/GT → Review → Decision`。保存＝Reviewed By/日付/理由。「AIが出した」でなく「誰が承認したか」まで会社知識に残す。公共工事・住宅・AI高度化後も決定的。
+- 最終フロー：`Drawing→Geometry→Evidence→Quantity→[Human/AI/GT]→Review→Decision→Knowledge{Project,Company}→Learning→Export`。同一データ基盤で「案件管理OS／会社知識OS／AI育成OS」の3つを実現。詳細 `claude/VER1-OS-ARCHITECTURE.md`。
+- Alternatives: Learning と Knowledge を同一視／Review を挟まず AI/GT から直接 Decision。
+- Rejected because: データと知識を混ぜると「AIが読むべき蒸留知識」と「学習素材」が分離できない。Review 無しだと承認責任の履歴が残らず、公共工事や監査で通らない。
