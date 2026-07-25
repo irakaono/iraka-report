@@ -36,18 +36,46 @@ export function buildEstimate(roofQ: QuantityResult[], drainQ: QuantityResult[],
   return { rows, subtotal: est.subtotal, tax: est.tax, total: est.total, pricedNote: '価格は雨樋(WITH DOM)のみ。屋根は数量。' };
 }
 
-// 見積書式の二次元配列（xlsx / プレビュー共通）。会社の見積書ヘッダ＋明細＋小計/税/合計。
-export function estimateToAOA(doc: EstimateDoc, meta: { title?: string; date?: string; issuer?: string }): (string | number)[][] {
-  const aoa: (string | number)[][] = [];
-  aoa.push(['御 見 積 書']);
-  aoa.push([`件名: ${meta.title ?? ''}`, '', '', '', `日付: ${meta.date ?? ''}`, '']);
-  aoa.push([`${meta.issuer ?? '株式会社 甍'}`]);
-  aoa.push([]);
-  aoa.push(['品名', '数量', '単位', '単価', '金額', '摘要']);
-  for (const r of doc.rows) aoa.push([r.name, r.qty, r.unit, r.unitPrice ?? '', r.amount ?? '', r.note]);
-  aoa.push([]);
-  aoa.push(['', '', '', '小計', doc.subtotal, '']);
-  aoa.push(['', '', '', '消費税', doc.tax, '']);
-  aoa.push(['', '', '', '合計', doc.total, doc.pricedNote]);
-  return aoa;
+// 甍の見積書 発行者情報（会社テンプレート 見積書書式.xls より）。
+export const IRAKA_ISSUER = {
+  company: '株式会社　甍', office: '坂戸営業所', zip: '〒350-0244', addr: '埼玉県坂戸市森戸1282-2',
+  tel: 'TEL/FAX　049-277-3376', staff: '小野　哲也', mobile: '090-4946-6247', mail: 'iraka-ono@outlook.jp',
+};
+export interface QuotationMeta { customer?: string; title?: string; site?: string; work?: string; date?: string; validUntil?: string }
+export interface Merge { s: { r: number; c: number }; e: { r: number; c: number } }
+export interface SheetSpec { aoa: (string | number)[][]; merges: Merge[]; cols: { wch: number }[] }
+
+function reiwaDate(iso?: string): string {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}/.test(iso)) return '';
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  return `令和${y - 2018}年${m}月${d}日`;
+}
+const yen = (n: number): string => `¥${Math.round(n).toLocaleString('ja-JP')}-`;
+
+// 甍の見積書書式で 見積書 シートを組む（品名/数量/単位/単価/金額/摘要＋発行者ヘッダ＋小計/消費税/合計）。
+export function buildQuotation(doc: EstimateDoc, meta: QuotationMeta): SheetSpec {
+  const I = IRAKA_ISSUER;
+  const a: (string | number)[][] = [];
+  const merges: Merge[] = [];
+  const wide = (r: number) => merges.push({ s: { r, c: 0 }, e: { r, c: 5 } }); // 0〜5列を結合
+  a.push(['御　見　積　書']); wide(0);                                     // 0
+  a.push(['', '', '', '', reiwaDate(meta.date), '']);                                    // 1
+  a.push([`${meta.customer ?? ''}　様`, '', '', I.company, '', '']);                 // 2
+  a.push(['', '', '', `${I.office}　${I.zip}　${I.addr}`, '', '']);              // 3
+  a.push(['', '', '', `${I.tel}　担当 ${I.staff}　${I.mobile}`, '', '']);        // 4
+  a.push([`件名　${meta.title ?? ''}`, '', '', `mail　${I.mail}`, '', '']);      // 5
+  a.push([`現場住所　${meta.site ?? ''}`, '', '', '', '', '']);                       // 6
+  a.push([`工事名　${meta.work ?? ''}`, '', '', `有効期限　${meta.validUntil ?? ''}`, '', '']); // 7
+  a.push([`税込合計金額　${yen(doc.total)}　（消費税込み）`]); wide(8);           // 8
+  a.push([]);                                                                            // 9
+  const headerRow = a.length;
+  a.push(['品名', '数量', '単位', '単価', '金額', '摘要']);                              // 10 明細見出し
+  for (const r of doc.rows) a.push([r.name, r.qty, r.unit, r.unitPrice ?? '', r.amount ?? '', r.note]);
+  a.push([]);
+  a.push(['', '', '', '小　計', doc.subtotal, '']);
+  a.push(['', '', '', '消費税等', doc.tax, '１０％']);
+  a.push(['', '', '', '合　計', doc.total, '']);
+  a.push([`備考：　${doc.pricedNote}`]);
+  const cols = [{ wch: 34 }, { wch: 8 }, { wch: 6 }, { wch: 12 }, { wch: 14 }, { wch: 22 }];
+  return { aoa: a, merges, cols, headerRow } as SheetSpec & { headerRow: number };
 }

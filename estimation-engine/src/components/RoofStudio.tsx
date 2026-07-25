@@ -26,7 +26,7 @@ import { serializeDocument, parseDocument, maxIdSuffix } from '../geometry/persi
 import { calibrateFrom2Points, DEV_PX_PER_METER } from '../geometry/calibration';
 import type { Calibration } from '../geometry/calibration';
 import AcceptancePanel from './AcceptancePanel';
-import { buildEstimate, estimateToAOA } from '../geometry/estimateExport';
+import { buildEstimate, buildQuotation } from '../geometry/estimateExport';
 import type { GutterProgram } from '../geometry/acceptance';
 import withdomGutter from '../../knowledge/programs/withdom-saitama.gutter.json';
 
@@ -292,9 +292,10 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
       const spec = SHEETJS_CDN;
       const XLSX = await import(/* @vite-ignore */ spec) as any;
       const doc = buildEstimate(rq, dq, withdomGutter as unknown as GutterProgram, 0);
-      const aoa = estimateToAOA(doc, { title: '', date: new Date().toISOString().slice(0, 10) });
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      ws['!cols'] = [{ wch: 28 }, { wch: 8 }, { wch: 6 }, { wch: 10 }, { wch: 12 }, { wch: 26 }];
+      const q = buildQuotation(doc, { date: new Date().toISOString().slice(0, 10) });
+      const ws = XLSX.utils.aoa_to_sheet(q.aoa);
+      ws['!cols'] = q.cols;
+      ws['!merges'] = q.merges.map((m: any) => ({ s: m.s, e: m.e }));
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, '見積書');
       XLSX.writeFile(wb, `甍AI-見積-${new Date().toISOString().slice(0, 10)}.xlsx`);
