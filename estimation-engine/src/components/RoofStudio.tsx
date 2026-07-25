@@ -26,6 +26,11 @@ import { serializeDocument, parseDocument, maxIdSuffix } from '../geometry/persi
 import { calibrateFrom2Points, DEV_PX_PER_METER } from '../geometry/calibration';
 import type { Calibration } from '../geometry/calibration';
 import AcceptancePanel from './AcceptancePanel';
+import { buildEstimate, estimateToAOA } from '../geometry/estimateExport';
+import type { GutterProgram } from '../geometry/acceptance';
+import withdomGutter from '../../knowledge/programs/withdom-saitama.gutter.json';
+
+const SHEETJS_CDN = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs';
 
 // iraka-report 埋め込み時のホスト（js/estimation-bridge.js が ?projectId 連携で window にセット）。無ければ standalone。
 interface EstimationHost {
@@ -281,6 +286,40 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
     const file = e.target.files?.[0]; if (!file) return;
     try { loadFromJson(await file.text()); } finally { e.target.value = ''; }
   };
+  // 見積 Excel 出力（SheetJS は必要時だけ CDN）。雨樋=WITH DOM価格、屋根=数量（単価は屋根Program確定後）。
+  const exportExcel = async () => {
+    try {
+      const spec = SHEETJS_CDN;
+      const XLSX = await import(/* @vite-ignore */ spec) as any;
+      const doc = buildEstimate(rq, dq, withdomGutter as unknown as GutterProgram, 0);
+      const aoa = estimateToAOA(doc, { title: '', date: new Date().toISOString().slice(0, 10) });
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws['!cols'] = [{ wch: 28 }, { wch: 8 }, { wch: 6 }, { wch: 10 }, { wch: 12 }, { wch: 26 }];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '見積書');
+      XLSX.writeFile(wb, `甍AI-見積-${new Date().toISOString().slice(0, 10)}.xlsx`);
+      setLoadError(null);
+    } catch (err) {
+      setLoadError('Excel出力に失敗（オフライン時は不可）: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+  // 積算保存（記録）：Model＋数量＋見積のスナップショットを保存。埋め込み時は Model を案件へ、記録はファイルにも残す。
+  const saveEstimation = () => {
+    const stamp = new Date().toISOString();
+    const modelJson = serializeDocument(faces, dm, stamp);
+    const snapshot = {
+      savedAt: stamp,
+      model: JSON.parse(modelJson),
+      roofQuantities: rq, drainQuantities: dq,
+      estimate: buildEstimate(rq, dq, withdomGutter as unknown as GutterProgram, 0),
+    };
+    const host = estimationHost();
+    if (host?.projectId && typeof host.saveModel === 'function') host.saveModel(modelJson).catch(() => {});
+    const url = URL.createObjectURL(new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' }));
+    const a = document.createElement('a'); a.href = url; a.download = `甍AI-積算-${stamp.slice(0, 10)}.iraka-estimation.json`; a.click();
+    URL.revokeObjectURL(url);
+    setSavedAt(stamp); setLoadError(null);
+  };
   // 埋め込み時：起動時に案件から復元（host があれば）
   useEffect(() => {
     const host = estimationHost();
@@ -340,6 +379,8 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
         <span className="rs-doc">
           <button onClick={onSave}>💾 保存</button>
           <button onClick={() => fileRef.current?.click()}>📂 開く</button>
+          <button onClick={exportExcel} title="見積書式でExcel出力（雨樋=WITH DOM価格・屋根=数量）">📊 見積Excel</button>
+          <button onClick={saveEstimation} title="積算（Model＋数量＋見積）を保存">🗂 積算保存</button>
           <span className="rs-saved">{savedLabel}</span>
           <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={onFile} />
         </span>
