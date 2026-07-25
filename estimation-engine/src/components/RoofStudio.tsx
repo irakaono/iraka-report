@@ -155,7 +155,11 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
   const [calibration, setCalibration] = useState<Calibration | null>(null);
   const [calPts, setCalPts] = useState<Point[]>([]); // 較正クリック中の2点（px）
   const [knownLen, setKnownLen] = useState<string>('0.91'); // 既知実寸(m)。既定=通り芯1マス0.91m
-  const [showAcceptance, setShowAcceptance] = useState<boolean>(false); // 実証パネル（Drawing Intelligence Debugger）
+  const [showAcceptance, setShowAcceptance] = useState<boolean>(false); // 検証パネル
+  // ── AIナビ（初回ガイド）：①図面 ②縮尺 ③屋根 ④数量 ⑤見積 の現在地を常時表示し、次の一手だけ案内する。 ──
+  const [roofDone, setRoofDone] = useState<boolean>(false);   // ③屋根なぞり完了（人が「これでOK」）
+  const [excelDone, setExcelDone] = useState<boolean>(false); // ⑤見積書 作成済み
+  const [guideOn, setGuideOn] = useState<boolean>(true);      // ガイド表示ON/OFF
   const applyCalibration = (p1: Point, p2: Point) => {
     const m = Number(knownLen);
     if (!(m > 0)) { setLoadError('既知寸法(m)を正の数で入力してください'); return; }
@@ -330,6 +334,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
       const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
       const a = document.createElement('a'); a.href = url; a.download = `甍AI-見積-${today}.xlsx`; a.click();
       URL.revokeObjectURL(url);
+      setExcelDone(true);
       setLoadError(null);
     } catch (err) {
       setLoadError('Excel出力に失敗（オフライン時は不可）: ' + (err instanceof Error ? err.message : String(err)));
@@ -402,7 +407,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
         <span className="rs-modes">
           {(['select', 'gutter', 'measure', 'calibrate'] as Mode[]).map((m) => (
             <button key={m} className={mode === m ? 'on' : ''} onClick={() => { setMode(m); setActiveRun(null); setSelDrop(null); setRouteHead(null); setCalPts([]); clearHi(); }}>
-              {m === 'select' ? '屋根を描く' : m === 'gutter' ? '雨樋を描く' : m === 'measure' ? '計測' : '較正'}
+              {m === 'select' ? '屋根を描く' : m === 'gutter' ? '雨樋を描く' : m === 'measure' ? '計測' : '縮尺合わせ'}
             </button>
           ))}
         </span>
@@ -411,12 +416,77 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
         <span className="rs-doc">
           <button onClick={onSave}>💾 保存</button>
           <button onClick={() => fileRef.current?.click()}>📂 開く</button>
-          <button onClick={exportExcel} title="見積書式でExcel出力（雨樋=WITH DOM価格・屋根=数量）">📊 見積Excel</button>
+          <button onClick={exportExcel} title="会社の見積書書式でExcel出力">📊 見積書を作成</button>
           <button onClick={saveEstimation} title="積算（Model＋数量＋見積）を保存">🗂 積算保存</button>
           <span className="rs-saved">{savedLabel}</span>
           <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={onFile} />
         </span>
       </header>
+      {/* ── AIナビ（初回ガイド）：現在地を常時表示し、次の一手だけを案内。専門用語は使わない。 ── */}
+      {(() => {
+        const steps = ['図面を開く', '縮尺を合わせる', '屋根をなぞる', 'AIが数量を計算', '見積書を作成'];
+        const circ = ['①', '②', '③', '④', '⑤'];
+        const done = [true, !!calibration, roofDone, roofDone && dq.length > 0, excelDone];
+        const cur = done.findIndex((d) => !d); // -1 = 全ステップ完了
+        const chip = (i: number) => {
+          const isDone = done[i]; const isCur = i === cur;
+          const bg = isCur ? '#1971c2' : isDone ? '#e6f4ea' : '#f1f3f5';
+          const fg = isCur ? '#fff' : isDone ? '#2b8a3e' : '#868e96';
+          return (
+            <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 999, background: bg, color: fg, fontWeight: isCur ? 800 : 600, fontSize: 13, boxShadow: isCur ? '0 2px 8px rgba(25,113,194,.35)' : 'none' }}>
+              <span style={{ fontWeight: 800 }}>{isDone && !isCur ? '✓' : circ[i]}</span>{steps[i]}
+            </span>
+          );
+        };
+        // 現在ステップの案内文＋主ボタン
+        let title = ''; let body = ''; const actions: { label: string; primary?: boolean; onClick: () => void }[] = [];
+        if (cur === 1) {
+          title = '次は「縮尺を合わせる」';
+          body = '図面の中で長さが分かっている線を2点クリックしてください。例：通り芯＝910mm、または建物の全長。';
+          actions.push({ label: '📏 縮尺を合わせる', primary: true, onClick: () => { setMode('calibrate'); setActiveRun(null); setRouteHead(null); setCalPts([]); if (!bgOn) setBgOn(true); } });
+        } else if (cur === 2) {
+          title = '次は「屋根をなぞる」';
+          body = '上の「切妻・方形・片流れ」から近い形を選ぶか、「屋根を描く」で屋根の外周を囲みます。できたら右の「屋根はこれでOK」を押してください。';
+          actions.push({ label: '🏠 屋根を描く', primary: true, onClick: () => { setMode('select'); } });
+          actions.push({ label: '屋根はこれでOK →', onClick: () => { setRoofDone(true); setMode('gutter'); } });
+        } else if (cur === 3) {
+          title = 'AIが数量を計算します';
+          body = '雨樋がまだ入っていません。「雨樋を描く」を押すと、AIが軒樋・集水器・縦樋を自動で提案します。';
+          actions.push({ label: '🌧 雨樋を描く', primary: true, onClick: () => { setMode('gutter'); } });
+        } else if (cur === 4) {
+          title = '最後に「見積書を作成」';
+          body = '右の数量を確認したら、ボタンひとつで会社の見積書（Excel）ができます。';
+          actions.push({ label: '📊 見積書を作成', primary: true, onClick: () => { void exportExcel(); } });
+        } else {
+          title = '✓ すべて完了しました';
+          body = '見積書ができました。数量や屋根を直したいときは、上のステップからやり直せます。';
+        }
+        return (
+          <div style={{ background: '#f8fbff', borderBottom: '1px solid #d0e2f5', padding: '10px 14px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {steps.map((_, i) => <span key={i} style={{ display: 'inline-flex', alignItems: 'center' }}>{chip(i)}{i < 4 && <span style={{ color: '#adb5bd', margin: '0 2px' }}>›</span>}</span>)}
+              <span style={{ flex: 1 }} />
+              <button onClick={() => setGuideOn((v) => !v)} style={{ fontSize: 12, color: '#6b7885', background: 'none', border: 'none', cursor: 'pointer' }}>{guideOn ? '案内を隠す' : '案内を表示'}</button>
+            </div>
+            {guideOn && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8, padding: '10px 14px', background: '#fff', border: '1px solid #d0e2f5', borderRadius: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 800, color: '#1a2530', fontSize: 14 }}>{title}</div>
+                  <div style={{ color: '#495057', fontSize: 13, marginTop: 2, lineHeight: 1.6 }}>{body}</div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  {actions.map((a, i) => (
+                    <button key={i} onClick={a.onClick}
+                      style={{ fontSize: 14, fontWeight: 700, padding: '10px 18px', borderRadius: 8, border: a.primary ? 'none' : '1px solid #ced4da', cursor: 'pointer', color: a.primary ? '#fff' : '#495057', background: a.primary ? '#1971c2' : '#fff', boxShadow: a.primary ? '0 2px 8px rgba(25,113,194,.3)' : 'none' }}>
+                      {a.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
       {loadError && <div className="rs-loaderr">⚠ {loadError}<button onClick={() => setLoadError(null)}>×</button></div>}
       {showAcceptance && <AcceptancePanel quantities={dq} hasDrawing={!!(planImg || elevImg)} calibrated={!!calibration}
         roofModel={model} scale={scale} onAdoptDrain={(d) => { setDrain(initHistory(d)); idc.current = maxIdSuffix(d) + 1; }}
@@ -441,17 +511,17 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
         </div>
       )}
 
-      {/* 較正バー（L0.5）：既知寸法(m)を入れ、図面上でその長さの2点をクリック→px/mを確定。全数量の基準。 */}
+      {/* 縮尺合わせバー：分かっている長さ(m)を入れ、図面上でその長さの2点をクリック→縮尺を確定。全数量の基準。 */}
       {mode === 'calibrate' && (
         <div className="rs-sub" style={{ background: '#fff4e6' }}>
-          <span className="rs-lbl">スケール較正:</span>
-          <span className="rs-lbl">既知寸法(m)</span>
+          <span className="rs-lbl">縮尺合わせ：</span>
+          <span className="rs-lbl">分かっている長さ(m)</span>
           <input type="number" step="0.001" min="0" value={knownLen} onChange={(e) => setKnownLen(e.target.value)} style={{ width: 74 }} />
-          <span className="rs-lbl">→ 図面上でその長さの2点をクリック（{calPts.length}/2）</span>
+          <span className="rs-lbl">→ 図面上で、その長さの両端を2点クリック（{calPts.length}/2）</span>
           {calPts.length > 0 && <button onClick={() => setCalPts([])}>やり直し</button>}
           <span className="rs-sp" />
           <span className="rs-lbl" style={{ color: calibration ? '#2f9e44' : '#e8590c' }}>
-            現在 {calibration ? `${calibration.pxPerMeter.toFixed(1)} px/m（較正済・${calibration.sourceLength}m基準）` : `${scale.toFixed(0)} px/m（未較正＝開発既定）`}
+            {calibration ? `✓ 縮尺OK（${calibration.sourceLength}m を基準に設定済み）` : '未設定（このままだと数量は仮の値です）'}
           </span>
         </div>
       )}
