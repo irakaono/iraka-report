@@ -1,11 +1,11 @@
-// 甍AI Roof Studio エントリ（standalone・Roof Engine 検証用）。
+// 甍AI v1.0 エントリ。入口(図面ドロップ) → 積算(Studio) を通す StudioApp を起点にする。
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import RoofStudio from './components/RoofStudio';
+import StudioApp from './components/StudioApp';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <RoofStudio />
+    <StudioApp />
   </StrictMode>,
 );

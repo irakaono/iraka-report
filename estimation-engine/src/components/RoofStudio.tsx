@@ -5,7 +5,7 @@
 //   モード: Selection / Gutter Edit / Measure。Gutter Edit で 軒樋→集水器→（竪樋→エルボ→呼び樋→排水）を Command で編集。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import { Stage, Layer, Line, Circle, Rect, Text, Arrow } from 'react-konva';
+import { Stage, Layer, Line, Circle, Rect, Text, Arrow, Image as KonvaImage } from 'react-konva';
 import type { Point } from '../geometry/roofModel';
 import { buildRoofModelFromFaces, faceArea, edgeLength, facePolygon } from '../geometry/roofModel';
 import { edgeRole, roofType } from '../geometry/roofEngine';
@@ -66,7 +66,13 @@ const bottomEdgeIndex = (poly: Point[]): number => {
   return best;
 };
 
-export default function RoofStudio() {
+interface RoofStudioProps {
+  planSrc?: string | null;        // 平面図（背景トレース用・入口画面から）
+  elevationSrc?: string | null;   // 立面図
+  onBackToDrawings?: () => void;  // 入口（図面ドロップ）へ戻る
+}
+
+export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: RoofStudioProps = {}) {
   const [faces, setFaces] = useState<FaceInput[]>(() => preset('gable'));
   const [draft, setDraft] = useState<Point[]>([]);
   const [drawingFace, setDrawingFace] = useState(false);
@@ -83,6 +89,41 @@ export default function RoofStudio() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const idc = useRef(1);
+  // ── 図面背景（トレース）：平面図/立面図を Konva Image でキャンバス下地に。人が上からなぞって Geometry を確定する。 ──
+  const [planImg, setPlanImg] = useState<HTMLImageElement | null>(null);
+  const [elevImg, setElevImg] = useState<HTMLImageElement | null>(null);
+  const [bgWhich, setBgWhich] = useState<'plan' | 'elevation'>('plan');
+  const [bgOn, setBgOn] = useState<boolean>(true);
+  const [bgOpacity, setBgOpacity] = useState<number>(0.45);
+  const [bgScale, setBgScale] = useState<number>(1);
+  const [bgPos, setBgPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [bgAdjust, setBgAdjust] = useState<boolean>(false);
+  const fitImage = (img: HTMLImageElement) => {
+    const s = Math.min(W / img.width, H / img.height) || 1;
+    setBgScale(s);
+    setBgPos({ x: (W - img.width * s) / 2, y: (H - img.height * s) / 2 });
+  };
+  // 画像ロード（src→HTMLImageElement）。読めたら該当が現在背景ならフィット。
+  useEffect(() => {
+    if (!planSrc) { setPlanImg(null); return; }
+    const img = new Image();
+    img.onload = () => { setPlanImg(img); if (bgWhich === 'plan') fitImage(img); };
+    img.src = planSrc;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planSrc]);
+  useEffect(() => {
+    if (!elevationSrc) { setElevImg(null); return; }
+    const img = new Image();
+    img.onload = () => { setElevImg(img); if (bgWhich === 'elevation') fitImage(img); };
+    img.src = elevationSrc;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elevationSrc]);
+  const bgImg = bgWhich === 'elevation' ? elevImg : planImg;
+  const switchBg = (which: 'plan' | 'elevation') => {
+    setBgWhich(which);
+    const img = which === 'elevation' ? elevImg : planImg;
+    if (img) fitImage(img);
+  };
   const nid = (p: string) => `${p}-${idc.current++}`;
 
   // ── Runtime を読むだけ（Studio はロジックを持たない） ──
@@ -235,6 +276,7 @@ export default function RoofStudio() {
   const savedLabel = savedAt ? `💾 最終保存 ${new Date(savedAt).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit', month: 'numeric', day: 'numeric' })}` : '未保存';
 
   const onStageClick = (e: any) => {
+    if (bgAdjust) return; // 図面の位置調整中は屋根の作図を止める
     const p = e.target.getStage().getPointerPosition(); if (!p) return;
     const pt = { x: Math.round(p.x), y: Math.round(p.y) };
     if (mode === 'select' && drawingFace) { setDraft((d) => [...d, pt]); return; }
@@ -259,6 +301,7 @@ export default function RoofStudio() {
   return (
     <div className="rs">
       <header className="rs-head">
+        {onBackToDrawings && <button onClick={onBackToDrawings} title="図面ドロップに戻る">← 図面</button>}
         <strong>甍AI Engine Studio</strong>
         <span>Runtime v1.0 / Engine: Roof + Drain</span>
         <span className="rs-type">屋根: <b>{roofType(model) ? TYPE_LABEL[roofType(model)!] : '—'}</b></span>
@@ -280,6 +323,25 @@ export default function RoofStudio() {
         </span>
       </header>
       {loadError && <div className="rs-loaderr">⚠ {loadError}<button onClick={() => setLoadError(null)}>×</button></div>}
+
+      {/* 図面背景バー：図面が入っているときだけ。人が下地の図面を見ながら屋根・雨樋をトレースする。 */}
+      {(planImg || elevImg) && (
+        <div className="rs-sub" style={{ background: '#eef4fb' }}>
+          <span className="rs-lbl">図面:</span>
+          <button className={bgWhich === 'plan' ? 'on' : ''} disabled={!planImg} onClick={() => switchBg('plan')}>平面図</button>
+          <button className={bgWhich === 'elevation' ? 'on' : ''} disabled={!elevImg} onClick={() => switchBg('elevation')}>立面図</button>
+          <button className={bgOn ? 'on' : ''} onClick={() => setBgOn((v) => !v)}>{bgOn ? '表示中' : '非表示'}</button>
+          <span className="rs-lbl">濃さ</span>
+          <input type="range" min={0.1} max={1} step={0.05} value={bgOpacity} onChange={(e) => setBgOpacity(Number(e.target.value))} style={{ width: 80 }} />
+          <span className="rs-lbl">大きさ</span>
+          <input type="range" min={0.2} max={3} step={0.02} value={bgScale} onChange={(e) => setBgScale(Number(e.target.value))} style={{ width: 90 }} />
+          <button className={bgAdjust ? 'on' : ''} onClick={() => setBgAdjust((v) => !v)} title="図面をドラッグで移動できます（その間、屋根の作図は止まります）">
+            {bgAdjust ? '調整中：終了' : '位置調整'}
+          </button>
+          {bgImg && <button onClick={() => fitImage(bgImg)}>枠に合わせる</button>}
+          {bgAdjust && <span className="rs-lbl" style={{ color: '#1971c2' }}>図面をドラッグで移動。終わったら「終了」。</span>}
+        </div>
+      )}
 
       {/* サブツールバー（モード依存） */}
       <div className="rs-sub">
@@ -368,6 +430,10 @@ export default function RoofStudio() {
         <div className="rs-canvas">
           <Stage width={W} height={H} onMouseDown={onStageClick}>
             <Layer>
+              {/* 図面下地（トレース対象）。position調整中だけ操作可、それ以外は不可視のクリック透過。 */}
+              {bgOn && bgImg && <KonvaImage image={bgImg} x={bgPos.x} y={bgPos.y} scaleX={bgScale} scaleY={bgScale}
+                opacity={bgOpacity} listening={bgAdjust} draggable={bgAdjust}
+                onDragEnd={(e) => setBgPos({ x: e.target.x(), y: e.target.y() })} />}
               {model.faces.map((f) => <Line key={f.id} points={flat(facePolygon(model, f))} closed
                 fill={hi.has(f.id) ? 'rgba(232,89,12,0.22)' : 'rgba(31,78,121,0.06)'} stroke="#c7d0da" strokeWidth={1} />)}
               {model.edges.map((e) => {
