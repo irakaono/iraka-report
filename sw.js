@@ -5,7 +5,7 @@
  *   - precache は耐性版（allSettled）。1ファイル欠けても SW 更新ごと止めない（原則10）。
  *   - リリースのたびに CACHE_NAME を上げること（RELEASE_CHECKLIST 参照）。
  */
-const CACHE_NAME = 'iraka-field-v2.13.0'; // v2.13.0: Roof Domain Program（屋根も価格つき見積）
+const CACHE_NAME = 'iraka-field-v2.14.0'; // v2.14.0: 全UI日本語化＋図面投入で雨樋を自動積算（数量即表示）
 const ASSETS = [
   './portal.html',
   './index.html',

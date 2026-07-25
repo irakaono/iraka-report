@@ -1,8 +1,9 @@
-// 甍AI Engine Studio（Roof + Drain）— Engine Runtime v1.0 の最初のクライアント。
+// 甍AI 積算スタジオ（屋根 + 雨樋）— Engine Runtime v1.0 の最初のクライアント。
 //   ★Studio は薄く保つ：UI は Command を dispatch し、History/Validator/Drawing/Quantity を「表示」するだけ。
 //     Reducer / Validator / Drawing / Quantity のロジックは一切持たない（全部 Runtime を呼ぶ）。
 //   ★排水経路は Node/Edge Graph が唯一の真実。Studio は Graph を Polyline として編集・表示するだけ。
-//   モード: Selection / Gutter Edit / Measure。Gutter Edit で 軒樋→集水器→（竪樋→エルボ→呼び樋→排水）を Command で編集。
+//   モード: 屋根を描く / 雨樋を描く / 計測。雨樋は 軒樋→集水器→（竪樋→エルボ→呼び樋→排水）を Command で編集。
+//   ★入口で図面を入れると、屋根プリセット＋雨樋の自動提案で数量を即座に表示（人が上から修正して確定）。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { Stage, Layer, Line, Circle, Rect, Text, Arrow, Image as KonvaImage } from 'react-konva';
@@ -28,6 +29,7 @@ import type { Calibration } from '../geometry/calibration';
 import AcceptancePanel from './AcceptancePanel';
 import { buildEstimate, buildQuotation } from '../geometry/estimateExport';
 import type { GutterProgram } from '../geometry/acceptance';
+import { autoProposeGutter } from '../geometry/autoPropose';
 import withdomGutter from '../../knowledge/programs/withdom-saitama.gutter.json';
 import withdomRoof from '../../knowledge/programs/withdom-saitama.roof.json';
 
@@ -158,6 +160,16 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
   const V = useMemo(() => new Map(model.vertices.map((v) => [v.id, v])), [model]);
 
   const [drain, setDrain] = useState<History<DrainModel>>(() => initHistory(emptyDrainModel('DR-1', model.id)));
+  // ── 自動積算（初回のみ）：図面を入れて開くと、屋根プリセットの軒から雨樋を自動提案し、雨樋数量を即表示。
+  //    人はこの下地を上からなぞって修正する（＝AIが下書き→人が確定）。手拾いで空にしたい場合は「経路クリア」。
+  const autoSeeded = useRef(false);
+  useEffect(() => {
+    if (autoSeeded.current) return;
+    autoSeeded.current = true;
+    const proposal = autoProposeGutter(model);
+    if (proposal.dropCount > 0) { setDrain(initHistory(proposal.model)); idc.current = maxIdSuffix(proposal.model) + 1; }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const dm = drain.present;
   const dq = useMemo(() => drainQuantities(model, dm, scale), [model, dm, scale]);
   // STEP5 Material Adapter：数量→Material IR(Intent)→Product（Rule Engine）。evidence は数量から継承＝要素と双方向。
@@ -364,19 +376,19 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
     <div className="rs">
       <header className="rs-head">
         {onBackToDrawings && <button onClick={onBackToDrawings} title="図面ドロップに戻る">← 図面</button>}
-        <strong>甍AI Engine Studio</strong>
-        <span>Runtime v1.0 / Engine: Roof + Drain</span>
+        <strong>甍AI 積算スタジオ</strong>
+        <span>屋根・雨樋</span>
         <span className="rs-type">屋根: <b>{roofType(model) ? TYPE_LABEL[roofType(model)!] : '—'}</b></span>
         <span className="rs-sp" />
         {/* 編集モード */}
         <span className="rs-modes">
           {(['select', 'gutter', 'measure', 'calibrate'] as Mode[]).map((m) => (
             <button key={m} className={mode === m ? 'on' : ''} onClick={() => { setMode(m); setActiveRun(null); setSelDrop(null); setRouteHead(null); setCalPts([]); clearHi(); }}>
-              {m === 'select' ? 'Selection' : m === 'gutter' ? 'Gutter Edit' : m === 'measure' ? 'Measure' : '較正'}
+              {m === 'select' ? '屋根を描く' : m === 'gutter' ? '雨樋を描く' : m === 'measure' ? '計測' : '較正'}
             </button>
           ))}
         </span>
-        <button className={showAcceptance ? 'on' : ''} onClick={() => setShowAcceptance((v) => !v)} title="Drawing Intelligence Debugger（実証パネル）">実証</button>
+        <button className={showAcceptance ? 'on' : ''} onClick={() => setShowAcceptance((v) => !v)} title="積算 検証パネル">検証</button>
         {/* 保存・開く（Persistence Standard：語彙は「保存 / 開く」のみ） */}
         <span className="rs-doc">
           <button onClick={onSave}>💾 保存</button>
@@ -464,13 +476,13 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
           <button disabled={!canRedo(drain)} onClick={() => setDrain(redo)}>↷ Redo</button>
           <button onClick={resetDrain}>雨樋全消去</button>
         </>}
-        {mode === 'measure' && <span className="rs-lbl">Measure（計測）は次段。今は Selection / Gutter Edit を。</span>}
+        {mode === 'measure' && <span className="rs-lbl">計測は次の段階です。いまは「屋根を描く／雨樋を描く」をお使いください。</span>}
       </div>
 
       <div className="rs-body">
         {/* 左: Face / Edge / 軒樋 / 経路 一覧 */}
         <aside className="rs-left">
-          <h4>Face（{model.faces.length}）</h4>
+          <h4>屋根面（{model.faces.length}）</h4>
           {model.faces.map((f, i) => (
             <div key={f.id} className={'rs-item' + (hi.has(f.id) ? ' hi' : '')} onMouseEnter={() => highlightElement(f.id)} onMouseLeave={clearHi}>
               <span>{f.id} · {(faceArea(model, f) / (scale * scale)).toFixed(2)}㎡</span>
@@ -478,7 +490,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
                 <button className="rs-del" onClick={() => delFace(i)}>✕</button></span>
             </div>
           ))}
-          <h4>Edge（{model.edges.length}）</h4>
+          <h4>辺（{model.edges.length}）</h4>
           {model.edges.map((e) => {
             const role = edgeRole(model, e);
             return (
@@ -499,7 +511,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
             ))}
           </>}
           {(dm.graph.nodes.length > 0 || dm.graph.edges.length > 0) && <>
-            <h4>経路 Graph（Node {dm.graph.nodes.length} / Edge {dm.graph.edges.length}）</h4>
+            <h4>排水経路（点 {dm.graph.nodes.length} / 線 {dm.graph.edges.length}）</h4>
             {ddraw.segments.map((s) => (
               <div key={s.edgeId} className={'rs-item' + (hi.has(s.edgeId) ? ' hi' : '')} onMouseEnter={() => highlightElement(s.edgeId)} onMouseLeave={clearHi}>
                 <span><b style={{ color: s.kind === 'downspout' ? DOWNSPOUT : CONNECTOR }}>{s.kind === 'downspout' ? '竪樋' : '呼び樋'}</b> {s.edgeId}</span>
@@ -564,7 +576,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
             {mode === 'gutter' ? (routeHead
               ? '経路構築中：空きをクリックで途中点を追加（次:エルボ/排水を切替）。「排水(終端)」で終了。'
               : '軒(緑)クリック→軒樋／軒樋を選び軒上クリック→集水器／集水器を選び「経路を描く」→クリックで竪樋・エルボ・呼び樋・排水。（Undo/Redo可）')
-              : mode === 'select' ? 'プリセット/描画で屋根を編集。Gutter Edit で雨樋へ。' : 'Measure は次段。'}
+              : mode === 'select' ? 'プリセット／描画で屋根を編集。「雨樋を描く」で雨樋へ。' : '計測は次の段階です。'}
           </div>
         </div>
 
@@ -575,19 +587,19 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
             {rq.map((q) => <tr key={q.key} className={[...hi].some((id) => q.evidence.find((e) => e.id === id)) ? 'hi' : ''}
               onMouseEnter={() => highlightQuantity(q.evidence)} onMouseLeave={clearHi}>
               <td>{q.label}</td><td className="rs-val">{q.value.toFixed(2)}<small> {q.unit}</small></td>
-              <td className="rs-basis">{(q.evidence[0]?.kind === 'face' ? 'Face' : 'Edge')}×{q.evidence.length}</td></tr>)}
+              <td className="rs-basis">{(q.evidence[0]?.kind === 'face' ? '面' : '辺')}×{q.evidence.length}</td></tr>)}
           </tbody></table>
 
-          <h4 className="rs-mt">雨樋 数量 <small>（Evidence付き）</small></h4>
+          <h4 className="rs-mt">雨樋 数量 <small>（根拠付き）</small></h4>
           <table className="rs-qty"><tbody>
-            {dq.length === 0 && <tr><td colSpan={3} className="rs-empty">Gutter Edit で軒樋を配置</td></tr>}
+            {dq.length === 0 && <tr><td colSpan={3} className="rs-empty">「雨樋を描く」で軒樋を配置</td></tr>}
             {dq.map((q) => <tr key={q.key} className={[...hi].some((id) => q.evidence.find((e) => e.id === id)) ? 'hi' : ''}
               onMouseEnter={() => highlightQuantity(q.evidence)} onMouseLeave={clearHi}>
               <td>{q.label}</td><td className="rs-val">{q.value.toFixed(2)}<small> {q.unit}</small></td>
-              <td className="rs-basis">{q.evidence[0]?.kind === 'segment' ? 'Seg' : q.evidence[0]?.kind === 'node' ? 'Node' : q.evidence[0]?.kind === 'drop' ? 'Drop' : 'Run'}×{q.evidence.length}</td></tr>)}
+              <td className="rs-basis">{q.evidence[0]?.kind === 'segment' ? '区間' : q.evidence[0]?.kind === 'node' ? '節点' : q.evidence[0]?.kind === 'drop' ? '縦樋' : '経路'}×{q.evidence.length}</td></tr>)}
           </tbody></table>
 
-          <h4 className="rs-mt">部材 <small>（数量→Intent→Product / Rule Engine）</small></h4>
+          <h4 className="rs-mt">部材 <small>（数量→施工意図→製品）</small></h4>
           <table className="rs-qty"><tbody>
             {mats.length === 0 && <tr><td colSpan={3} className="rs-empty">数量が出れば部材へ射影</td></tr>}
             {mats.map((m, i) => <tr key={m.kind + i} className={[...hi].some((id) => m.evidence.find((e) => e.id === id)) ? 'hi' : ''}
@@ -597,7 +609,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
               <td className="rs-basis">{m.product ? m.product.sku : 'IR:' + m.kind}</td></tr>)}
           </tbody></table>
 
-          <h4 className="rs-mt">発注（BOM・付属展開）<small>（同じ Execution の Projection）</small></h4>
+          <h4 className="rs-mt">発注（部材表・付属）<small>（数量からの射影）</small></h4>
           <table className="rs-qty"><tbody>
             {bom.length === 0 && <tr><td colSpan={3} className="rs-empty">数量が出れば発注へ</td></tr>}
             {bom.map((l, i) => <tr key={(l.sku ?? l.kind) + i} className={[...hi].some((id) => l.evidence.find((e) => e.id === id)) ? 'hi' : ''}
@@ -607,7 +619,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
               <td className="rs-basis">{l.sku ?? '未解決'}</td></tr>)}
           </tbody></table>
 
-          <h4 className="rs-mt">見積（Cost Compiler・例示単価）<small>（材料→労務→間接）</small></h4>
+          <h4 className="rs-mt">見積（例示単価）<small>（材料→労務→間接）</small></h4>
           <table className="rs-qty"><tbody>
             <tr><td>材料費</td><td className="rs-val">{yen(est.materialCost)}</td><td className="rs-basis">BOM×単価</td></tr>
             <tr><td>労務費</td><td className="rs-val">{yen(est.laborCost)}</td><td className="rs-basis">歩掛×人工</td></tr>
@@ -615,20 +627,20 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
             <tr><td><b>合計</b></td><td className="rs-val"><b>{yen(est.total)}</b></td><td className="rs-basis">Estimate</td></tr>
           </tbody></table>
 
-          <h4 className="rs-mt">工程（Schedule Compiler・例示）<small>（同じ Execution・CPM）</small></h4>
+          <h4 className="rs-mt">工程（例示）<small>（作業順・日数）</small></h4>
           <table className="rs-qty"><tbody>
             <tr><td>総工期</td><td className="rs-val">{sched.totalDuration.toFixed(2)}<small> 人日</small></td><td className="rs-basis">CPM</td></tr>
             <tr><td>クリティカル</td><td className="rs-val">{sched.criticalPath.length}<small> / {sched.tasks.length} 工程</small></td><td className="rs-basis">float0</td></tr>
           </tbody></table>
 
-          <h4 className="rs-mt">品質・CO₂ <small>（QA=Rule Engine / Carbon=多段集約・同じ Execution）</small></h4>
+          <h4 className="rs-mt">品質・CO₂ <small>（例示）</small></h4>
           <table className="rs-qty"><tbody>
             <tr><td>品質（QA）</td><td className="rs-val">{insp.passCount}/{insp.checks.length}<small> pass</small></td><td className="rs-basis">{insp.allPass ? 'OK' : 'NG'}</td></tr>
             <tr><td>CO₂ 合計</td><td className="rs-val">{carbon.total.toFixed(1)}<small> kg</small></td><td className="rs-basis">材料+輸送+施工</td></tr>
             <tr><td>体制（Resource）</td><td className="rs-val">{res.totalLabor.toFixed(2)}<small> 人工</small></td><td className="rs-basis">{res.trades.length}職種</td></tr>
           </tbody></table>
 
-          <h4 className="rs-mt">Validator {errCount > 0 ? <span className="rs-err">● {errCount} error</span> : <span className="rs-ok">● OK</span>}</h4>
+          <h4 className="rs-mt">検証 {errCount > 0 ? <span className="rs-err">● {errCount} 件エラー</span> : <span className="rs-ok">● OK</span>}</h4>
           <div className="rs-valid">
             {issues.length === 0 && <div className="rs-empty">問題なし</div>}
             {issues.map((iss, i) => <div key={i} className={'rs-iss ' + iss.severity} onMouseEnter={() => highlightQuantity(iss.evidence)} onMouseLeave={clearHi}>

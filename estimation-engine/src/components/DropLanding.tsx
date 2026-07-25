@@ -274,8 +274,8 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
       </div>
 
       <div style={{ marginTop: 26, padding: '12px 16px', background: '#f4f7fa', borderRadius: 10, fontSize: 12, color: '#6b7885', lineHeight: 1.7 }}>
-        いまの一周目：図面を取り込み → 既存の Engine Studio で人が屋根・雨樋を確認・修正 → 数量確定 →（雨樋から）実見積と照合。
-        図面からの自動提案はこの後の版で段階的に増やします。
+        使い方：図面を取り込み →「積算開始」→ 屋根・雨樋を確認・修正 → 数量が自動集計され、見積Excelを出力できます。
+        図面からの自動読み取り（自動提案）はこの後の版で段階的に増やしていきます。
       </div>
     </div>
   );

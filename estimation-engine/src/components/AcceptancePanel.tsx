@@ -19,6 +19,7 @@ const G = '#2f9e44', R = '#e03131', GRAY = '#adb5bd';
 type St = 'PASS' | 'FAIL' | 'SKIP';
 const stColor = (s: St): string => s === 'PASS' ? G : s === 'FAIL' ? R : GRAY;
 const stBg = (s: St): string => s === 'PASS' ? '#ebfbee' : s === 'FAIL' ? '#fff5f5' : '#f8f9fa';
+const stLabel = (s: St): string => s === 'PASS' ? '合格' : s === 'FAIL' ? '不合格' : '—';
 
 // 保存する Run（失敗も成果）。case・L0〜L3・Reason・内訳を残し Failure→Cause→Fix→PASS を追える。
 type Decision = 'adopt' | 'hold' | 'reject';
@@ -70,8 +71,8 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
   const L2 = report ? report.l2.length > 0 && report.l2.every((r) => r.verdict === 'PASS') : false;
   const L3 = report ? report.l3.length > 0 && report.l3.every((r) => r.verdict === 'PASS') : false;
   const base = [
-    { k: 'L0', label: '図面', ok: L0 }, { k: 'L0.5', label: '較正', ok: L05 }, { k: 'L1', label: 'Geometry', ok: L1 },
-    { k: 'L2', label: 'Quantity', ok: L2 }, { k: 'L3', label: 'Program', ok: L3 },
+    { k: 'L0', label: '図面', ok: L0 }, { k: 'L0.5', label: '較正', ok: L05 }, { k: 'L1', label: '形状', ok: L1 },
+    { k: 'L2', label: '数量', ok: L2 }, { k: 'L3', label: '単価', ok: L3 },
   ];
   const statuses: St[] = [];
   { let broken = false; for (const b of base) { if (broken) statuses.push('SKIP'); else if (b.ok) statuses.push('PASS'); else { statuses.push('FAIL'); broken = true; } } }
@@ -82,7 +83,7 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
 
   // Baseline（標準器・IMMUTABLE）：ALL PASS を固定。編集/修正/削除不可、改善は新版(v1.1/v2.0)を積む。
   const [baseline, setBaseline] = useState<Baseline | null>(null);
-  const [baselineVer, setBaselineVer] = useState<string>('Human Baseline v1.0');
+  const [baselineVer, setBaselineVer] = useState<string>('手拾い基準 v1.0');
   const baselineForCase = baseline && baseline.caseId === caseId ? baseline : null;
 
   // Run 記録（失敗も成果）。Compared Against（基準の version）と Decision を Run 自身に埋め込む＝後年も基準・判断が失われない。
@@ -108,11 +109,11 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
   };
 
   // IMMUTABLE：同一 version での上書き固定は不可（改善版は version を上げる）。
-  const canLock = allPass && (!baselineForCase || baselineForCase.version !== (baselineVer || 'Human Baseline v1.0'));
+  const canLock = allPass && (!baselineForCase || baselineForCase.version !== (baselineVer || '手拾い基準 v1.0'));
   const lockBaseline = () => {
     if (!canLock) return;
     setBaseline({
-      version: baselineVer || 'Human Baseline v1.0', caseId, provider: 'human', at: new Date().toISOString(), status: 'IMMUTABLE',
+      version: baselineVer || '手拾い基準 v1.0', caseId, provider: 'human', at: new Date().toISOString(), status: 'IMMUTABLE',
       quantities: quantities.map((x) => ({ key: x.key, label: x.label, unit: x.unit, value: round3(x.value) })), breakdown,
     });
   };
@@ -149,7 +150,7 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
       <td style={num}>{d.engine}{d.unit === '円' ? '' : d.unit}</td>
       <td style={num}>{d.cases}{d.unit === '円' ? '' : d.unit}</td>
       <td style={num}>{d.delta}</td>
-      <td style={{ ...td, color: d.verdict === 'PASS' ? G : R, fontWeight: 700, fontSize: 11 }} title={`${d.threshold} / allowed=${d.allowed} / actual=${d.actual}`}>{d.verdict}</td>
+      <td style={{ ...td, color: d.verdict === 'PASS' ? G : R, fontWeight: 700, fontSize: 11 }} title={`${d.threshold} / 許容=${d.allowed} / 実測=${d.actual}`}>{stLabel(d.verdict as St)}</td>
     </tr>
   );
 
@@ -160,7 +161,7 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
       zIndex: 50, padding: 12, fontSize: 12, fontFamily: 'system-ui, sans-serif',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <strong style={{ fontSize: 13 }}>Drawing Intelligence Debugger</strong>
+        <strong style={{ fontSize: 13 }}>積算 検証パネル</strong>
         <span style={{ flex: 1 }} />
         <button onClick={exportCSV} title="内訳ログをCSVで書き出し" style={{ fontSize: 11 }}>CSV</button>
         <button onClick={onClose} style={{ fontSize: 11 }}>×</button>
@@ -168,7 +169,7 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
 
       {/* Case */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-        <span style={{ color: '#868e96' }}>Case</span>
+        <span style={{ color: '#868e96' }}>案件</span>
         <select value={caseId} onChange={(e) => setCaseId(e.target.value)} style={{ flex: 1 }}>
           {cases.map((c) => <option key={c.id} value={c.id}>{c.id}（{c.customer}）</option>)}
         </select>
@@ -180,12 +181,12 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
           <div key={x.k} style={{ flex: 1, textAlign: 'center', border: `1px solid ${stColor(x.st)}`, borderRadius: 6, padding: '4px 2px', background: stBg(x.st) }}>
             <div style={{ fontSize: 10, color: '#868e96' }}>{x.k}</div>
             <div style={{ fontSize: 9.5, color: '#495057' }}>{x.label}</div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: stColor(x.st) }}>{x.st}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: stColor(x.st) }}>{stLabel(x.st)}</div>
           </div>
         ))}
       </div>
       <div style={{ textAlign: 'center', fontWeight: 800, marginBottom: 8, color: allPass ? G : '#868e96' }}>
-        {allPass ? '✅ L0〜L3 ALL PASS' : '実証中…（測定器：PASSより「なぜFAILか」を見る）'}
+        {allPass ? '✅ L0〜L3 すべて合格' : '検証中…（合格より「なぜ不合格か」を見る）'}
       </div>
 
       {/* Run 記録：失敗も成果として保存（基準version・Decisionを埋め込む） */}
@@ -202,7 +203,7 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
         <span>Review 承認者</span>
         <input value={reviewer} onChange={(e) => setReviewer(e.target.value)} placeholder="例: 小野哲也" style={{ fontSize: 10, width: 96 }} />
         <span style={{ flex: 1 }} />
-        <span style={{ color: '#adb5bd' }}>Compared Against: {baselineForCase ? baselineForCase.version : '未固定'}</span>
+        <span style={{ color: '#adb5bd' }}>比較基準: {baselineForCase ? baselineForCase.version : '未固定'}</span>
       </div>
       {runs.length > 0 && (
         <div style={{ maxHeight: 90, overflowY: 'auto', marginBottom: 8, fontSize: 10.5 }}>
@@ -212,9 +213,9 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
               <span style={{ width: 34, color: '#868e96' }}>{r.caseId.slice(0, 4)}</span>
               <span style={{ display: 'flex', gap: 2 }}>{r.statuses.map((s, i) => <span key={i} title={base[i].k} style={{ color: stColor(s), fontWeight: 700 }}>{s === 'PASS' ? '✓' : s === 'FAIL' ? '✗' : '–'}</span>)}</span>
               {r.decision && <span style={{ color: r.decision === 'adopt' ? G : r.decision === 'reject' ? R : '#f08c00', fontWeight: 700 }}>{decisionLabel[r.decision]}</span>}
-              {r.reviewedBy && <span style={{ color: '#5f3dc4' }} title={`Reviewed by ${r.reviewedBy} / ${r.at.slice(0, 10)}`}>👤{r.reviewedBy}</span>}
+              {r.reviewedBy && <span style={{ color: '#5f3dc4' }} title={`承認 ${r.reviewedBy} / ${r.at.slice(0, 10)}`}>👤{r.reviewedBy}</span>}
               <span style={{ flex: 1, color: '#495057', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                title={(r.comparedAgainst ? 'vs ' + r.comparedAgainst : '基準なし') + (r.reviewedBy ? ' / Reviewed by ' + r.reviewedBy + ' ' + r.at.slice(0, 10) : '') + (r.note ? ' — ' + r.note : '')}>{r.note}</span>
+                title={(r.comparedAgainst ? 'vs ' + r.comparedAgainst : '基準なし') + (r.reviewedBy ? ' / 承認 ' + r.reviewedBy + ' ' + r.at.slice(0, 10) : '') + (r.note ? ' — ' + r.note : '')}>{r.note}</span>
             </div>
           ))}
         </div>
@@ -225,22 +226,22 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
         {baselineForCase && (
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 4 }}>
             <span style={{ fontWeight: 700, color: '#5f3dc4' }}>🔒 {baselineForCase.version}</span>
-            <span style={{ fontSize: 10, color: '#868e96' }}>{baselineForCase.provider} / IMMUTABLE</span>
+            <span style={{ fontSize: 10, color: '#868e96' }}>{baselineForCase.provider === 'human' ? '手拾い' : 'AI'} / 確定（変更不可）</span>
             <span style={{ flex: 1 }} />
             <button onClick={exportBaseline} title="標準器をJSON保存（永続・不変）">保存</button>
             <button onClick={() => setBaseline(null)} title="表示から外す（切替用。保存済JSONは削除されない）">外す</button>
           </div>
         )}
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <span style={{ fontWeight: 700, color: '#5f3dc4', fontSize: 11 }}>Baseline</span>
+          <span style={{ fontWeight: 700, color: '#5f3dc4', fontSize: 11 }}>基準（標準器）</span>
           <input value={baselineVer} onChange={(e) => setBaselineVer(e.target.value)} style={{ flex: 1, fontSize: 11, minWidth: 0 }} />
           <button onClick={lockBaseline} disabled={!canLock}
-            title={!allPass ? 'ALL PASS 後に固定できます' : (baselineForCase && baselineForCase.version === baselineVer ? '同一versionは上書き不可。改善版は v1.1 等に' : 'この合格結果を標準器として固定（IMMUTABLE）')}>固定</button>
+            title={!allPass ? '全項目 合格の後に固定できます' : (baselineForCase && baselineForCase.version === baselineVer ? '同じ版は上書きできません。改善版は v1.1 等に' : 'この合格結果を標準器として固定（変更不可）')}>固定</button>
           <label style={{ fontSize: 11, cursor: 'pointer', color: '#5f3dc4' }}>読込<input type="file" accept="application/json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importBaseline(f); e.target.value = ''; }} /></label>
         </div>
         {baselineDiff && (
           <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 4 }}>
-            <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>Baseline</th><th style={{ ...th, textAlign: 'right' }}>Current</th><th style={{ ...th, textAlign: 'right' }}>Δ</th></tr></thead>
+            <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>基準</th><th style={{ ...th, textAlign: 'right' }}>現在</th><th style={{ ...th, textAlign: 'right' }}>Δ</th></tr></thead>
             <tbody>{baselineDiff.map((d) => (
               <tr key={d.key}>
                 <td style={td}>{d.label}</td>
@@ -254,11 +255,11 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
       </div>
 
       {/* Geometry：辺ごと内訳ログ */}
-      <div style={{ fontWeight: 700, color: '#343a40', margin: '6px 0 2px' }}>Geometry（辺ごと内訳・source/confidence）</div>
+      <div style={{ fontWeight: 700, color: '#343a40', margin: '6px 0 2px' }}>形状（辺ごと内訳・入力/確度）</div>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead><tr><th style={th}>refId</th><th style={th}>role</th><th style={{ ...th, textAlign: 'right' }}>length</th><th style={th}>src</th><th style={{ ...th, textAlign: 'right' }}>conf</th></tr></thead>
+        <thead><tr><th style={th}>要素</th><th style={th}>役割</th><th style={{ ...th, textAlign: 'right' }}>長さ</th><th style={th}>入力</th><th style={{ ...th, textAlign: 'right' }}>確度</th></tr></thead>
         <tbody>
-          {breakdown.flatMap((b) => b.rows).length === 0 && <tr><td style={td} colSpan={5}>まだGeometry無し（Gutter Editで軒樋を配置）</td></tr>}
+          {breakdown.flatMap((b) => b.rows).length === 0 && <tr><td style={td} colSpan={5}>まだ形状データがありません（「雨樋を描く」で軒樋を配置）</td></tr>}
           {breakdown.map((b) => b.rows.map((r) => (
             <tr key={b.key + r.refId}>
               <td style={td}>{r.refId}</td>
@@ -271,30 +272,30 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
         </tbody>
       </table>
 
-      {/* Quantity（L2）：L1まで通っていなければ SKIP（見る順番の固定） */}
-      <div style={{ fontWeight: 700, color: '#343a40', margin: '10px 0 2px' }}>Quantity（L2：max(0.1m,1%) / 個数完全一致）</div>
+      {/* 数量（L2）：L1まで通っていなければ SKIP（見る順番の固定） */}
+      <div style={{ fontWeight: 700, color: '#343a40', margin: '10px 0 2px' }}>数量（L2：max(0.1m,1%) / 個数完全一致）</div>
       {!L2reached ? (
         <div style={{ padding: '6px 8px', background: '#f8f9fa', borderRadius: 6, color: '#868e96' }}>SKIP — 先に L0/L0.5/L1 を通す（前段が赤なら後段は見ない）</div>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>Engine</th><th style={{ ...th, textAlign: 'right' }}>GT</th><th style={{ ...th, textAlign: 'right' }}>Δ</th><th style={th}>判定</th></tr></thead>
+          <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>エンジン</th><th style={{ ...th, textAlign: 'right' }}>正解</th><th style={{ ...th, textAlign: 'right' }}>Δ</th><th style={th}>判定</th></tr></thead>
           <tbody>{report ? report.l2.map(dRow) : <tr><td style={td} colSpan={5}>Case未選択</td></tr>}</tbody>
         </table>
       )}
 
       {/* Program（L3）：L2が通っていなければ SKIP */}
-      <div style={{ fontWeight: 700, color: '#343a40', margin: '10px 0 2px' }}>Program（L3：見積・完全一致）<span style={{ color: '#868e96', fontWeight: 400 }}> WITH DOM</span></div>
+      <div style={{ fontWeight: 700, color: '#343a40', margin: '10px 0 2px' }}>単価適用（L3：見積・完全一致）<span style={{ color: '#868e96', fontWeight: 400 }}> 甍</span></div>
       {!L3reached ? (
-        <div style={{ padding: '6px 8px', background: '#f8f9fa', borderRadius: 6, color: '#868e96' }}>SKIP — 先に L2(Quantity) を通す</div>
+        <div style={{ padding: '6px 8px', background: '#f8f9fa', borderRadius: 6, color: '#868e96' }}>— 先に L2（数量）を通してください</div>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>Engine</th><th style={{ ...th, textAlign: 'right' }}>GT</th><th style={{ ...th, textAlign: 'right' }}>Δ</th><th style={th}>判定</th></tr></thead>
+          <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>エンジン</th><th style={{ ...th, textAlign: 'right' }}>正解</th><th style={{ ...th, textAlign: 'right' }}>Δ</th><th style={th}>判定</th></tr></thead>
           <tbody>{report ? report.l3.map(dRow) : <tr><td style={td} colSpan={5}>Case未選択</td></tr>}</tbody>
         </table>
       )}
 
       {/* 自動提案（AI積算）：手拾い vs AI vs GT。採用でAI提案を雨樋Modelへ反映（以後手で補正）。 */}
-      <div style={{ fontWeight: 700, color: '#343a40', margin: '10px 0 2px' }}>自動提案（AI積算）<span style={{ color: '#868e96', fontWeight: 400 }}> 手拾い vs AI vs GT</span></div>
+      <div style={{ fontWeight: 700, color: '#343a40', margin: '10px 0 2px' }}>自動提案（AI積算）<span style={{ color: '#868e96', fontWeight: 400 }}> 手拾い vs AI vs 正解</span></div>
       <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
         <button onClick={computeAi} title="屋根Geometryから雨樋を自動提案">AI提案を計算</button>
         {ai && <button onClick={() => onAdoptDrain(ai.drain)} title="AI提案を雨樋Modelに採用（手拾いに反映・以後編集可）">AIを採用</button>}
@@ -302,7 +303,7 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, ro
       </div>
       {ai && (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>手拾い</th><th style={{ ...th, textAlign: 'right' }}>AI提案</th><th style={{ ...th, textAlign: 'right' }}>GT</th></tr></thead>
+          <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>手拾い</th><th style={{ ...th, textAlign: 'right' }}>AI提案</th><th style={{ ...th, textAlign: 'right' }}>正解</th></tr></thead>
           <tbody>{gKeys.map((g) => {
             const m = manualBy(g.k); const a = aiBy(g.k); const gt = gtByKey.get(g.k);
             const aiHit = a != null && gt != null && (g.unit === 'ヶ所' ? a === gt : Math.abs(a - gt) <= Math.max(0.1, 0.01 * gt));
