@@ -160,3 +160,10 @@
 - フェーズ＝別プロジェクト：Ver.1 Excel/積算保存 → Ver.1.x 雨樋排水経路(AIが"考える"最初) → Ver.2 屋根伏図生成(図面生成AIの入口) → Ver.3 Company Knowledge → 最終 Digital Twin。
 - Alternatives: 「AI積算ソフト」として機能を積む。
 - Rejected because: 積算はライフサイクルの一断面。Digital Twin を北極星に置くと、既存の 案件→Geometry→Evidence→Provider→Review→Decision→Knowledge がそのまま一生の管理へ拡張でき、途中で設計を作り直さない。
+
+## 2026-07-25 — 甍AI ＝ Building Intelligence Platform（共通エンジンは工種非依存）。Ver.4 に建物理解エンジンを明示
+- Reason: エンジンは工種に依存しない。`Drawing→Geometry→Semantic Model→Engineering Rules→Simulation→Decision→Knowledge`。雨樋は最初の1工種で、屋根/外壁/基礎/木工事/設備/太陽光/維持管理が**同じエンジン**に載る。既存実装がそのまま対応：Geometry IR＝Geometry、Material/Execution IR＝Semantic Model、Program/Domain Compiler＝Engineering Rules、排水能力等＝Simulation、Provider/Review/Decision/Knowledge＝そのまま。
+- ロードマップに **Ver.4 Building Intelligence Engine** を Ver.3 と Ver.5(Digital Twin) の間に明示。これで Digital Twin が単なる3D・履歴でなく「**判断できる建物モデル**」になる。
+- 差別化：他社は `CAD→積算` で終わる。甍AIは `図面→Geometry→Evidence→Engineering→Knowledge→Decision→建物の一生`＝図面を読むAIでなく**建物を理解して判断するAI**。詳細 `claude/BACKLOG-yaritai.md`。
+- Alternatives: 雨樋専用エンジンとして最適化／Digital Twin を Ver.3 直後に置く。
+- Rejected because: 工種専用化は再利用を捨てる。エンジン層(Ver.4)を明示せず Digital Twin へ飛ぶと「判断できるモデル」の土台が言語化されず、全工種展開時に作り直しを招く。
