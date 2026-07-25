@@ -1,0 +1,249 @@
+{
+  "schemaVersion": "1.0",
+  "title": "甍 実案件 見積データセット（Program Validation / Ground Truth）",
+  "client": "WITH DOM saitama",
+  "clientNote": "この7棟は取引先 WITH DOM saitama のパターン＝Iraka Program #1。他取引先は別 Program（商品＋単価＋拾いルール）として同ディレクトリに兄弟データセットで追加する。Recognizerが出す数量は全取引先で共通なので、拡張は Program 差し替えのみ。",
+  "description": "甍が取引先 WITH DOM saitama 向けに出した実案件見積書(屋根工事・雨樋工事)から抽出した実データ。エンジンの積算結果を突き合わせる答え合わせ(Program Validation / Recognizer評価)であり、Iraka Program(商品・単価・拾いルール)の実値源でもある。",
+  "provenance": {
+    "source": "Project「甍AI」に保存された見積PDF（屋根工事/雨樋工事）。図面(建築確認/承認図面)・積算資料(数量根拠)は画像PDFのため本データには未収録。",
+    "extractedAt": "2026-07-25",
+    "extractedBy": "PDFテキスト層から抽出→各見積の小計を行合計と機械照合(全14本一致)",
+    "issuer": "株式会社 甍 / WITHDOM Saitama 株式会社 櫻井（坂戸営業所, 担当: 丸谷 宏伸）",
+    "currency": "JPY",
+    "taxRate": 0.10,
+    "notes": [
+      "金額は円。単価×数量の端数処理は見積書の記載値に従う。",
+      "amount負値は値引き行。",
+      "図面(input)と本見積(ground truth)の対で、Recognizer/Program検証に使う。",
+      "積算資料PDF(面積・長さの根拠)は画像のため数量の根拠は別途トレースが必要。"
+    ]
+  },
+  "cases": [
+    {
+      "id": "fukubori",
+      "customer": "福堀 佑記",
+      "site": "春日部市南",
+      "date": "2026-06-17",
+      "roof": {
+        "total": 1052285, "subtotal": 956623, "tax": 95662,
+        "items": [
+          {"name": "アンダーがムロンK", "qty": 77.12, "unit": "㎡", "unitPrice": 1400, "amount": 107968, "note": "片面粘着（下葺 ルーフィング。タディスセルフアーマー欠品の代替）"},
+          {"name": "ルーフィング値上がり分", "qty": 77.12, "unit": "㎡", "unitPrice": 200, "amount": 15424, "note": ""},
+          {"name": "屋根工事 ビルトマテリアル デコルーフ フラットH-30-455 0.4", "qty": 77.12, "unit": "㎡", "unitPrice": 4900, "amount": 377888, "note": "屋根材葺き"},
+          {"name": "桟鼻（後付け）", "qty": 32.55, "unit": "m", "unitPrice": 750, "amount": 24413, "note": "軒、片棟"},
+          {"name": "捨て唐草45", "qty": 35.1, "unit": "m", "unitPrice": 900, "amount": 31590, "note": ""},
+          {"name": "捨て唐草60", "qty": 19.55, "unit": "m", "unitPrice": 1000, "amount": 19550, "note": ""},
+          {"name": "雪止め金具（シングル）", "qty": 19.55, "unit": "m", "unitPrice": 2400, "amount": 46920, "note": ""},
+          {"name": "通気部材取り付け施工費", "qty": 32.55, "unit": "m", "unitPrice": 400, "amount": 13020, "note": ""},
+          {"name": "雨押え換気 I-ROOF 1P", "qty": 3, "unit": "ヶ所", "unitPrice": 23000, "amount": 69000, "note": ""},
+          {"name": "雨押え（平行壁）", "qty": 6.9, "unit": "m", "unitPrice": 2000, "amount": 13800, "note": ""},
+          {"name": "水上立ち上げ", "qty": 6.9, "unit": "m", "unitPrice": 1700, "amount": 11730, "note": ""},
+          {"name": "破風板金 特注加工", "qty": 54.65, "unit": "m", "unitPrice": 2800, "amount": 153020, "note": ""},
+          {"name": "諸経費", "qty": 1, "unit": "式", "unitPrice": 80000, "amount": 80000, "note": ""},
+          {"name": "ルーフィング値上り分 半額値引", "qty": 1, "unit": "式", "unitPrice": -7700, "amount": -7700, "note": "値引き"}
+        ]
+      },
+      "gutter": {
+        "total": 190253, "subtotal": 172958, "tax": 17296,
+        "sourceNote": "原本の消費税表示(17296)と合計(190253)に1円差。合計は小計×1.1の切り捨て(190253.8→190253)、税は四捨五入表示のため。原本の値を保持。",
+        "items": [
+          {"name": "軒とい ファインスケアNF-1型", "qty": 19.55, "unit": "m", "unitPrice": 3850, "amount": 75268, "note": ""},
+          {"name": "集水器 F型", "qty": 7, "unit": "ヶ所", "unitPrice": 2950, "amount": 20650, "note": ""},
+          {"name": "たてとい", "qty": 28.2, "unit": "m", "unitPrice": 2200, "amount": 62040, "note": ""},
+          {"name": "諸経費", "qty": 1, "unit": "式", "unitPrice": 15000, "amount": 15000, "note": ""}
+        ]
+      }
+    },
+    {
+      "id": "nobe",
+      "customer": "野邉 幸太郎",
+      "site": "加須市琴寄",
+      "date": "2026-06-17",
+      "roof": {
+        "total": 1371165, "subtotal": 1246514, "tax": 124651,
+        "items": [
+          {"name": "アンダーがムロンK", "qty": 109.69, "unit": "㎡", "unitPrice": 1400, "amount": 153566, "note": "片面粘着（タディスセルフアーマー欠品の代替）"},
+          {"name": "ルーフィング値上がり分", "qty": 109.69, "unit": "㎡", "unitPrice": 200, "amount": 21938, "note": ""},
+          {"name": "屋根工事 ビルトマテリアル デコルーフ フラットH-30-455 0.4", "qty": 109.69, "unit": "㎡", "unitPrice": 4900, "amount": 537481, "note": ""},
+          {"name": "桟鼻（後付け）", "qty": 30.3, "unit": "m", "unitPrice": 750, "amount": 22725, "note": "軒、片棟"},
+          {"name": "捨て唐草45", "qty": 41.5, "unit": "m", "unitPrice": 900, "amount": 37350, "note": ""},
+          {"name": "捨て唐草60", "qty": 21.2, "unit": "m", "unitPrice": 1000, "amount": 21200, "note": ""},
+          {"name": "雪止め金具（シングル）", "qty": 21.2, "unit": "m", "unitPrice": 2400, "amount": 50880, "note": ""},
+          {"name": "通気部材取り付け施工費", "qty": 30.3, "unit": "m", "unitPrice": 400, "amount": 12120, "note": ""},
+          {"name": "雨押え換気 I-ROOF 2P", "qty": 3, "unit": "ヶ所", "unitPrice": 27000, "amount": 81000, "note": ""},
+          {"name": "雨押え（平行壁）", "qty": 11.8, "unit": "m", "unitPrice": 2000, "amount": 23600, "note": ""},
+          {"name": "水上立ち上げ", "qty": 11.8, "unit": "m", "unitPrice": 1700, "amount": 20060, "note": ""},
+          {"name": "破風板金 特注加工", "qty": 62.7, "unit": "m", "unitPrice": 2800, "amount": 175560, "note": ""},
+          {"name": "諸経費", "qty": 1, "unit": "式", "unitPrice": 100000, "amount": 100000, "note": ""},
+          {"name": "ルーフィング値上り分 半額値引", "qty": 1, "unit": "式", "unitPrice": -10966, "amount": -10966, "note": "値引き"}
+        ]
+      },
+      "gutter": {
+        "total": 167255, "subtotal": 152050, "tax": 15205,
+        "items": [
+          {"name": "軒とい ファインスケアNF-1型", "qty": 21.2, "unit": "m", "unitPrice": 3850, "amount": 81620, "note": ""},
+          {"name": "集水器 F型", "qty": 5, "unit": "ヶ所", "unitPrice": 2950, "amount": 14750, "note": ""},
+          {"name": "たてとい", "qty": 19.4, "unit": "m", "unitPrice": 2200, "amount": 42680, "note": ""},
+          {"name": "諸経費", "qty": 1, "unit": "式", "unitPrice": 13000, "amount": 13000, "note": ""}
+        ]
+      }
+    },
+    {
+      "id": "uchida",
+      "customer": "内田 恭平",
+      "site": "東松山市 石橋1671-50",
+      "date": "2025-11-18",
+      "roof": {
+        "total": 1302744, "subtotal": 1184313, "tax": 118431,
+        "items": [
+          {"name": "タディスセルフアーマー", "qty": 114.41, "unit": "㎡", "unitPrice": 1350, "amount": 154454, "note": "片面粘着（下葺 ルーフィング）"},
+          {"name": "屋根工事 ビルトマテリアル デコルーフ フラットH-30-455 0.4", "qty": 114.41, "unit": "㎡", "unitPrice": 4900, "amount": 560609, "note": ""},
+          {"name": "桟鼻（後付け）", "qty": 36.8, "unit": "m", "unitPrice": 750, "amount": 27600, "note": ""},
+          {"name": "捨て唐草45", "qty": 62.9, "unit": "m", "unitPrice": 900, "amount": 56610, "note": ""},
+          {"name": "雪止め金具（シングル）", "qty": 22, "unit": "m", "unitPrice": 2400, "amount": 52800, "note": ""},
+          {"name": "通気部材取り付け施工費", "qty": 36.8, "unit": "m", "unitPrice": 400, "amount": 14720, "note": ""},
+          {"name": "雨押え換気 I-ROOF 2P", "qty": 1, "unit": "ヶ所", "unitPrice": 27000, "amount": 27000, "note": ""},
+          {"name": "雨押え（平行壁）", "qty": 7.2, "unit": "m", "unitPrice": 2000, "amount": 14400, "note": ""},
+          {"name": "破風板金 特注加工", "qty": 62.9, "unit": "m", "unitPrice": 2800, "amount": 176120, "note": ""},
+          {"name": "諸経費", "qty": 1, "unit": "式", "unitPrice": 100000, "amount": 100000, "note": ""}
+        ]
+      },
+      "gutter": {
+        "total": 208659, "subtotal": 189690, "tax": 18969,
+        "items": [
+          {"name": "軒とい ファインスケアNF-1型", "qty": 22, "unit": "m", "unitPrice": 3850, "amount": 84700, "note": ""},
+          {"name": "集水器 F型", "qty": 5, "unit": "ヶ所", "unitPrice": 2950, "amount": 14750, "note": ""},
+          {"name": "たてとい", "qty": 34.2, "unit": "m", "unitPrice": 2200, "amount": 75240, "note": ""},
+          {"name": "諸経費", "qty": 1, "unit": "式", "unitPrice": 15000, "amount": 15000, "note": ""}
+        ]
+      }
+    },
+    {
+      "id": "kawahara",
+      "customer": "河原 侑平",
+      "site": "鶴ヶ島市 藤金",
+      "date": "2025-10-10",
+      "note": "屋根は再見積り。屋根材IROOF(グランスケア雨樋)。",
+      "roof": {
+        "total": 928004, "subtotal": 843640, "tax": 84364,
+        "items": [
+          {"name": "IMAルーフコートSR", "qty": 94.8, "unit": "㎡", "unitPrice": 1500, "amount": 142200, "note": "片面粘着（下葺 ルーフィング）"},
+          {"name": "屋根工事 ビルトマテリアル デコルーフ フラットH30-455 0.4", "qty": 77.2, "unit": "㎡", "unitPrice": 4900, "amount": 378280, "note": ""},
+          {"name": "屋根工事 ビルトマテリアル デコルーフ フラットH30-455 0.4", "qty": 17.6, "unit": "㎡", "unitPrice": 5400, "amount": 95040, "note": "1Fのみ裏張り"},
+          {"name": "桟鼻（後付け）", "qty": 28.4, "unit": "m", "unitPrice": 750, "amount": 21300, "note": "軒、片棟"},
+          {"name": "捨て唐草45", "qty": 56.6, "unit": "m", "unitPrice": 900, "amount": 50940, "note": ""},
+          {"name": "雪止め金具（シングル）", "qty": 15.8, "unit": "m", "unitPrice": 2400, "amount": 37920, "note": ""},
+          {"name": "通気部材取り付け施工費", "qty": 28.4, "unit": "m", "unitPrice": 400, "amount": 11360, "note": ""},
+          {"name": "雨押え換気 I-ROOF 2P", "qty": 1, "unit": "ヶ所", "unitPrice": 25000, "amount": 25000, "note": ""},
+          {"name": "雨押え板金（平行壁）", "qty": 3.3, "unit": "m", "unitPrice": 2000, "amount": 6600, "note": ""},
+          {"name": "諸経費", "qty": 1, "unit": "式", "unitPrice": 75000, "amount": 75000, "note": ""}
+        ]
+      },
+      "gutter": {
+        "total": 131692, "subtotal": 119720, "tax": 11972,
+        "items": [
+          {"name": "軒とい グランスケアPGR60", "qty": 15.8, "unit": "m", "unitPrice": 3700, "amount": 58460, "note": ""},
+          {"name": "集水器 F型", "qty": 4, "unit": "ヶ所", "unitPrice": 2800, "amount": 11200, "note": ""},
+          {"name": "たてとい 丸60Φ", "qty": 17.3, "unit": "m", "unitPrice": 2200, "amount": 38060, "note": ""},
+          {"name": "Ｐマス", "qty": 1, "unit": "ヶ所", "unitPrice": 2000, "amount": 2000, "note": ""},
+          {"name": "諸経費", "qty": 1, "unit": "式", "unitPrice": 10000, "amount": 10000, "note": ""}
+        ]
+      }
+    },
+    {
+      "id": "nakamaru",
+      "customer": "中丸 智文",
+      "site": "青梅市 河辺町8-11-33",
+      "date": "2025-09-27",
+      "roof": {
+        "total": 1421558, "subtotal": 1292325, "tax": 129233,
+        "items": [
+          {"name": "タディスセルフ アーマー", "qty": 92.9, "unit": "㎡", "unitPrice": 1350, "amount": 125415, "note": "片面粘着（下葺 ルーフィング）"},
+          {"name": "ニューライナールーフィング", "qty": 25.6, "unit": "㎡", "unitPrice": 1100, "amount": 28160, "note": ""},
+          {"name": "屋根工事 ビルトマテリアル デコルーフ フラットH30-455 0.4", "qty": 118.5, "unit": "㎡", "unitPrice": 4900, "amount": 580650, "note": ""},
+          {"name": "桟鼻（後付け）", "qty": 29.8, "unit": "m", "unitPrice": 750, "amount": 22350, "note": ""},
+          {"name": "捨て唐草45", "qty": 56.8, "unit": "m", "unitPrice": 900, "amount": 51120, "note": ""},
+          {"name": "雪止め金具（シングル）", "qty": 29.8, "unit": "m", "unitPrice": 2400, "amount": 71520, "note": ""},
+          {"name": "通気部材取り付け施工費", "qty": 29.8, "unit": "m", "unitPrice": 400, "amount": 11920, "note": ""},
+          {"name": "雨押え換気 I-ROOF 2P", "qty": 2, "unit": "ヶ所", "unitPrice": 25000, "amount": 50000, "note": ""},
+          {"name": "雨押え板金（平行壁）", "qty": 8.2, "unit": "m", "unitPrice": 2000, "amount": 16400, "note": ""},
+          {"name": "棟換気 I-ROOF 2P", "qty": 2, "unit": "ヶ所", "unitPrice": 25000, "amount": 50000, "note": ""},
+          {"name": "棟", "qty": 10.3, "unit": "m", "unitPrice": 2500, "amount": 25750, "note": ""},
+          {"name": "破風板金 特注加工", "qty": 56.8, "unit": "m", "unitPrice": 2800, "amount": 159040, "note": ""},
+          {"name": "諸経費", "qty": 1, "unit": "式", "unitPrice": 100000, "amount": 100000, "note": ""}
+        ]
+      },
+      "gutter": {
+        "total": 244591, "subtotal": 222355, "tax": 22236,
+        "items": [
+          {"name": "軒とい ファインスケアNF-I型", "qty": 28.9, "unit": "m", "unitPrice": 3850, "amount": 111265, "note": ""},
+          {"name": "集水器 F型", "qty": 7, "unit": "ヶ所", "unitPrice": 2950, "amount": 20650, "note": ""},
+          {"name": "たてとい", "qty": 30.2, "unit": "m", "unitPrice": 2200, "amount": 66440, "note": ""},
+          {"name": "はいとい", "qty": 2, "unit": "ヶ所", "unitPrice": 2000, "amount": 4000, "note": "這い樋"},
+          {"name": "諸経費", "qty": 1, "unit": "式", "unitPrice": 20000, "amount": 20000, "note": ""}
+        ]
+      }
+    },
+    {
+      "id": "mizukami",
+      "customer": "水上 智紀",
+      "site": "東松山市",
+      "date": "2025-09-24",
+      "roof": {
+        "total": 1173172, "subtotal": 1066520, "tax": 106652,
+        "items": [
+          {"name": "タディスセルフ アーマー", "qty": 108.2, "unit": "㎡", "unitPrice": 1350, "amount": 146070, "note": "片面粘着（下葺 ルーフィング）"},
+          {"name": "屋根工事 ビルトマテリアル デコルーフ フラットH30-455 0.4", "qty": 108.2, "unit": "㎡", "unitPrice": 4900, "amount": 530180, "note": ""},
+          {"name": "桟鼻（後付け）", "qty": 16.2, "unit": "m", "unitPrice": 750, "amount": 12150, "note": ""},
+          {"name": "捨て唐草45", "qty": 53.2, "unit": "m", "unitPrice": 900, "amount": 47880, "note": ""},
+          {"name": "雪止め金具（シングル）", "qty": 16.2, "unit": "m", "unitPrice": 2400, "amount": 38880, "note": ""},
+          {"name": "通気部材取り付け施工費", "qty": 26, "unit": "m", "unitPrice": 400, "amount": 10400, "note": ""},
+          {"name": "雨押え換気 I-ROOF 2P", "qty": 1, "unit": "ヶ所", "unitPrice": 25000, "amount": 25000, "note": ""},
+          {"name": "雨押え板金（平行壁）", "qty": 6, "unit": "m", "unitPrice": 2000, "amount": 12000, "note": ""},
+          {"name": "破風板金 特注加工", "qty": 53.2, "unit": "m", "unitPrice": 2800, "amount": 148960, "note": ""},
+          {"name": "諸経費", "qty": 1, "unit": "式", "unitPrice": 95000, "amount": 95000, "note": ""}
+        ]
+      },
+      "gutter": {
+        "total": 148247, "subtotal": 134770, "tax": 13477,
+        "items": [
+          {"name": "軒とい ファインスケアNF-I型", "qty": 16.2, "unit": "m", "unitPrice": 3850, "amount": 62370, "note": ""},
+          {"name": "集水器 F型", "qty": 4, "unit": "ヶ所", "unitPrice": 2950, "amount": 11800, "note": ""},
+          {"name": "たてとい", "qty": 23, "unit": "m", "unitPrice": 2200, "amount": 50600, "note": ""},
+          {"name": "諸経費", "qty": 1, "unit": "式", "unitPrice": 10000, "amount": 10000, "note": ""}
+        ]
+      }
+    },
+    {
+      "id": "sato",
+      "customer": "佐藤 健",
+      "site": "蓮田市 椿山1-26-17",
+      "date": "2026-01-27",
+      "roof": {
+        "total": 1612955, "subtotal": 1466323, "tax": 146632,
+        "items": [
+          {"name": "タディスセルフアーマー", "qty": 143.77, "unit": "㎡", "unitPrice": 1350, "amount": 194090, "note": "片面粘着（下葺 ルーフィング）"},
+          {"name": "屋根工事 ビルトマテリアル デコルーフ フラットH-30-455 0.4", "qty": 143.77, "unit": "㎡", "unitPrice": 4900, "amount": 704473, "note": ""},
+          {"name": "桟鼻（後付け）", "qty": 37.4, "unit": "m", "unitPrice": 750, "amount": 28050, "note": ""},
+          {"name": "捨て唐草60", "qty": 37.4, "unit": "m", "unitPrice": 1100, "amount": 41140, "note": "軒"},
+          {"name": "捨て唐草45", "qty": 32.1, "unit": "m", "unitPrice": 900, "amount": 28890, "note": "妻、片棟"},
+          {"name": "雪止め金具（シングル）", "qty": 37.4, "unit": "m", "unitPrice": 2400, "amount": 89760, "note": ""},
+          {"name": "通気部材取り付け施工費", "qty": 45.3, "unit": "m", "unitPrice": 400, "amount": 18120, "note": ""},
+          {"name": "雨押え換気 I-ROOF 2P", "qty": 2, "unit": "ヶ所", "unitPrice": 27000, "amount": 54000, "note": ""},
+          {"name": "雨押え（平行壁）", "qty": 6.6, "unit": "m", "unitPrice": 2000, "amount": 13200, "note": ""},
+          {"name": "破風板金 特注加工", "qty": 69.5, "unit": "m", "unitPrice": 2800, "amount": 194600, "note": ""},
+          {"name": "諸経費", "qty": 1, "unit": "式", "unitPrice": 100000, "amount": 100000, "note": ""}
+        ]
+      },
+      "gutter": {
+        "total": 246224, "subtotal": 223840, "tax": 22384,
+        "items": [
+          {"name": "軒とい ファインスケアNF-1型", "qty": 37.4, "unit": "m", "unitPrice": 3850, "amount": 143990, "note": ""},
+          {"name": "集水器 F型", "qty": 5, "unit": "ヶ所", "unitPrice": 2950, "amount": 14750, "note": ""},
+          {"name": "たてとい", "qty": 20.5, "unit": "m", "unitPrice": 2200, "amount": 45100, "note": ""},
+          {"name": "諸経費", "qty": 1, "unit": "式", "unitPrice": 20000, "amount": 20000, "note": ""}
+        ]
+      }
+    }
+  ]
+}
