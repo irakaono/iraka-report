@@ -132,3 +132,9 @@
 - **適用範囲**：Drawing Intelligence だけでなく KKai・今後の甍AI 全体に展開できる検証アーキテクチャ（汎用の測定基盤）。
 - Alternatives: Baseline を可変にして常に最新へ更新／Run に基準を残さない。
 - Rejected because: 可変 Baseline は過去評価を破壊し回帰・進歩の履歴が消える。基準未記録だと後年 Diff の意味が復元不能。
+
+## 2026-07-25 — ゲート緩和（ユーザー判断）：自動提案(AI積算)を並行実装する
+- Reason: 小野の判断で「Recognizer は水上 Human Baseline 固定まで開始しない」を緩和し、自動提案を**並行で今すぐ**実装する（`手拾い vs AI積算 → 採用` の比較ワークフローを回したい）。ただし原因の切り分けが濁らないよう **Acceptance/Baseline の規律は維持**：AI も同じ測定系(L0〜L3・Baseline との Diff)で評価し、手拾いと並べて表示する。
+- 第一版 自動提案：雨樋を屋根 Geometry から決定的に提案（全軒に軒樋／各軒両端に集水器／各集水器から縦樋）＝`autoPropose.ts`。Recognizer(図面→Geometry 自動認識)ではなく「Geometry→雨樋の自動拾い」から。図面認識は段階的に。
+- Alternatives: ゲート厳守（Human Baseline 固定まで自動提案を作らない）。
+- Rejected because: ユーザーが比較ワークフローを優先。規律（同一Acceptanceで手拾いとAIを並べる）を保てば、切り分けの濁りは比較画面で可視化できる＝ゲートの意図は測定系で担保。

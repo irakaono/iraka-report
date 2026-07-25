@@ -345,7 +345,9 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
         </span>
       </header>
       {loadError && <div className="rs-loaderr">⚠ {loadError}<button onClick={() => setLoadError(null)}>×</button></div>}
-      {showAcceptance && <AcceptancePanel quantities={dq} hasDrawing={!!(planImg || elevImg)} calibrated={!!calibration} onClose={() => setShowAcceptance(false)} />}
+      {showAcceptance && <AcceptancePanel quantities={dq} hasDrawing={!!(planImg || elevImg)} calibrated={!!calibration}
+        roofModel={model} scale={scale} onAdoptDrain={(d) => { setDrain(initHistory(d)); idc.current = maxIdSuffix(d) + 1; }}
+        onClose={() => setShowAcceptance(false)} />}
 
       {/* 図面背景バー：図面が入っているときだけ。人が下地の図面を見ながら屋根・雨樋をトレースする。 */}
       {(planImg || elevImg) && (

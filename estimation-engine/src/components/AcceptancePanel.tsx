@@ -2,8 +2,11 @@
 //   Geometry → Quantity → Program を一画面で追い、右下に L0〜L3 の実証状態を出す。
 //   ★人トレースでも Recognizer でも同じ画面。将来 Human Geometry Provider → Recognizer Geometry Provider に差し替えても、この Acceptance だけで定量評価できる。
 import { useMemo, useState } from 'react';
-import type { QuantityResult } from '../geometry/roofModel';
-import { runAcceptance, buildBreakdown } from '../geometry/acceptance';
+import type { QuantityResult, RoofModel } from '../geometry/roofModel';
+import type { DrainModel } from '../geometry/drainModel';
+import { drainQuantities } from '../geometry/drainQuantities';
+import { autoProposeGutter } from '../geometry/autoPropose';
+import { runAcceptance, buildBreakdown, classifyGutterItem } from '../geometry/acceptance';
 import type { GutterProgram, CaseWork, QuantityBreakdown, DeltaRow } from '../geometry/acceptance';
 import casesData from '../../knowledge/validation/cases.json';
 import withdomGutter from '../../knowledge/programs/withdom-saitama.gutter.json';
@@ -44,8 +47,9 @@ const th: React.CSSProperties = { textAlign: 'left', padding: '2px 6px', fontWei
 const td: React.CSSProperties = { padding: '2px 6px', borderBottom: '1px solid #f1f3f5' };
 const num: React.CSSProperties = { ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' };
 
-export default function AcceptancePanel({ quantities, hasDrawing, calibrated, onClose }: {
-  quantities: QuantityResult[]; hasDrawing: boolean; calibrated: boolean; onClose: () => void;
+export default function AcceptancePanel({ quantities, hasDrawing, calibrated, roofModel, scale, onAdoptDrain, onClose }: {
+  quantities: QuantityResult[]; hasDrawing: boolean; calibrated: boolean;
+  roofModel: RoofModel; scale: number; onAdoptDrain: (d: DrainModel) => void; onClose: () => void;
 }) {
   const [caseId, setCaseId] = useState<string>(cases.find((c) => c.id === 'mizukami') ? 'mizukami' : (cases[0]?.id ?? ''));
   const theCase = cases.find((c) => c.id === caseId);
@@ -125,6 +129,16 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, on
     const a = document.createElement('a'); a.href = url; a.download = `iraka-breakdown-${caseId}.csv`; a.click();
     URL.revokeObjectURL(url);
   };
+
+  // 自動提案(AI積算 v0)：屋根 Geometry から雨樋を提案し、手拾い・GT と並べる。採用で Model へ反映。
+  const [ai, setAi] = useState<{ q: QuantityResult[]; drain: DrainModel; note: string } | null>(null);
+  const computeAi = () => { const p = autoProposeGutter(roofModel); setAi({ q: drainQuantities(roofModel, p.model, scale), drain: p.model, note: p.note }); };
+  const gtByKey = useMemo(() => { const m = new Map<string, number>(); if (caseWork) for (const it of caseWork.items) { const k = classifyGutterItem(it.name); if (k && !m.has(k)) m.set(k, it.qty); } return m; }, [caseWork]);
+  const gKeys: Array<{ k: string; label: string; unit: string }> = [
+    { k: 'gutterLength', label: '軒樋長', unit: 'm' }, { k: 'outletCount', label: '集水器数', unit: 'ヶ所' }, { k: 'downspoutLength', label: '縦樋長', unit: 'm' },
+  ];
+  const manualBy = (k: string) => quantities.find((q) => q.key === k)?.value;
+  const aiBy = (k: string) => ai?.q.find((q) => q.key === k)?.value;
 
   const dRow = (d: DeltaRow) => (
     <tr key={d.level + d.key}>
@@ -270,9 +284,34 @@ export default function AcceptancePanel({ quantities, hasDrawing, calibrated, on
         </table>
       )}
 
+      {/* 自動提案（AI積算）：手拾い vs AI vs GT。採用でAI提案を雨樋Modelへ反映（以後手で補正）。 */}
+      <div style={{ fontWeight: 700, color: '#343a40', margin: '10px 0 2px' }}>自動提案（AI積算）<span style={{ color: '#868e96', fontWeight: 400 }}> 手拾い vs AI vs GT</span></div>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginBottom: 4 }}>
+        <button onClick={computeAi} title="屋根Geometryから雨樋を自動提案">AI提案を計算</button>
+        {ai && <button onClick={() => onAdoptDrain(ai.drain)} title="AI提案を雨樋Modelに採用（手拾いに反映・以後編集可）">AIを採用</button>}
+        {ai && <span style={{ fontSize: 10, color: '#868e96', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ai.note}</span>}
+      </div>
+      {ai && (
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr><th style={th}>項目</th><th style={{ ...th, textAlign: 'right' }}>手拾い</th><th style={{ ...th, textAlign: 'right' }}>AI提案</th><th style={{ ...th, textAlign: 'right' }}>GT</th></tr></thead>
+          <tbody>{gKeys.map((g) => {
+            const m = manualBy(g.k); const a = aiBy(g.k); const gt = gtByKey.get(g.k);
+            const aiHit = a != null && gt != null && (g.unit === 'ヶ所' ? a === gt : Math.abs(a - gt) <= Math.max(0.1, 0.01 * gt));
+            return (
+              <tr key={g.k}>
+                <td style={td}>{g.label}</td>
+                <td style={num}>{m == null ? '—' : round3(m)}</td>
+                <td style={{ ...num, color: a == null ? GRAY : aiHit ? G : R }}>{a == null ? '—' : round3(a)}</td>
+                <td style={num}>{gt == null ? '—' : gt}</td>
+              </tr>
+            );
+          })}</tbody>
+        </table>
+      )}
+
       <div style={{ marginTop: 8, fontSize: 10.5, color: '#868e96', lineHeight: 1.6 }}>
-        Δが緑になるまで「較正 → 軒樋/縦樋/集水器をトレース」。判定セルにカーソルを当てると threshold/allowed/actual を表示。
-        将来 Recognizer を載せても、この画面のまま人トレースを差し替えて評価できます。
+        Δが緑になるまで「較正 → 軒樋/縦樋/集水器をトレース（or AI提案を採用して補正）」。判定セルにカーソルで threshold/allowed/actual。
+        手拾い(Human)とAI提案は同じ測定系で比較され、採用は Run の Decision に残せます。
       </div>
     </div>
   );
