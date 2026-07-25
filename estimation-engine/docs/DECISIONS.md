@@ -167,3 +167,11 @@
 - 差別化：他社は `CAD→積算` で終わる。甍AIは `図面→Geometry→Evidence→Engineering→Knowledge→Decision→建物の一生`＝図面を読むAIでなく**建物を理解して判断するAI**。詳細 `claude/BACKLOG-yaritai.md`。
 - Alternatives: 雨樋専用エンジンとして最適化／Digital Twin を Ver.3 直後に置く。
 - Rejected because: 工種専用化は再利用を捨てる。エンジン層(Ver.4)を明示せず Digital Twin へ飛ぶと「判断できるモデル」の土台が言語化されず、全工種展開時に作り直しを招く。
+
+## 2026-07-25 — 「工種」でなく「Domain」。BIE＝Construction Domain の集合。Digital Twin＝BIE＋Project History
+- Reason: 屋根/雨樋/外壁/基礎 は工種名でなく **Construction Domain**。各 Domain は Semantic Model＋Engineering Rules＋Simulation＋Program を持ち、**Domain Compiler** が `Semantic Model→Estimate/Construction/Simulation/Check` にコンパイルする。Program が増えても「Domain Compiler」1概念で統一（Domain追加＝Compiler追加、既存不変）。詳細 `claude/DOMAIN-ARCHITECTURE.md`。
+- ★2層の整理：**Construction Domain**（Roof/Gutter/Wall…＝建物システム）と、既存の **Output Domain**（Cost/Schedule/QA/Carbon/Resource＝`DomainCompiler<Program,IR>`・横断出力投影）は段が違う。Construction が「何を作るか」、Output が「各帳票へ写す」。
+- 既存が既に対応：Roof Domain＝roofModel/roofQuantities、Gutter Domain＝drainModel/drainQuantities。外壁/基礎…は同形で Domain を足すだけ（作り直し不要）。
+- Digital Twin＝Geometry＋Domain Knowledge＋Engineering Rules＋History＝**BIE＋Project History**。役割分担：Ver.4 BIE＝頭脳（工学判断）、Ver.5 Digital Twin＝生きた建物（頭脳＋施工/点検/修繕の履歴）。
+- Alternatives: 工種を単なるラベルとして扱う／RoofProgram等を個別概念のまま増やす。
+- Rejected because: ラベル扱いだと Program の増加で構造が崩れる。Domain Compiler で統一すれば N ドメインでも一様。Digital Twin を BIE＋History と定義しないと「3Dモデル」に退化する。
