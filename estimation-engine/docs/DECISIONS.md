@@ -138,3 +138,10 @@
 - 第一版 自動提案：雨樋を屋根 Geometry から決定的に提案（全軒に軒樋／各軒両端に集水器／各集水器から縦樋）＝`autoPropose.ts`。Recognizer(図面→Geometry 自動認識)ではなく「Geometry→雨樋の自動拾い」から。図面認識は段階的に。
 - Alternatives: ゲート厳守（Human Baseline 固定まで自動提案を作らない）。
 - Rejected because: ユーザーが比較ワークフローを優先。規律（同一Acceptanceで手拾いとAIを並べる）を保てば、切り分けの濁りは比較画面で可視化できる＝ゲートの意図は測定系で担保。
+
+## 2026-07-25 — 甍AI Ver.1 ＝ 図面から会社の知識を育てる OS（アーキテクチャを一段上げる）
+- Reason: 積算データを使い捨てでなく **案件(Project)の資産**として持つ。一本のデータ基盤 `Drawing→Geometry→Evidence→Quantity→[Human/AI/GT]→Decision→Learning→Export` で、採用・学習・帳票が同じ土台で動く。詳細は Project doc `claude/VER1-OS-ARCHITECTURE.md`。
+- 既存の測定基盤 `Baseline→Run→Diff→Decision`（ロック済）と矛盾せず内包：Decision の下に **Evidence**（数量→辺内訳→図面ハイライトの一気通貫トレース＝Evidence First の UI 実体化）、上に **Learning**（Decision→AIの成功例/負例）が乗るだけ。
+- Comparison は `Human/AI/GT` から **`Item×Human×AI×GT×Decision`（項目ごとの採用）** へ上げる。
+- Alternatives: 積算をセッション限りのデータとして扱う／比較を全体一括の採用に留める。
+- Rejected because: 案件資産化しないと履歴・学習・トレースが消える。項目ごとDecisionでないと「どの数量を誰の値で採ったか」と学習データが取れない。

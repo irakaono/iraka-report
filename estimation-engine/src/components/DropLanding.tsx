@@ -50,16 +50,23 @@ async function renderDocPage(doc: any, pageNum: number, scale = 2): Promise<stri
 }
 
 // ── 複数ページPDFから 平面図/立面図 を自動抽出：各ページのテキスト層からタイトルを読み分類する ──
-export type PageCategory = 'plan' | 'elevation' | 'roofplan' | 'other';
+export type PageCategory = 'plan' | 'elevation' | 'roofplan' | 'framing' | 'section' | 'site' | 'schedule' | 'other';
 export interface PageInfo { n: number; category: PageCategory; title: string }
+export const CAT_LABEL: Record<PageCategory, string> = {
+  plan: '平面図', elevation: '立面図', roofplan: '屋根伏図', framing: '伏図', section: '断面/矩計', site: '配置図', schedule: '建具/仕上/面積', other: 'その他',
+};
 function classifyPage(text: string): { category: PageCategory; title: string } {
   const t = text.replace(/\s+/g, '');
-  const title = (t.match(/((?:[0-9０-９]{1,2}階|[東西南北]|小屋|基礎|地下|各階|R)?(?:平面詳細図|平面図|立面図|屋根伏図|小屋伏図|床伏図|基礎伏図|伏図|配置図|断面図|矩計図|展開図|面積表|求積図))/) || [])[1] || '';
+  const title = (t.match(/((?:[0-9０-９]{1,2}階|[東西南北]|小屋|基礎|地下|各階|R)?(?:平面詳細図|平面図|立面図|屋根伏図|小屋伏図|床伏図|基礎伏図|伏図|配置図|断面図|矩計図|展開図|面積表|求積図|建具表|仕上表))/) || [])[1] || '';
   let category: PageCategory = 'other';
-  if (/立面図/.test(t)) category = 'elevation';
+  if (/立面図/.test(t)) category = 'elevation';               // 種別の優先順（平面図は generic なので最後）
   else if (/屋根伏図/.test(t)) category = 'roofplan';
-  else if (/平面図|平面詳細図/.test(t)) category = 'plan';
-  return { category, title: title || (category === 'other' ? 'その他' : category) };
+  else if (/小屋伏図|床伏図|基礎伏図|伏図/.test(t)) category = 'framing';
+  else if (/矩計図|断面図/.test(t)) category = 'section';
+  else if (/配置図/.test(t)) category = 'site';
+  else if (/建具表|仕上表|面積表|求積図/.test(t)) category = 'schedule';
+  else if (/平面詳細図|平面図/.test(t)) category = 'plan';
+  return { category, title: title || CAT_LABEL[category] };
 }
 async function analyzeDoc(doc: any): Promise<PageInfo[]> {
   const pages: PageInfo[] = [];
@@ -225,7 +232,11 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
         {extract && (
           <div style={{ marginTop: 10, padding: '10px 14px', background: '#f5f2ff', borderRadius: 10, fontSize: 12 }}>
             <div style={{ color: '#5f3dc4', fontWeight: 700, marginBottom: 8 }}>
-              {extract.fileName}：{extract.pages.length}ページ解析（平面{extract.pages.filter((p) => p.category === 'plan').length}・立面{extract.pages.filter((p) => p.category === 'elevation').length}・屋根伏図{extract.pages.filter((p) => p.category === 'roofplan').length} 検出）
+              {extract.fileName}：{extract.pages.length}ページ解析 — この案件には{' '}
+              {(['plan', 'elevation', 'roofplan', 'framing', 'section', 'site', 'schedule', 'other'] as PageCategory[])
+                .map((c) => ({ c, n: extract.pages.filter((p) => p.category === c).length }))
+                .filter((x) => x.n > 0)
+                .map((x) => `${CAT_LABEL[x.c]}${x.n}枚`).join('・')}
             </div>
             <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
               <label style={{ color: '#495057' }}>平面図ページ：{' '}
