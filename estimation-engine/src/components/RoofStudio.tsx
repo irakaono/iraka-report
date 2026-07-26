@@ -162,12 +162,16 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
   const [guideOn, setGuideOn] = useState<boolean>(true);      // ガイド表示ON/OFF
   const [advanced, setAdvanced] = useState<boolean>(false);   // 詳細モード（上部ツールバーを畳む/展開）
   const [showIntro, setShowIntro] = useState<boolean>(true);  // 初回だけ画面中央に指示を重ねる
+  const [cursorPt, setCursorPt] = useState<Point | null>(null); // 縮尺合わせ中：カーソル追従ヒント用
+  const [toast, setToast] = useState<string | null>(null);      // 成功トースト（✓縮尺を設定しました 等）
   const applyCalibration = (p1: Point, p2: Point) => {
     const m = Number(knownLen);
     if (!(m > 0)) { setLoadError('既知寸法(m)を正の数で入力してください'); return; }
     try {
       const cal = calibrateFrom2Points({ id: `cal-${idc.current++}`, drawingId: bgWhich, p1, p2, sourceLength: m });
       setCalibration(cal); setScale(cal.pxPerMeter); setCalPts([]); setLoadError(null);
+      setCursorPt(null);
+      setToast('✓ 縮尺を設定しました'); window.setTimeout(() => setToast(null), 1100); // 成功体験を一瞬見せる
       setMode('select'); setShowIntro(false); // 縮尺確定 → 自動で「屋根をなぞる」へ
 
     } catch (err) { setLoadError(err instanceof Error ? err.message : String(err)); }
@@ -377,6 +381,12 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
   }, []);
   const savedLabel = savedAt ? `💾 最終保存 ${new Date(savedAt).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit', month: 'numeric', day: 'numeric' })}` : '未保存';
 
+  // 縮尺合わせ中のカーソル追従ヒント（①点目/②点目をクリック）用にポインタ位置を追う。
+  const onStageMove = (e: any) => {
+    if (mode !== 'calibrate') { if (cursorPt) setCursorPt(null); return; }
+    const p = e.target.getStage().getPointerPosition();
+    setCursorPt(p ? { x: p.x, y: p.y } : null);
+  };
   const onStageClick = (e: any) => {
     if (bgAdjust) return; // 図面の位置調整中は屋根の作図を止める
     const p = e.target.getStage().getPointerPosition(); if (!p) return;
@@ -651,7 +661,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
         </aside>
 
         {/* 中央: キャンバス（Roof ＋ Drain オーバーレイ） */}
-        <div className="rs-canvas" style={{ position: 'relative' }}>
+        <div className="rs-canvas" style={{ position: 'relative', cursor: mode === 'calibrate' ? 'crosshair' : undefined }}>
           {/* 仮の下書きバッジ：確定前は「AIの下書き・図面認識ではない」と明示（誤認防止） */}
           {!roofDone && (
             <div style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 5,
@@ -660,9 +670,10 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
               🔖 これは仮の下書きです（AIの提案。図面を認識した結果ではありません）
             </div>
           )}
-          {/* 初回だけ中央に指示を重ねる。「はじめる」で閉じ、以後は上部AIナビが案内。縮尺済みなら出さない。 */}
+          {/* 初回だけ中央に指示を重ねる。画面のどこかをクリックで閉じる（以後は上部AIナビが案内）。縮尺済みなら出さない。 */}
           {showIntro && !calibration && (
-            <div style={{ position: 'absolute', inset: 0, zIndex: 6, background: 'rgba(26,37,48,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div onClick={() => setShowIntro(false)}
+              style={{ position: 'absolute', inset: 0, zIndex: 6, background: 'rgba(26,37,48,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <div style={{ background: '#fff', borderRadius: 14, padding: '22px 26px', maxWidth: 440, boxShadow: '0 8px 30px rgba(0,0,0,.25)', textAlign: 'center' }}>
                 <div style={{ fontSize: 18, fontWeight: 800, color: '#1a2530' }}>まず「縮尺」を合わせます</div>
                 <div style={{ fontSize: 13.5, color: '#495057', marginTop: 10, lineHeight: 1.8, textAlign: 'left' }}>
@@ -672,14 +683,19 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
                   これで縮尺が決まり、面積や長さが実寸になります。
                 </div>
                 <div style={{ fontSize: 12, color: '#868e96', marginTop: 10 }}>※ いま表示中の屋根・雨樋は「仮の下書き」です。</div>
-                <button onClick={() => setShowIntro(false)}
-                  style={{ marginTop: 16, fontSize: 15, fontWeight: 700, padding: '11px 30px', borderRadius: 9, border: 'none', color: '#fff', background: '#1971c2', cursor: 'pointer' }}>
-                  はじめる
-                </button>
+                <div style={{ marginTop: 16, fontSize: 14, fontWeight: 700, color: '#1971c2' }}>▶ 画面のどこかをクリックして始めましょう</div>
               </div>
             </div>
           )}
-          <Stage width={W} height={H} onMouseDown={onStageClick}>
+          {/* 成功トースト：縮尺確定などの「進めた」瞬間を一瞬見せる */}
+          {toast && (
+            <div style={{ position: 'absolute', top: '46%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 7,
+              background: '#2b8a3e', color: '#fff', borderRadius: 12, padding: '14px 28px', fontSize: 17, fontWeight: 800,
+              boxShadow: '0 6px 24px rgba(0,0,0,.28)', pointerEvents: 'none' }}>
+              {toast}
+            </div>
+          )}
+          <Stage width={W} height={H} onMouseDown={onStageClick} onMouseMove={onStageMove}>
             <Layer>
               {/* 図面下地（トレース対象）。position調整中だけ操作可、それ以外は不可視のクリック透過。 */}
               {bgOn && bgImg && <KonvaImage image={bgImg} x={bgPos.x} y={bgPos.y} scaleX={bgScale} scaleY={bgScale}
@@ -727,6 +743,18 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
               {draft.length > 0 && <Line points={flat(draft)} stroke="#2e74b5" strokeWidth={2} dash={[6, 4]} />}
               {/* 較正マーカー：クリック中の点＋確定した較正線 */}
               {mode === 'calibrate' && calPts.map((cp, i) => <Circle key={'calp' + i} x={cp.x} y={cp.y} radius={5} fill="#f08c00" stroke="#fff" strokeWidth={1} />)}
+              {mode === 'calibrate' && calPts.length === 1 && cursorPt && <Line points={[calPts[0].x, calPts[0].y, cursorPt.x, cursorPt.y]} stroke="#f08c00" strokeWidth={2} dash={[4, 4]} opacity={0.7} />}
+              {/* カーソル追従ヒント：①点目/②点目をクリック（縮尺合わせ中だけ） */}
+              {mode === 'calibrate' && cursorPt && (() => {
+                const label = calPts.length === 0 ? '①点目をクリック' : '②点目をクリック';
+                const w = label.length * 13 + 16;
+                return (
+                  <Group x={cursorPt.x + 14} y={cursorPt.y + 14} listening={false}>
+                    <Rect width={w} height={26} cornerRadius={13} fill="#1971c2" opacity={0.95} />
+                    <Text x={0} y={0} width={w} height={26} align="center" verticalAlign="middle" text={label} fontSize={13} fontStyle="bold" fill="#fff" />
+                  </Group>
+                );
+              })()}
               {calibration && <Line points={[calibration.p1.x, calibration.p1.y, calibration.p2.x, calibration.p2.y]} stroke="#f08c00" strokeWidth={2} dash={[4, 4]} />}
               {model.edges.map((e) => { const role = edgeRole(model, e); if (!role) return null; const a = V.get(e.v[0]); const b2 = V.get(e.v[1]); if (!a || !b2) return null;
                 return <Text key={'t' + e.id} x={(a.x + b2.x) / 2 - 8} y={(a.y + b2.y) / 2 - 8} text={ROLE_LABEL[role]} fontSize={11} fill={ROLE_COLOR[role]} />; })}
