@@ -52,10 +52,19 @@ function loadExcelJS(): Promise<any> {
 }
 
 // iraka-report 埋め込み時のホスト（js/estimation-bridge.js が ?projectId 連携で window にセット）。無ければ standalone。
+interface EstimationRevisionRec {
+  id: string; sequence: number; createdAt: string; note?: string;
+  geometryRevisionId: string; geometrySequence?: number; quotationSnapshot?: unknown; status?: string;
+}
 interface EstimationHost {
   projectId?: string | null;
   loadModel: () => Promise<string | null>;
   saveModel: (json: string) => Promise<void>;
+  // v5 履歴 API（無ければ standalone 扱い）
+  hasHistory?: boolean;
+  listRevisions?: () => Promise<EstimationRevisionRec[]>;
+  saveRevision?: (payload: { model: string; quantitySnapshot?: unknown; quotationSnapshot?: unknown; note?: string; createdBy?: string }) => Promise<{ estimation: EstimationRevisionRec; geometryReused?: boolean }>;
+  openRevision?: (geometryRevisionId: string) => Promise<string | null>;
 }
 function estimationHost(): EstimationHost | undefined {
   return typeof window !== 'undefined'
@@ -164,6 +173,9 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
   const [showIntro, setShowIntro] = useState<boolean>(true);  // 初回だけ画面中央に指示を重ねる
   const [cursorPt, setCursorPt] = useState<Point | null>(null); // 縮尺合わせ中：カーソル追従ヒント用
   const [toast, setToast] = useState<string | null>(null);      // 成功トースト（✓縮尺を設定しました 等）
+  const [showHistory, setShowHistory] = useState<boolean>(false);       // 積算履歴パネル（案件埋め込み時のみ）
+  const [revisions, setRevisions] = useState<EstimationRevisionRec[]>([]); // 案件の Estimation 履歴（001/002…）
+  const hasHistory = !!estimationHost()?.hasHistory;                     // 履歴機能が使える（?projectId 埋め込み）か
   const applyCalibration = (p1: Point, p2: Point) => {
     const m = Number(knownLen);
     if (!(m > 0)) { setLoadError('既知寸法(m)を正の数で入力してください'); return; }
@@ -370,13 +382,45 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
     const a = document.createElement('a'); a.href = url; a.download = `甍AI-積算-${stamp.slice(0, 10)}.iraka-estimation.json`; a.click();
     URL.revokeObjectURL(url);
     setSavedAt(stamp); setLoadError(null);
+    // 案件埋め込み時は、この保存を「履歴（Estimation-00N）」にも追記する（原則12：追記／原則20：形状を固定）。
+    //   ★Geometry Revision には savedAt を含めない形状純粋版を渡す（同一形状なら複製せず再利用させるため）。
+    if (host?.saveRevision) {
+      host.saveRevision({
+        model: serializeDocument(faces, dm),
+        quantitySnapshot: { roof: rq, drain: dq },
+        quotationSnapshot: snapshot.estimate,
+        note: '', createdBy: '',
+      }).then((res) => {
+        flash(`✓ 履歴に保存しました（Estimation-${String(res.estimation.sequence).padStart(3, '0')}）`);
+        refreshHistory();
+      }).catch(() => {});
+    }
   };
-  // 埋め込み時：起動時に案件から復元（host があれば）
+  const flash = (msg: string) => { setToast(msg); window.setTimeout(() => setToast(null), 1300); };
+  // 案件の Estimation 履歴を再読込
+  const refreshHistory = () => {
+    const host = estimationHost();
+    if (host?.listRevisions) host.listRevisions().then((rows) => setRevisions(rows || [])).catch(() => {});
+  };
+  // 過去版を開く：当時の Geometry Revision を読み込む（数量・見積は Geometry から自動再計算＝Projection・原則20）
+  const openRevision = (rev: EstimationRevisionRec) => {
+    const host = estimationHost();
+    if (!host?.openRevision) return;
+    host.openRevision(rev.geometryRevisionId).then((json) => {
+      if (json && loadFromJson(json)) {
+        setRoofDone(true); // 過去版は確定済み形状として開く
+        flash(`Estimation-${String(rev.sequence).padStart(3, '0')} を開きました`);
+        setShowHistory(false);
+      }
+    }).catch(() => setLoadError('過去版の読み込みに失敗しました'));
+  };
+  // 埋め込み時：起動時に案件から復元（host があれば）＋履歴の初期読込
   useEffect(() => {
     const host = estimationHost();
     if (host?.projectId && typeof host.loadModel === 'function') {
       host.loadModel().then((json) => { if (json) loadFromJson(json); }).catch(() => {});
     }
+    if (host?.listRevisions) host.listRevisions().then((rows) => setRevisions(rows || [])).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const savedLabel = savedAt ? `💾 最終保存 ${new Date(savedAt).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit', month: 'numeric', day: 'numeric' })}` : '未保存';
@@ -443,7 +487,45 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
           <span className="rs-sp2" />
           <button className={showAcceptance ? 'on' : ''} onClick={() => setShowAcceptance((v) => !v)} title="積算 検証パネル">検証</button>
           <button onClick={exportExcel} title="会社の見積書書式でExcel出力">📊 見積書を作成</button>
-          <button onClick={saveEstimation} title="積算（Model＋数量＋見積）を保存">🗂 積算保存</button>
+          <button onClick={saveEstimation} title="積算（Model＋数量＋見積）を保存。案件では履歴にも追記">🗂 積算保存</button>
+          {hasHistory && <button className={showHistory ? 'on' : ''} onClick={() => { setShowHistory((v) => !v); refreshHistory(); }} title="この案件の積算履歴（Estimation-001/002…）">🕘 履歴{revisions.length ? `（${revisions.length}）` : ''}</button>}
+        </div>
+      )}
+      {/* 積算履歴パネル（案件埋め込み時のみ）：過去版の一覧＋開く。原則19/20＝Projectが器・Geometryを固定して再現。 */}
+      {showHistory && hasHistory && (
+        <div style={{ background: '#fff', borderBottom: '1px solid #d0e2f5', padding: '12px 16px', maxHeight: 260, overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <b style={{ fontSize: 14, color: '#1a2530' }}>積算履歴</b>
+            <span style={{ fontSize: 12, color: '#868e96' }}>「積算保存」するたびに Estimation-001, 002… と追記されます（保存済みは上書きしません）。</span>
+            <span style={{ flex: 1 }} />
+            <button onClick={saveEstimation} style={{ fontSize: 13, fontWeight: 700, padding: '7px 14px', borderRadius: 8, border: 'none', color: '#fff', background: '#1971c2', cursor: 'pointer' }}>＋ この状態を履歴に保存</button>
+          </div>
+          {revisions.length === 0 ? (
+            <div style={{ fontSize: 13, color: '#868e96', padding: '8px 0' }}>まだ履歴はありません。「積算保存」で最初の版（Estimation-001）ができます。</div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead><tr style={{ color: '#868e96', textAlign: 'left' }}>
+                <th style={{ padding: '4px 8px' }}>版</th><th style={{ padding: '4px 8px' }}>日時</th>
+                <th style={{ padding: '4px 8px' }}>形状</th><th style={{ padding: '4px 8px', textAlign: 'right' }}>合計</th>
+                <th style={{ padding: '4px 8px' }}>メモ</th><th></th>
+              </tr></thead>
+              <tbody>
+                {revisions.slice().reverse().map((r) => {
+                  const total = (r.quotationSnapshot && typeof r.quotationSnapshot === 'object') ? (r.quotationSnapshot as { total?: number }).total : undefined;
+                  return (
+                    <tr key={r.id} style={{ borderTop: '1px solid #f1f3f5' }}>
+                      <td style={{ padding: '6px 8px', fontWeight: 700 }}>Estimation-{String(r.sequence).padStart(3, '0')}</td>
+                      <td style={{ padding: '6px 8px', color: '#495057' }}>{new Date(r.createdAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                      <td style={{ padding: '6px 8px', color: '#868e96' }}>Geometry-{String(r.geometrySequence ?? 0).padStart(3, '0')}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{total != null ? `¥${Math.round(total).toLocaleString('ja-JP')}` : '—'}</td>
+                      <td style={{ padding: '6px 8px', color: '#495057' }}>{r.note || ''}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}><button onClick={() => openRevision(r)} style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 7, border: '1px solid #74b0e6', color: '#1971c2', background: '#fff', cursor: 'pointer' }}>開く</button></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
       {/* ── AIナビ（初回ガイド）：現在地を常時表示し、次の一手だけを案内。専門用語は使わない。 ── */}

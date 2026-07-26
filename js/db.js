@@ -8,8 +8,9 @@
  *
  *  ARCHITECTURE_V2（憲法）確定事項：
  *    - DB名        : irakafieldDB
- *    - DB Version  : 4   （v2: 初期スキーマ / v3: projects.kind / v4: estimations ストア追加）
+ *    - DB Version  : 5   （v2: 初期スキーマ / v3: projects.kind / v4: estimations / v5: 履歴2ストア）
  *    - stores      : projects / reports / photos / settings / estimations
+ *                    / geometryRevisions / estimationRevisions（v5：積算履歴・原則12/19/20）
  *    - 最上位構造  : 案件 → 帳票 → 写真 → AI
  *    - 原則:
  *        (1) reports に写真本体を持たせない（写真は photos ストアに独立）
@@ -32,7 +33,7 @@
 
   /* ---- 定数（憲法の固定条件） ------------------------------------------- */
   var DB_NAME = 'irakafieldDB';
-  var DB_VERSION = 4;
+  var DB_VERSION = 5;
 
   // ストア定義。keyPath とインデックスのみを宣言。レコードの中身は縛らない。
   var SCHEMA = {
@@ -66,12 +67,32 @@
       indexes: []
     },
     // v4: 積算（案件配下の Model 保存）。中身の構造は縛らない（Evidence First：Model=幾何+属性の JSON）。
+    //   ★これは「現在編集中の状態（current working state）」。履歴は下の 2 ストア（v5）で持つ。
     estimations: {
       keyPath: 'id',
       indexes: [
         { name: 'projectId',     keyPath: 'projectId',     options: { unique: false } },
         { name: 'schemaVersion', keyPath: 'schemaVersion', options: { unique: false } },
         { name: 'updatedAt',     keyPath: 'updatedAt',     options: { unique: false } }
+      ]
+    },
+    // v5: Geometry Revision（保存済み形状＝不変・追記のみ／憲法 原則20）。Model=serializeDocument の JSON。
+    geometryRevisions: {
+      keyPath: 'id',
+      indexes: [
+        { name: 'projectId', keyPath: 'projectId', options: { unique: false } },
+        { name: 'sequence',  keyPath: 'sequence',  options: { unique: false } },
+        { name: 'createdAt', keyPath: 'createdAt', options: { unique: false } }
+      ]
+    },
+    // v5: Estimation Revision（積算の履歴 001/002…／憲法 原則12・19）。geometryRevisionId で形状を固定（pin）。
+    estimationRevisions: {
+      keyPath: 'id',
+      indexes: [
+        { name: 'projectId',          keyPath: 'projectId',          options: { unique: false } },
+        { name: 'sequence',           keyPath: 'sequence',           options: { unique: false } },
+        { name: 'geometryRevisionId', keyPath: 'geometryRevisionId', options: { unique: false } },
+        { name: 'createdAt',          keyPath: 'createdAt',          options: { unique: false } }
       ]
     }
   };
@@ -126,8 +147,24 @@
       ['projectId', 'schemaVersion', 'updatedAt'].forEach(function (name) {
         if (!est.indexNames.contains(name)) est.createIndex(name, name, { unique: false });
       });
+    },
+
+    // v5: 履歴用ストア追加（geometryRevisions / estimationRevisions）。構造のみ・既存データは一切触らない。
+    //     憲法 原則5/10：旧データ（estimations の current working state）は不変。履歴は新ストアに追記する。
+    5: function (db, tx) {
+      var gr = db.objectStoreNames.contains('geometryRevisions')
+        ? tx.objectStore('geometryRevisions')
+        : db.createObjectStore('geometryRevisions', { keyPath: 'id' });
+      ['projectId', 'sequence', 'createdAt'].forEach(function (name) {
+        if (!gr.indexNames.contains(name)) gr.createIndex(name, name, { unique: false });
+      });
+      var er = db.objectStoreNames.contains('estimationRevisions')
+        ? tx.objectStore('estimationRevisions')
+        : db.createObjectStore('estimationRevisions', { keyPath: 'id' });
+      ['projectId', 'sequence', 'geometryRevisionId', 'createdAt'].forEach(function (name) {
+        if (!er.indexNames.contains(name)) er.createIndex(name, name, { unique: false });
+      });
     }
-    // 5: function (db, tx) { /* migrate4to5 */ }
   };
 
   function registerMigration(version, fn) {

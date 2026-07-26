@@ -186,3 +186,16 @@
 - Ver.1 KPI：**「3分で見積」**（PDF投入→②縮尺30s→③屋根90s→④AI数量→⑤見積30s＝3分以内）を合格ライン兼・営業資料兼・社内目標に。
 - Alternatives: Recognizer を特別な AI レイヤーとして設計／出力物(Excel)を編集して正とする／Recognizer を Phase A より先に着手。
 - Rejected because: Recognizer特別扱いはAI強化のたびにアーキ改修を招く。出力編集を許すと真実が二重化しGeometry不変が崩れる。器(Project/Estimation履歴)未完のままRecognizerを積むと土台が後で崩れる。
+
+## 2026-07-26 — Phase A #1「案件ごとの Estimation 履歴」：永続化契約を LOCK して実装（原則19の初実体化）
+- **DB v5（追加のみ・原則5/10）**：`js/db.js` に 2 ストア追加。既存(projects/reports/photos/settings/estimations)は不変。
+  - `geometryRevisions`：保存済み形状＝不変・追記のみ（原則20）。`{ id, projectId, sequence, schemaVersion, createdAt, model(=serializeDocument JSON・savedAt無し) }`。index: projectId/sequence/createdAt。
+  - `estimationRevisions`：積算履歴 001/002…（原則12/19）。`{ id, projectId, sequence, schemaVersion, createdAt, createdBy, geometryRevisionId(＝形状を固定/pin), geometrySequence, quantitySnapshot, quotationSnapshot, status:'draft'|'reviewed'|'adopted'|'superseded', note }`。index: projectId/sequence/geometryRevisionId/createdAt。
+- **採用版は Estimation でなく Project 側の Decision**（原則19・Phase A#2の受け皿）：`project.extensions.estimationDecision = { adoptedEstimationId, decidedBy, decidedAt, reason }`。bridge に get/setEstimationDecision を用意（UIは#2）。
+- **current working state は従来の `estimations`（1件・上書き）を維持**＝後方互換。履歴は別ストアに追記。旧案件は履歴0件＝「未履歴化」、次の保存で Estimation-001 になる（遅延移行・強制変換なし）。
+- **形状の複製をしない（原則20）**：saveEstimationRevision は直近 Geometry Revision と model 文字列が同一なら再利用（Estimation-002→Geometry-001 可）。ゆえに Revision には savedAt を含めない純粋形状を渡す（Studio 側で `serializeDocument(faces, dm)`）。
+- **過去版を開く**＝当時の Geometry Revision を loadFromJson。数量・見積は Geometry からの決定的 Projection（原則20）なので snapshot は監査・再現確認用に併存。
+- bridge API（`window.IrakaEstimationHost` / `window.IrakaEstimation`）：listRevisions / listGeometryRevisions / saveRevision / openRevision(=loadGeometryRevision) / get/setDecision。Studio は host.hasHistory の時だけ「🕘 履歴」を出す（standalone は非表示＝単体HTML保存経路は不変）。
+- **自己テスト（原則11・本番APIを直接）**：headless(実IndexedDB)で DoD 実証＝001/002/003 追記／一覧／過去版を開く／保存済み不変／再読込でID・連番不変／同一形状は Geometry を複製しない／旧経路(standalone)不変。
+- Alternatives: adopted を Estimation の可変属性にする／Geometry を各 Estimation へ丸ごと複製／履歴を project レコード内の配列で持つ。
+- Rejected because: adopted を Estimation に持たせると採用の付け替えが履歴を汚す（Decisionは Project 側が自然）。形状の丸ごと複製はデータ膨張と同一性喪失。配列内包は原則1（本体と参照の分離）に反し肥大化する。

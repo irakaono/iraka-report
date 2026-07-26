@@ -35,8 +35,11 @@
   var PROJECT_ID = queryParam('projectId');
   var IDB = root.IrakaDB;
   var IP = root.IrakaProject;
-  var STORE = 'estimations';
+  var STORE = 'estimations';                 // current working state（現在編集中の1件・従来どおり）
+  var GEOM_STORE = 'geometryRevisions';      // v5: 保存済み形状（不変・追記のみ・原則20）
+  var EST_STORE = 'estimationRevisions';     // v5: 積算の履歴 001/002…（原則12/19）
   var SCHEMA_VERSION = 1;
+  var REV_SCHEMA_VERSION = 1;
   var TYPE = 'roof'; // 現行 Engine は屋根＋雨樋
 
   /* ---- 低レベル：estimations ストア API（?projectId 非依存で使える） -------- */
@@ -92,10 +95,93 @@
     });
   }
 
+  /* ---- 履歴（v5）：Geometry Revision（不変・追記）＋ Estimation Revision（001/002…） ------
+   *  憲法 原則12（判断は追記）・19（Projectが器）・20（保存済み形状は不変・Estimationは形状を固定）。
+   *  ★current working state（STORE）は従来どおり。履歴は別ストアに「追記のみ」で貯める。
+   *  ★過去版を開く＝当時の Geometry Revision の model を読む。数量/見積は Geometry からの決定的 Projection。 */
+  function sortBySeq(rows) {
+    return (rows || []).slice().sort(function (a, b) { return (a.sequence || 0) - (b.sequence || 0); });
+  }
+  function listGeometryRevisions(projectId) {
+    if (!IDB || !projectId) return Promise.resolve([]);
+    return IDB.query(GEOM_STORE, 'projectId', projectId).then(sortBySeq);
+  }
+  function listEstimationRevisions(projectId) {
+    if (!IDB || !projectId) return Promise.resolve([]);
+    return IDB.query(EST_STORE, 'projectId', projectId).then(sortBySeq);
+  }
+  // 過去版を開く：Geometry Revision の model(JSON文字列) を返す（当時の形状を完全再現）。
+  function loadGeometryRevision(projectId, geometryRevisionId) {
+    if (!IDB || !projectId || !geometryRevisionId) return Promise.resolve(null);
+    return IDB.get(GEOM_STORE, geometryRevisionId).then(function (rec) {
+      return (rec && rec.projectId === projectId) ? rec.model : null;
+    });
+  }
+  // 履歴に1件追記：形状は直近と同一なら再利用（複製しない）、違えば新 Geometry Revision を追記。
+  //   payload: { model(JSON文字列/obj), quantitySnapshot?, quotationSnapshot?, note?, createdBy? }
+  function saveEstimationRevision(projectId, payload) {
+    if (!IDB || !IP || !projectId) return Promise.reject(new Error('IrakaDB/IrakaProject/projectId が必要です'));
+    payload = payload || {};
+    var model = payload.model;
+    if (typeof model !== 'string') model = JSON.stringify(model);
+    if (!model) return Promise.reject(new Error('model（Geometry）が必要です'));
+    var now = IDB.nowISO();
+    return listGeometryRevisions(projectId).then(function (grows) {
+      var latest = grows[grows.length - 1] || null;
+      var reused = !!(latest && latest.model === model);
+      var geomPromise;
+      if (reused) {
+        geomPromise = Promise.resolve(latest);                 // 同一形状は複製せず参照を使い回す（原則20）
+      } else {
+        var grec = {
+          id: IDB.genId('grev'), projectId: projectId, sequence: (latest ? latest.sequence : 0) + 1,
+          schemaVersion: REV_SCHEMA_VERSION, createdAt: now, model: model
+        };
+        geomPromise = IDB.put(GEOM_STORE, grec).then(function () { return grec; });
+      }
+      return geomPromise.then(function (geom) {
+        return listEstimationRevisions(projectId).then(function (erows) {
+          var eseq = (erows[erows.length - 1] ? erows[erows.length - 1].sequence : 0) + 1;
+          var erec = {
+            id: IDB.genId('erev'), projectId: projectId, sequence: eseq,
+            schemaVersion: REV_SCHEMA_VERSION, createdAt: now, createdBy: payload.createdBy || null,
+            geometryRevisionId: geom.id, geometrySequence: geom.sequence,       // ★形状を固定（pin）
+            quantitySnapshot: (payload.quantitySnapshot != null) ? payload.quantitySnapshot : null,  // 監査・再現確認用
+            quotationSnapshot: (payload.quotationSnapshot != null) ? payload.quotationSnapshot : null,
+            status: 'draft', note: payload.note || ''
+          };
+          return IDB.put(EST_STORE, erec).then(function () {
+            // 現在編集中の状態も最新へ（loadModel の一貫性）。旧 estimations レコードは壊さない。
+            return saveForProject(projectId, model).then(
+              function () { return { estimation: erec, geometry: geom, geometryReused: reused }; },
+              function () { return { estimation: erec, geometry: geom, geometryReused: reused }; }
+            );
+          });
+        });
+      });
+    });
+  }
+  // 採用版の判断（EstimationDecision）は Project 側に持つ（原則19・Phase A#2 の受け皿）。今は read/write のみ。
+  function getEstimationDecision(projectId) {
+    return IP.get(projectId).then(function (p) { return (p && p.extensions && p.extensions.estimationDecision) || null; });
+  }
+  function setEstimationDecision(projectId, decision) {
+    return IP.update(projectId, { extensions: { estimationDecision: decision } }).then(function () { return decision; });
+  }
+
   var IrakaEstimation = {
     STORE: STORE,
+    GEOM_STORE: GEOM_STORE,
+    EST_STORE: EST_STORE,
     loadByProject: loadByProject,
     saveForProject: saveForProject,
+    // v5 履歴 API（現状調査 → 契約LOCK 済み）
+    listGeometryRevisions: listGeometryRevisions,
+    listEstimationRevisions: listEstimationRevisions,
+    loadGeometryRevision: loadGeometryRevision,
+    saveEstimationRevision: saveEstimationRevision,
+    getEstimationDecision: getEstimationDecision,
+    setEstimationDecision: setEstimationDecision,
     removeForProject: function (projectId) {
       return loadByProject(projectId).then(function (rec) {
         if (!rec) return null;
@@ -115,10 +201,18 @@
       loadModel: function () {
         return loadByProject(PROJECT_ID).then(function (rec) { return rec ? rec.model : null; });
       },
-      // Engine 保存時：Model(JSON文字列) を案件配下へ保存。
+      // Engine 保存時：Model(JSON文字列) を案件配下へ保存（＝現在編集中の状態）。
       saveModel: function (json) {
         return saveForProject(PROJECT_ID, json).then(function () { return; });
-      }
+      },
+      // ── v5 履歴 API（Studio が呼ぶ。無い場合は standalone 扱い＝Studio は履歴UIを出さない） ──
+      hasHistory: true,
+      listRevisions: function () { return listEstimationRevisions(PROJECT_ID); },
+      listGeometryRevisions: function () { return listGeometryRevisions(PROJECT_ID); },
+      saveRevision: function (payload) { return saveEstimationRevision(PROJECT_ID, payload); },
+      openRevision: function (geometryRevisionId) { return loadGeometryRevision(PROJECT_ID, geometryRevisionId); },
+      getDecision: function () { return getEstimationDecision(PROJECT_ID); },
+      setDecision: function (d) { return setEstimationDecision(PROJECT_ID, d); }
     };
     // 案件名の案内（任意）
     if (IP.get) {
