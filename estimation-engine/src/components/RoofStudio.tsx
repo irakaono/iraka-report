@@ -6,7 +6,7 @@
 //   ★入口で図面を入れると、屋根プリセット＋雨樋の自動提案で数量を即座に表示（人が上から修正して確定）。
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import { Stage, Layer, Line, Circle, Rect, Text, Arrow, Image as KonvaImage } from 'react-konva';
+import { Stage, Layer, Line, Circle, Rect, Text, Arrow, Group, Image as KonvaImage } from 'react-konva';
 import type { Point } from '../geometry/roofModel';
 import { buildRoofModelFromFaces, faceArea, edgeLength, facePolygon } from '../geometry/roofModel';
 import { edgeRole, roofType } from '../geometry/roofEngine';
@@ -157,18 +157,28 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
   const [knownLen, setKnownLen] = useState<string>('0.91'); // 既知実寸(m)。既定=通り芯1マス0.91m
   const [showAcceptance, setShowAcceptance] = useState<boolean>(false); // 検証パネル
   // ── AIナビ（初回ガイド）：①図面 ②縮尺 ③屋根 ④数量 ⑤見積 の現在地を常時表示し、次の一手だけ案内する。 ──
-  const [roofDone, setRoofDone] = useState<boolean>(false);   // ③屋根なぞり完了（人が「これでOK」）
+  const [roofDone, setRoofDone] = useState<boolean>(false);   // ③屋根なぞり完了（人が「これでOK」）＝下書きが確定図形になる
   const [excelDone, setExcelDone] = useState<boolean>(false); // ⑤見積書 作成済み
   const [guideOn, setGuideOn] = useState<boolean>(true);      // ガイド表示ON/OFF
+  const [advanced, setAdvanced] = useState<boolean>(false);   // 詳細モード（上部ツールバーを畳む/展開）
+  const [showIntro, setShowIntro] = useState<boolean>(true);  // 初回だけ画面中央に指示を重ねる
   const applyCalibration = (p1: Point, p2: Point) => {
     const m = Number(knownLen);
     if (!(m > 0)) { setLoadError('既知寸法(m)を正の数で入力してください'); return; }
     try {
       const cal = calibrateFrom2Points({ id: `cal-${idc.current++}`, drawingId: bgWhich, p1, p2, sourceLength: m });
       setCalibration(cal); setScale(cal.pxPerMeter); setCalPts([]); setLoadError(null);
+      setMode('select'); setShowIntro(false); // 縮尺確定 → 自動で「屋根をなぞる」へ
+
     } catch (err) { setLoadError(err instanceof Error ? err.message : String(err)); }
   };
   const nid = (p: string) => `${p}-${idc.current++}`;
+  // 縮尺プリセット：使う寸法(m)をワンタップ→縮尺合わせモードへ（あとは図面上で両端2点クリックで確定）。
+  const pickScale = (meters: number) => {
+    setKnownLen(String(meters));
+    setMode('calibrate'); setActiveRun(null); setSelDrop(null); setRouteHead(null); setCalPts([]); clearHi();
+    if (!bgOn) setBgOn(true); setShowIntro(false);
+  };
 
   // ── Runtime を読むだけ（Studio はロジックを持たない） ──
   const model = useMemo(() => buildRoofModelFromFaces(
@@ -400,28 +410,32 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
       <header className="rs-head">
         {onBackToDrawings && <button onClick={onBackToDrawings} title="図面ドロップに戻る">← 図面</button>}
         <strong>甍AI 積算スタジオ</strong>
-        <span>屋根・雨樋</span>
         <span className="rs-type">屋根: <b>{roofType(model) ? TYPE_LABEL[roofType(model)!] : '—'}</b></span>
         <span className="rs-sp" />
-        {/* 編集モード */}
-        <span className="rs-modes">
-          {(['select', 'gutter', 'measure', 'calibrate'] as Mode[]).map((m) => (
-            <button key={m} className={mode === m ? 'on' : ''} onClick={() => { setMode(m); setActiveRun(null); setSelDrop(null); setRouteHead(null); setCalPts([]); clearHi(); }}>
-              {m === 'select' ? '屋根を描く' : m === 'gutter' ? '雨樋を描く' : m === 'measure' ? '計測' : '縮尺合わせ'}
-            </button>
-          ))}
-        </span>
-        <button className={showAcceptance ? 'on' : ''} onClick={() => setShowAcceptance((v) => !v)} title="積算 検証パネル">検証</button>
-        {/* 保存・開く（Persistence Standard：語彙は「保存 / 開く」のみ） */}
+        {/* 通常モードは最小限（保存・開く・詳細）。作図/縮尺/見積は下のAIナビから起動する＝ボタン重複をなくす。 */}
         <span className="rs-doc">
           <button onClick={onSave}>💾 保存</button>
           <button onClick={() => fileRef.current?.click()}>📂 開く</button>
-          <button onClick={exportExcel} title="会社の見積書書式でExcel出力">📊 見積書を作成</button>
-          <button onClick={saveEstimation} title="積算（Model＋数量＋見積）を保存">🗂 積算保存</button>
+          <button className={advanced ? 'on' : ''} onClick={() => setAdvanced((v) => !v)} title="ツール一覧（検証・計測・手動出力など）">{advanced ? '詳細 ▲' : '詳細 ▾'}</button>
           <span className="rs-saved">{savedLabel}</span>
           <input ref={fileRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={onFile} />
         </span>
       </header>
+      {/* 詳細モード：普段は隠すツール（モード切替・検証・計測・手動の見積/積算出力）。AIナビと機能が重複するものはここへ集約。 */}
+      {advanced && (
+        <div className="rs-sub" style={{ background: '#f1f3f5' }}>
+          <span className="rs-lbl">ツール：</span>
+          {(['select', 'gutter', 'calibrate', 'measure'] as Mode[]).map((m) => (
+            <button key={m} className={mode === m ? 'on' : ''} onClick={() => { setMode(m); setActiveRun(null); setSelDrop(null); setRouteHead(null); setCalPts([]); clearHi(); }}>
+              {m === 'select' ? '屋根を描く' : m === 'gutter' ? '雨樋を描く' : m === 'calibrate' ? '縮尺合わせ' : '計測'}
+            </button>
+          ))}
+          <span className="rs-sp2" />
+          <button className={showAcceptance ? 'on' : ''} onClick={() => setShowAcceptance((v) => !v)} title="積算 検証パネル">検証</button>
+          <button onClick={exportExcel} title="会社の見積書書式でExcel出力">📊 見積書を作成</button>
+          <button onClick={saveEstimation} title="積算（Model＋数量＋見積）を保存">🗂 積算保存</button>
+        </div>
+      )}
       {/* ── AIナビ（初回ガイド）：現在地を常時表示し、次の一手だけを案内。専門用語は使わない。 ── */}
       {(() => {
         const steps = ['図面を開く', '縮尺を合わせる', '屋根をなぞる', 'AIが数量を計算', '見積書を作成'];
@@ -439,11 +453,14 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
           );
         };
         // 現在ステップの案内文＋主ボタン
+        const scalePicker = cur === 1; // ②は「寸法を選ぶ→両端クリック」の専用UI
+        const inCalibrating = mode === 'calibrate';
         let title = ''; let body = ''; const actions: { label: string; primary?: boolean; onClick: () => void }[] = [];
         if (cur === 1) {
-          title = '次は「縮尺を合わせる」';
-          body = '図面の中で長さが分かっている線を2点クリックしてください。例：通り芯＝910mm、または建物の全長。';
-          actions.push({ label: '📏 縮尺を合わせる', primary: true, onClick: () => { setMode('calibrate'); setActiveRun(null); setRouteHead(null); setCalPts([]); if (!bgOn) setBgOn(true); } });
+          title = '次は縮尺を合わせます';
+          body = inCalibrating
+            ? `図面上で、選んだ寸法の両端を2点クリックしてください（${calPts.length}/2）。`
+            : '';
         } else if (cur === 2) {
           title = '次は「屋根をなぞる」';
           body = '上の「切妻・方形・片流れ」から近い形を選ぶか、「屋根を描く」で屋根の外周を囲みます。できたら右の「屋根はこれでOK」を押してください。';
@@ -461,6 +478,16 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
           title = '✓ すべて完了しました';
           body = '見積書ができました。数量や屋根を直したいときは、上のステップからやり直せます。';
         }
+        const scaleChip = (label: string, meters: number | null) => (
+          <button key={label} onClick={() => meters == null ? (setMode('calibrate'), setShowIntro(false)) : pickScale(meters)}
+            className={inCalibrating && meters != null && Number(knownLen) === meters ? 'on' : ''}
+            style={{ fontSize: 14, fontWeight: 700, padding: '9px 16px', borderRadius: 8, cursor: 'pointer',
+              border: (inCalibrating && meters != null && Number(knownLen) === meters) ? 'none' : '1px solid #74b0e6',
+              color: (inCalibrating && meters != null && Number(knownLen) === meters) ? '#fff' : '#1971c2',
+              background: (inCalibrating && meters != null && Number(knownLen) === meters) ? '#1971c2' : '#fff' }}>
+            {label}
+          </button>
+        );
         return (
           <div style={{ background: '#f8fbff', borderBottom: '1px solid #d0e2f5', padding: '10px 14px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -469,19 +496,33 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
               <button onClick={() => setGuideOn((v) => !v)} style={{ fontSize: 12, color: '#6b7885', background: 'none', border: 'none', cursor: 'pointer' }}>{guideOn ? '案内を隠す' : '案内を表示'}</button>
             </div>
             {guideOn && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8, padding: '10px 14px', background: '#fff', border: '1px solid #d0e2f5', borderRadius: 10 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 800, color: '#1a2530', fontSize: 14 }}>{title}</div>
-                  <div style={{ color: '#495057', fontSize: 13, marginTop: 2, lineHeight: 1.6 }}>{body}</div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                  {actions.map((a, i) => (
-                    <button key={i} onClick={a.onClick}
-                      style={{ fontSize: 14, fontWeight: 700, padding: '10px 18px', borderRadius: 8, border: a.primary ? 'none' : '1px solid #ced4da', cursor: 'pointer', color: a.primary ? '#fff' : '#495057', background: a.primary ? '#1971c2' : '#fff', boxShadow: a.primary ? '0 2px 8px rgba(25,113,194,.3)' : 'none' }}>
-                      {a.label}
-                    </button>
-                  ))}
-                </div>
+              <div style={{ marginTop: 8, padding: '10px 14px', background: '#fff', border: '1px solid #d0e2f5', borderRadius: 10 }}>
+                <div style={{ fontWeight: 800, color: '#1a2530', fontSize: 14 }}>{title}</div>
+                {scalePicker ? (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ color: '#495057', fontSize: 13, marginBottom: 6 }}><b>①</b> 使う寸法を選ぶ（図面で長さが分かる所）</div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                      {scaleChip('910mm（1マス）', 0.91)}
+                      {scaleChip('1820mm（1間）', 1.82)}
+                      {scaleChip('3640mm（2間）', 3.64)}
+                      {scaleChip('その他の長さ', null)}
+                    </div>
+                    <div style={{ color: '#495057', fontSize: 13 }}><b>②</b> 図面上で、その寸法の<b>両端を2点クリック</b>{inCalibrating ? `（いま ${calPts.length}/2）` : '（上の寸法を選ぶと始まります）'}</div>
+                    {inCalibrating && calPts.length > 0 && <button onClick={() => setCalPts([])} style={{ marginTop: 6, fontSize: 12 }}>やり直す</button>}
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div style={{ flex: 1, color: '#495057', fontSize: 13, marginTop: 2, lineHeight: 1.6 }}>{body}</div>
+                    <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                      {actions.map((a, i) => (
+                        <button key={i} onClick={a.onClick}
+                          style={{ fontSize: 14, fontWeight: 700, padding: '10px 18px', borderRadius: 8, border: a.primary ? 'none' : '1px solid #ced4da', cursor: 'pointer', color: a.primary ? '#fff' : '#495057', background: a.primary ? '#1971c2' : '#fff', boxShadow: a.primary ? '0 2px 8px rgba(25,113,194,.3)' : 'none' }}>
+                          {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -610,15 +651,45 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
         </aside>
 
         {/* 中央: キャンバス（Roof ＋ Drain オーバーレイ） */}
-        <div className="rs-canvas">
+        <div className="rs-canvas" style={{ position: 'relative' }}>
+          {/* 仮の下書きバッジ：確定前は「AIの下書き・図面認識ではない」と明示（誤認防止） */}
+          {!roofDone && (
+            <div style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 5,
+              background: '#fff4e6', border: '1px solid #ffc078', color: '#d9480f', borderRadius: 999,
+              padding: '6px 16px', fontSize: 12.5, fontWeight: 700, boxShadow: '0 2px 8px rgba(0,0,0,.12)', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+              🔖 これは仮の下書きです（AIの提案。図面を認識した結果ではありません）
+            </div>
+          )}
+          {/* 初回だけ中央に指示を重ねる。「はじめる」で閉じ、以後は上部AIナビが案内。縮尺済みなら出さない。 */}
+          {showIntro && !calibration && (
+            <div style={{ position: 'absolute', inset: 0, zIndex: 6, background: 'rgba(26,37,48,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ background: '#fff', borderRadius: 14, padding: '22px 26px', maxWidth: 440, boxShadow: '0 8px 30px rgba(0,0,0,.25)', textAlign: 'center' }}>
+                <div style={{ fontSize: 18, fontWeight: 800, color: '#1a2530' }}>まず「縮尺」を合わせます</div>
+                <div style={{ fontSize: 13.5, color: '#495057', marginTop: 10, lineHeight: 1.8, textAlign: 'left' }}>
+                  図面の数字を正しく出すために、最初に「実際の長さ」を1つだけ教えてください。<br />
+                  <b>①</b> 上の案内で使う寸法（例：910mm）を選ぶ<br />
+                  <b>②</b> 図面上で、その長さの<b>両端を2点クリック</b><br />
+                  これで縮尺が決まり、面積や長さが実寸になります。
+                </div>
+                <div style={{ fontSize: 12, color: '#868e96', marginTop: 10 }}>※ いま表示中の屋根・雨樋は「仮の下書き」です。</div>
+                <button onClick={() => setShowIntro(false)}
+                  style={{ marginTop: 16, fontSize: 15, fontWeight: 700, padding: '11px 30px', borderRadius: 9, border: 'none', color: '#fff', background: '#1971c2', cursor: 'pointer' }}>
+                  はじめる
+                </button>
+              </div>
+            </div>
+          )}
           <Stage width={W} height={H} onMouseDown={onStageClick}>
             <Layer>
               {/* 図面下地（トレース対象）。position調整中だけ操作可、それ以外は不可視のクリック透過。 */}
               {bgOn && bgImg && <KonvaImage image={bgImg} x={bgPos.x} y={bgPos.y} scaleX={bgScale} scaleY={bgScale}
                 opacity={bgOpacity} listening={bgAdjust} draggable={bgAdjust}
                 onDragEnd={(e) => setBgPos({ x: e.target.x(), y: e.target.y() })} />}
+              {/* 屋根＋雨樋は「確定」までは仮の下書き＝半透明で表示（図面認識の結果ではない）。roofDoneで実線化。 */}
+              <Group opacity={roofDone ? 1 : 0.5}>
               {model.faces.map((f) => <Line key={f.id} points={flat(facePolygon(model, f))} closed
-                fill={hi.has(f.id) ? 'rgba(232,89,12,0.22)' : 'rgba(31,78,121,0.06)'} stroke="#c7d0da" strokeWidth={1} />)}
+                fill={hi.has(f.id) ? 'rgba(232,89,12,0.22)' : 'rgba(31,78,121,0.06)'} stroke="#c7d0da" strokeWidth={1}
+                dash={roofDone ? undefined : [8, 5]} />)}
               {model.edges.map((e) => {
                 const role = edgeRole(model, e); const a = V.get(e.v[0]); const b2 = V.get(e.v[1]); if (!a || !b2) return null;
                 const on = hi.has(e.id);
@@ -649,6 +720,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
                   const info = allDrops.find((x) => x.id === d.dropId);
                   if (info) { const pr = projectOnEave(info.eaveEdgeId, { x: ev.target.x(), y: ev.target.y() }); if (pr) dispatchDrain({ type: 'MoveDrop', dropId: d.dropId, position: pr.t }); }
                 }} />)}
+              </Group>
               {/* 経路構築中：head から次点への予告線は出さず、head を強調 */}
               {routeHead && (() => { const hn = dm.graph.nodes.find((n) => n.id === routeHead); return hn
                 ? <Circle key="head" x={hn.point.x} y={hn.point.y} radius={10} stroke={ELBOW} strokeWidth={2} dash={[3, 3]} /> : null; })()}

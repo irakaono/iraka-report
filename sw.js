@@ -5,7 +5,7 @@
  *   - precache は耐性版（allSettled）。1ファイル欠けても SW 更新ごと止めない（原則10）。
  *   - リリースのたびに CACHE_NAME を上げること（RELEASE_CHECKLIST 参照）。
  */
-const CACHE_NAME = 'iraka-field-v2.16.0'; // v2.16.0: AIナビ（①図面→②縮尺→③屋根→④数量→⑤見積の常時表示・現在地案内・専門用語廃止）
+const CACHE_NAME = 'iraka-field-v2.17.0'; // v2.17.0: 仮下書き明示＋縮尺候補(910/1820/3640)＋ツールバー整理＋縮尺後自動で屋根へ＋初回中央ガイド
 const ASSETS = [
   './portal.html',
   './index.html',
