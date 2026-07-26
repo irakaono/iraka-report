@@ -5,7 +5,7 @@
  *   - precache は耐性版（allSettled）。1ファイル欠けても SW 更新ごと止めない（原則10）。
  *   - リリースのたびに CACHE_NAME を上げること（RELEASE_CHECKLIST 参照）。
  */
-const CACHE_NAME = 'iraka-field-v2.18.0'; // v2.18.0: 縮尺の磨き込み（カーソル追従①②点目ヒント・成功トースト・初回オーバーレイはクリックで閉じる）
+const CACHE_NAME = 'iraka-field-v2.19.0'; // v2.19.0: 縮尺ボタンを現場言葉へ（1マス/柱2本の間/2間）
 const ASSETS = [
   './portal.html',
   './index.html',

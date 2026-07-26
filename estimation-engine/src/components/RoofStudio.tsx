@@ -512,9 +512,9 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
                   <div style={{ marginTop: 8 }}>
                     <div style={{ color: '#495057', fontSize: 13, marginBottom: 6 }}><b>①</b> 使う寸法を選ぶ（図面で長さが分かる所）</div>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-                      {scaleChip('910mm（1マス）', 0.91)}
-                      {scaleChip('1820mm（1間）', 1.82)}
-                      {scaleChip('3640mm（2間）', 3.64)}
+                      {scaleChip('1マス（910mm）', 0.91)}
+                      {scaleChip('柱2本の間（1820mm）', 1.82)}
+                      {scaleChip('2間（3640mm）', 3.64)}
                       {scaleChip('その他の長さ', null)}
                     </div>
                     <div style={{ color: '#495057', fontSize: 13 }}><b>②</b> 図面上で、その寸法の<b>両端を2点クリック</b>{inCalibrating ? `（いま ${calPts.length}/2）` : '（上の寸法を選ぶと始まります）'}</div>
