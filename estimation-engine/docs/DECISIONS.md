@@ -175,3 +175,14 @@
 - Digital Twin＝Geometry＋Domain Knowledge＋Engineering Rules＋History＝**BIE＋Project History**。役割分担：Ver.4 BIE＝頭脳（工学判断）、Ver.5 Digital Twin＝生きた建物（頭脳＋施工/点検/修繕の履歴）。
 - Alternatives: 工種を単なるラベルとして扱う／RoofProgram等を個別概念のまま増やす。
 - Rejected because: ラベル扱いだと Program の増加で構造が崩れる。Domain Compiler で統一すれば N ドメインでも一様。Digital Twin を BIE＋History と定義しないと「3Dモデル」に退化する。
+
+## 2026-07-26 — 設計の背骨3原則を憲法に追加（19 Project=SSOT/Projection、20 Geometry Immutable、21 Recognizer=Provider）
+- Reason: 「作る」より「育てる（案件・知識）を管理する」段階に入り、5年後も崩れない軸として3原則を CONSTITUTION 原則19〜21に明文化（Project doc `CONSTITUTION.md`）。
+- **19 Project が器・Export は Projection**：Project(Drawings/Geometry/Estimations/Decisions/Knowledge/Reports/Photos/History) が唯一の真実。Excel/PDF/報告書/見積/Learning は保存対象でなく Project の **Projection（射影）**。「Export」でなく「Projection」と考える＝出口が増えても真実は増えない。
+- **20 Geometry is Immutable, everything else is Projection**：`Geometry→Roof→Gutter→Estimate→Report→Excel` は全部 Projection。数字を直すのは「Excel修正」でなく「**Geometry修正**」。出力物を手で書き換えて正にしない（真実が二つになる）。既存の原則18(Canonical Result)を形状レイヤーへ一般化。
+- **21 Recognizer は AI でなく Provider**：Human/AI/GT/Recognizer は**対等な Provider**（同じ入力契約で Measurement/Geometry まで作る）→ Review→Decision→Knowledge で一本化。Recognizer を特別扱いしない＝AIが賢くなってもアーキは一本のまま。
+- 統一図：`Project → Providers(Human/AI/GT/Recognizer) → Geometry → Review → Decision → Knowledge → Projection(Excel/Report/PDF/Dashboard/API)`。重心は「AIを増やす」でなく「**Projectに集約**」。
+- 実行順の確定（Project doc `claude/BACKLOG-yaritai.md`）：**Phase A**（案件Estimation履歴→採用版→Decision→Evidence）→ **Phase B** Recognizer（AIおすすめ縮尺→寸法線検出→屋根候補）→ **Phase C** 設計支援（排水経路→換気→屋根伏図）→ **Phase D** Knowledge→BIE→Digital Twin。理由：Recognizerは後から賢くできるが、**案件という器**が弱いと後続のAI/Knowledge/Decisionが積み上がらない。
+- Ver.1 KPI：**「3分で見積」**（PDF投入→②縮尺30s→③屋根90s→④AI数量→⑤見積30s＝3分以内）を合格ライン兼・営業資料兼・社内目標に。
+- Alternatives: Recognizer を特別な AI レイヤーとして設計／出力物(Excel)を編集して正とする／Recognizer を Phase A より先に着手。
+- Rejected because: Recognizer特別扱いはAI強化のたびにアーキ改修を招く。出力編集を許すと真実が二重化しGeometry不変が崩れる。器(Project/Estimation履歴)未完のままRecognizerを積むと土台が後で崩れる。
