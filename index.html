@@ -1030,30 +1030,45 @@ window.addEventListener('afterprint', ()=>{
   updateMediaStatus();
 });
 
-/* ===== 印刷改善①：補修内容の textarea を全文表示（rows=2 でのクリップ防止） =====
- * textarea は CSS の height:auto では内容に合わせて伸びない。印刷直前に scrollHeight まで
- * 伸ばして全文を出す（印刷フォント8pxで測って過不足なく）。印刷後は元へ戻す（画面は不変）。
- * 対象は補修のご提案テーブルの入力欄のみ（点検ブロック等の固定高には触らない）。 */
-function _fitProposalTextareasForPrint(){
-  document.querySelectorAll('#p-summary .rtbl td textarea').forEach(function(ta){
-    if(!ta.value || !ta.value.trim()) return;           // 空欄は既存の非表示ルールに任せる
-    ta.setAttribute('data-printfit','1');
-    ta.style.setProperty('font-size','8px','important');
-    ta.style.setProperty('line-height','1.3','important');
-    ta.style.setProperty('height','auto','important');  // 一旦autoにして内容高さを測る
-    ta.style.setProperty('height',(ta.scrollHeight + 2)+'px','important'); // インライン!importantで印刷CSSに勝つ
+/* ===== 印刷改善①/②：まとめページの textarea を全文表示（固定高でのクリップ防止） =====
+ * v2.21.0＝補修内容テーブル(.rtbl・8px)。v2.23.0＝「雨漏りの原因」「劣化状況」(.sbox・9px)も同様に展開。
+ * textarea は height 固定＋overflow:hidden だと印刷で末尾がクリップされる。印刷直前に scrollHeight まで
+ * 伸ばし overflow:visible にして全文を出す（印刷フォントで測って過不足なく）。印刷後は元へ厳密復元（画面は不変）。
+ * .sbox は画面で固定高(48px/36px)を持つため、元のインライン高さを退避して afterprint で戻す。空欄は既存の非表示ルールに任せる。 */
+function _fitTextareasForPrint(){
+  var groups = [
+    { sel: '#p-summary .rtbl td textarea', fs: '8px' },  // 補修内容（テーブル）
+    { sel: '#p-summary .sbox textarea',    fs: '9px' }   // 雨漏りの原因・劣化状況
+  ];
+  groups.forEach(function(g){
+    document.querySelectorAll(g.sel).forEach(function(ta){
+      if(!ta.value || !ta.value.trim()) return;           // 空欄は既存の非表示ルールに任せる
+      ta.setAttribute('data-printfit','1');
+      ta.setAttribute('data-prevheight', ta.style.height || '');   // 元のインライン高さ(例48px)を退避
+      ta.style.setProperty('font-size', g.fs, 'important');
+      ta.style.setProperty('line-height','1.3','important');
+      ta.style.setProperty('overflow','visible','important');       // global textarea{overflow:hidden} に勝つ
+      ta.style.setProperty('white-space','pre-wrap','important');
+      ta.style.setProperty('height','auto','important');            // 一旦autoにして内容高さを測る
+      ta.style.setProperty('height',(ta.scrollHeight + 2)+'px','important'); // インライン!importantで印刷CSSに勝つ
+    });
   });
 }
-function _restoreProposalTextareasAfterPrint(){
-  document.querySelectorAll('#p-summary .rtbl td textarea[data-printfit]').forEach(function(ta){
+function _restoreTextareasAfterPrint(){
+  document.querySelectorAll('#p-summary textarea[data-printfit]').forEach(function(ta){
     ta.style.removeProperty('height');
     ta.style.removeProperty('font-size');
     ta.style.removeProperty('line-height');
+    ta.style.removeProperty('overflow');
+    ta.style.removeProperty('white-space');
+    var prev = ta.getAttribute('data-prevheight');
+    if(prev) ta.style.height = prev;                                // 元の固定高(48px/36px)を復元＝画面は不変
+    ta.removeAttribute('data-prevheight');
     ta.removeAttribute('data-printfit');
   });
 }
-window.addEventListener('beforeprint', _fitProposalTextareasForPrint);
-window.addEventListener('afterprint', _restoreProposalTextareasAfterPrint);
+window.addEventListener('beforeprint', _fitTextareasForPrint);
+window.addEventListener('afterprint', _restoreTextareasAfterPrint);
 
 function openPrintQualityModal(count, onConfirm){
   const modal = document.getElementById('printQualityModal');
@@ -1861,7 +1876,7 @@ function dataURLToBlob(dataUrl){
   return new Blob([u8], { type: mime });
 }
 // 現在このセッションが使う CACHE_NAME（sw.js と揃える）。書き出したファイルにどのバージョンで作ったかを残す。
-const APP_CACHE_NAME = (typeof CACHE_NAME !== 'undefined') ? CACHE_NAME : 'iraka-field-v2.22.0';
+const APP_CACHE_NAME = (typeof CACHE_NAME !== 'undefined') ? CACHE_NAME : 'iraka-field-v2.23.0';
 async function exportDraftToFile(id){
   const drafts=getDrafts(); const d=drafts[id];
   if(!d){ alert('下書きが見つかりません。'); return; }
