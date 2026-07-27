@@ -1,4 +1,8 @@
-// 甍AI Recognizer（図面→Configuration の翻訳器）— 原則21：Recognizer は Provider の一つ。
+// 甍AI Recognizer（図面→Roof Configuration の翻訳器）＝Roof Configuration Compiler の入口。
+//   ★スコープ：甍AI は屋根専門。ここで扱う Configuration は常に「Roof Configuration」
+//     （屋根勾配・軒の出・雨押え・片棟・ケラバ・雨樋・屋根材のみ）。建物全体は 小泉建設AI＝別プロジェクト。
+//   正の設計：claude/CONFIGURATION_ARCHITECTURE.md（親）／claude/RECOGNIZER-ARCHITECTURE.md（本章）。
+// 原則21：Recognizer は Provider の一つ。
 //   責務：図面を読み、宣言的な RoofConfig（Configuration）を返す。Geometry は作らない・知らない。
 //   ★不変条件：Recognizer は Geometry を知らない／Geometry は Recognizer を知らない。契約は Configuration のみ。
 //   Recognizer は Reader（生の値）と Resolver（建築知識→Configuration）に分ける：
