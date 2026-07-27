@@ -5,7 +5,7 @@
 //   モード: 屋根を描く / 雨樋を描く / 計測。雨樋は 軒樋→集水器→（竪樋→エルボ→呼び樋→排水）を Command で編集。
 //   ★入口で図面を入れると、屋根プリセット＋雨樋の自動提案で数量を即座に表示（人が上から修正して確定）。
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import type { ChangeEvent } from 'react';
+import type { ChangeEvent, ReactNode } from 'react';
 import { Stage, Layer, Line, Circle, Rect, Text, Arrow, Group, Image as KonvaImage } from 'react-konva';
 import type { Point, EdgeRole } from '../geometry/roofModel';
 import { buildRoofModelFromFaces, faceArea, edgeLength, facePolygon } from '../geometry/roofModel';
@@ -190,6 +190,11 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
   const [autoImagePPM, setAutoImagePPM] = useState<number | null>(null);      // 自動縮尺：画像px基準のpx/m（表示倍率bgScaleに追従させる＝ズームしても数量が狂わない）
   const [overhangMm, setOverhangMm] = useState<number>(0);                     // 適用済みの軒の出(mm)。差分で外周をオフセット
   const [overhangInput, setOverhangInput] = useState<string>('');             // 軒の出 入力欄（立面図の推定で初期化）
+  // ── Phase B 確認ファースト：取り込み直後の「AIの理解」確認カード（通常フローの主役・編集は例外） ──
+  const [reviewOpen, setReviewOpen] = useState<boolean>(!!(planSrc || elevationSrc)); // 図面ありで起動時に表示
+  const [reviewForm, setReviewForm] = useState<'shed' | 'gable' | 'hipped'>('shed');
+  const [reviewPitch, setReviewPitch] = useState<string>('5');
+  const [reviewOverhang, setReviewOverhang] = useState<string>('');
   const [calPts, setCalPts] = useState<Point[]>([]); // 較正クリック中の2点（px）
   const [knownLen, setKnownLen] = useState<string>('0.91'); // 既知実寸(m)。既定=通り芯1マス0.91m
   const [showAcceptance, setShowAcceptance] = useState<boolean>(false); // 検証パネル
@@ -352,21 +357,39 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
   // 立面図から：勾配（寸）を全屋根面に反映（提案→確認して適用）。
   const applyPitchAll = (p: number) => { setFaces((fs) => fs.map((f) => ({ ...f, pitch: p }))); flash(`✓ 勾配 ${p}寸 を反映`); };
   // 立面図から：軒の出(mm)ぶん外周を外側へオフセット（差分で適用＝値を変えても追従。壁の外周をなぞってから使う）。
-  const applyOverhang = (mm: number) => {
+  //   explicitScale：確認カードで縮尺確定と同時に適用する時、setScale の非同期を待たず正しい px/m を渡す。
+  const applyOverhang = (mm: number, explicitScale?: number) => {
     if (!(mm >= 0)) return;
+    const s = explicitScale ?? scale;
     const delta = mm - overhangMm;
-    if (delta !== 0 && scale > 0) {
-      const dpx = (delta / 1000) * scale;
+    if (delta !== 0 && s > 0) {
+      const dpx = (delta / 1000) * s;
       setFaces((fs) => fs.map((f) => ({ ...f, vertices: offsetPolygonOutward(f.vertices, dpx) })));
     }
     setOverhangMm(mm);
     flash(`✓ 軒の出 ${mm}mm を反映`);
   };
-  // 立面図の推定値で軒の出入力欄を初期化（一度だけ）。
+  // 立面図の推定値で入力欄・確認カードの初期値をセット（一度だけ）。
   useEffect(() => {
-    if (elevHint?.overhang != null && overhangInput === '') setOverhangInput(String(elevHint.overhang));
+    if (elevHint?.overhang != null) { if (overhangInput === '') setOverhangInput(String(elevHint.overhang)); setReviewOverhang(String(elevHint.overhang)); }
+    if (elevHint?.pitch != null) setReviewPitch(String(elevHint.pitch));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elevHint]);
+  // 確認カードの「この内容で進む」＝AIの理解を一括適用（形・縮尺・勾配・軒の出・雨樋）。編集画面には入らない＝確認ファースト。
+  const confirmReview = () => {
+    const p = Number(reviewPitch) || 5;
+    const mm = Number(reviewOverhang) || 0;
+    chooseForm(reviewForm);                 // 形＋雨樋（水上は雨押え・軒樋1本）
+    let effScale = scale;
+    if (scaleHint?.pxPerMeter != null) { applyScaleHint(); effScale = scaleHint.pxPerMeter * bgScale; }
+    applyPitchAll(p);
+    if (mm > 0) applyOverhang(mm, effScale);
+    setRoofFormChosen(true);
+    setReviewOpen(false); setShowIntro(false);
+    // 縮尺が確定していれば数量まで出せる（⑤へ）。未確定なら縮尺合わせへ。
+    if (scaleHint?.pxPerMeter != null || calibration) { setRoofDone(true); setMode('gutter'); }
+    else { setMode('calibrate'); }
+  };
   const setPitch = (i: number, p: number) => setFaces((fs) => fs.map((f, j) => (j === i ? { ...f, pitch: p } : f)));
   const delFace = (i: number) => { setFaces((fs) => fs.filter((_, j) => j !== i)); clearHi(); };
 
@@ -670,6 +693,63 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
 
   return (
     <div className="rs">
+      {/* Phase B 確認ファースト：取り込み直後の「AIの理解」確認カード。通常はここでOK＝編集画面に入らない。 */}
+      {reviewOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(20,30,40,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div style={{ width: 'min(520px,96vw)', background: '#fff', borderRadius: 14, boxShadow: '0 12px 40px rgba(0,0,0,.3)', padding: '20px 22px' }}>
+            <div style={{ fontSize: 18, fontWeight: 800, color: '#1a2530' }}>AIが図面をこう理解しました</div>
+            <div style={{ fontSize: 12, color: '#6b7885', marginTop: 3, marginBottom: 14 }}>合っていれば「この内容で進む」。違うところだけ直せます。</div>
+            {(() => {
+              const Row = ({ label, children, ok }: { label: string; children: ReactNode; ok?: boolean }) => (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 2px', borderTop: '1px solid #f1f3f5' }}>
+                  <span style={{ width: 18, color: ok ? '#2b8a3e' : '#adb5bd', fontWeight: 800 }}>{ok ? '☑' : '・'}</span>
+                  <span style={{ width: 78, fontSize: 13, color: '#495057', fontWeight: 700 }}>{label}</span>
+                  <span style={{ flex: 1 }}>{children}</span>
+                </div>
+              );
+              const selStyle = { fontSize: 14, padding: '5px 8px', borderRadius: 7, border: '1px solid #ced4da' } as const;
+              return (
+                <div>
+                  <Row label="屋根形状" ok>
+                    <select value={reviewForm} onChange={(e) => setReviewForm(e.target.value as 'shed' | 'gable' | 'hipped')} style={selStyle}>
+                      <option value="shed">片流れ</option><option value="gable">切妻</option><option value="hipped">寄棟／方形</option>
+                    </select>
+                    <span style={{ fontSize: 11, color: '#adb5bd', marginLeft: 8 }}>※形の自動判定は今後。ご確認ください</span>
+                  </Row>
+                  <Row label="縮尺" ok={!!(scaleHint && scaleHint.pxPerMeter != null)}>
+                    {scaleHint && scaleHint.pxPerMeter != null
+                      ? <b style={{ color: '#1971c2' }}>{scaleHint.noteD ? `1/${scaleHint.noteD}` : '寸法から推定'}</b>
+                      : <span style={{ color: '#e8590c', fontSize: 13 }}>読めませんでした → 次で手動合わせ</span>}
+                  </Row>
+                  <Row label="勾配" ok={elevHint?.pitch != null}>
+                    <input type="number" step={0.5} min={0} value={reviewPitch} onChange={(e) => setReviewPitch(e.target.value)} style={{ ...selStyle, width: 68 }} /> 寸
+                    {elevHint?.pitchCandidates && elevHint.pitchCandidates.length > 1 && <span style={{ fontSize: 11, color: '#868e96', marginLeft: 8 }}>候補：{elevHint.pitchCandidates.join('/')}寸</span>}
+                  </Row>
+                  <Row label="軒の出" ok={elevHint?.overhang != null}>
+                    <input type="number" step={5} min={0} value={reviewOverhang} onChange={(e) => setReviewOverhang(e.target.value)} style={{ ...selStyle, width: 84 }} /> mm
+                  </Row>
+                  <Row label="雨樋" ok>
+                    <span style={{ fontSize: 13, color: '#495057' }}>自動（{reviewForm === 'shed' ? '水下の片側' : '軒に配置'}）</span>
+                  </Row>
+                </div>
+              );
+            })()}
+            <div style={{ fontSize: 11, color: '#868e96', margin: '12px 0 14px' }}>
+              ※今は<b>屋根の外周だけ</b>、この後に図面へ合わせて角を動かします（他は設定済み）。外周の自動認識が入れば、それも確認だけになります。
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={() => { setReviewOpen(false); setShowIntro(false); }}
+                style={{ fontSize: 14, fontWeight: 700, padding: '10px 16px', borderRadius: 8, border: '1px solid #ced4da', background: '#fff', color: '#495057', cursor: 'pointer' }}>
+                修正する（図面を見て編集）
+              </button>
+              <button onClick={confirmReview}
+                style={{ fontSize: 15, fontWeight: 800, padding: '11px 22px', borderRadius: 8, border: 'none', background: '#1971c2', color: '#fff', cursor: 'pointer', boxShadow: '0 2px 10px rgba(25,113,194,.35)' }}>
+                この内容で進む →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <header className="rs-head">
         {onBackToDrawings && <button onClick={onBackToDrawings} title="図面ドロップに戻る">← 図面</button>}
         <strong>甍AI 積算スタジオ</strong>
@@ -779,7 +859,7 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
         </div>
       )}
       {/* 縮尺の自動提案バナー（原則14＝AIは提案・人が確認して確定）。図面から縮尺表記/寸法で推定できたときだけ。 */}
-      {scaleHint && scaleHint.pxPerMeter != null && !calibration && scaleProposalOpen && (
+      {scaleHint && scaleHint.pxPerMeter != null && !calibration && scaleProposalOpen && !reviewOpen && (
         <div style={{ background: '#e7f5ff', borderBottom: '1px solid #a5d8ff', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 20 }}>📏</span>
           <div style={{ flex: 1, minWidth: 240 }}>
