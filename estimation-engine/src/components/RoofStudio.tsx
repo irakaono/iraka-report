@@ -176,6 +176,7 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
   const [scale, setScale] = useState<number>(DEV_PX_PER_METER);
   const [calibration, setCalibration] = useState<Calibration | null>(null);
   const [scaleProposalOpen, setScaleProposalOpen] = useState<boolean>(true); // 縮尺の自動提案バナー（人が確認して確定＝原則14）
+  const [autoImagePPM, setAutoImagePPM] = useState<number | null>(null);      // 自動縮尺：画像px基準のpx/m（表示倍率bgScaleに追従させる＝ズームしても数量が狂わない）
   const [calPts, setCalPts] = useState<Point[]>([]); // 較正クリック中の2点（px）
   const [knownLen, setKnownLen] = useState<string>('0.91'); // 既知実寸(m)。既定=通り芯1マス0.91m
   const [showAcceptance, setShowAcceptance] = useState<boolean>(false); // 検証パネル
@@ -198,7 +199,8 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
     if (!(m > 0)) { setLoadError('既知寸法(m)を正の数で入力してください'); return; }
     try {
       const cal = calibrateFrom2Points({ id: `cal-${idc.current++}`, drawingId: bgWhich, p1, p2, sourceLength: m });
-      setCalibration(cal); setScale(cal.pxPerMeter); setCalPts([]); setLoadError(null);
+      setCalibration(cal); setScale(cal.pxPerMeter); setAutoImagePPM(null); setCalPts([]); setLoadError(null); // 手動2点は表示倍率に依らず固定
+
       setCursorPt(null);
       setToast('✓ 縮尺を設定しました'); window.setTimeout(() => setToast(null), 1100); // 成功体験を一瞬見せる
       setMode('select'); setShowIntro(false); // 縮尺確定 → 自動で「屋根をなぞる」へ
@@ -215,6 +217,7 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
         method: scaleHint.source === 'dimension' ? 'dimension_line' : 'pdf_note',
       });
       setCalibration(cal); setScale(cal.pxPerMeter);
+      setAutoImagePPM(scaleHint.pxPerMeter); // 以後 bgScale に追従（ズーム/パンしても実寸維持）
       setScaleProposalOpen(false); setLoadError(null); setCursorPt(null);
       setToast('✓ 縮尺を自動設定しました'); window.setTimeout(() => setToast(null), 1300);
       setMode('select'); setShowIntro(false);
@@ -248,6 +251,13 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
     if (proposal.dropCount > 0) { setDrain(initHistory(proposal.model)); idc.current = maxIdSuffix(proposal.model) + 1; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // 自動縮尺は表示倍率(bgScale)に追従＝図面をズーム/パンしても実寸(px/m)が保たれる。
+  useEffect(() => {
+    if (autoImagePPM == null) return;
+    const ppm = autoImagePPM * bgScale;
+    setScale(ppm);
+    setCalibration((c) => (c && (c.method === 'pdf_note' || c.method === 'dimension_line') ? { ...c, pxPerMeter: ppm } : c));
+  }, [autoImagePPM, bgScale]);
   const dm = drain.present;
   const dq = useMemo(() => drainQuantities(model, dm, scale), [model, dm, scale]);
   // STEP5 Material Adapter：数量→Material IR(Intent)→Product（Rule Engine）。evidence は数量から継承＝要素と双方向。
@@ -302,6 +312,36 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
   };
   const setPitch = (i: number, p: number) => setFaces((fs) => fs.map((f, j) => (j === i ? { ...f, pitch: p } : f)));
   const delFace = (i: number) => { setFaces((fs) => fs.filter((_, j) => j !== i)); clearHi(); };
+
+  // ── 屋根の角をドラッグして図面に合わせる（②の主操作） ──
+  //   共有された角（隣り合う面が同じ座標を持つ）は一緒に動かす＝辺が割れない。
+  const dragVerts = useRef<{ fi: number; vi: number }[]>([]);
+  const onVertexDragStart = (x: number, y: number) => {
+    const list: { fi: number; vi: number }[] = [];
+    faces.forEach((f, fi) => f.vertices.forEach((v, vi) => { if (Math.abs(v.x - x) <= 3 && Math.abs(v.y - y) <= 3) list.push({ fi, vi }); }));
+    dragVerts.current = list;
+  };
+  const onVertexDragMove = (nx: number, ny: number) => {
+    const list = dragVerts.current; if (!list.length) return;
+    setFaces((fs) => fs.map((f, fi) => {
+      const hits = list.filter((l) => l.fi === fi); if (!hits.length) return f;
+      return { ...f, vertices: f.vertices.map((v, vi) => (hits.some((h) => h.vi === vi) ? { x: nx, y: ny } : v)) };
+    }));
+  };
+  // 屋根の角（重複座標は1つに集約）＝ドラッグ用ハンドルの位置。
+  const vertexHandles = useMemo(() => {
+    const seen = new Set<string>(); const out: Point[] = [];
+    faces.forEach((f) => f.vertices.forEach((v) => { const k = `${Math.round(v.x)},${Math.round(v.y)}`; if (!seen.has(k)) { seen.add(k); out.push(v); } }));
+    return out;
+  }, [faces]);
+  // 屋根全体をドラッグで移動（角ではなく面の内側をつかんだとき）。全頂点に同じ移動量を足す。
+  const roofDragRef = useRef<{ x: number; y: number } | null>(null);
+  const onRoofGroupDragStart = (x: number, y: number) => { roofDragRef.current = { x, y }; };
+  const onRoofGroupDragMove = (x: number, y: number) => {
+    const p = roofDragRef.current; if (!p) return;
+    const dx = x - p.x, dy = y - p.y; roofDragRef.current = { x, y };
+    setFaces((fs) => fs.map((f) => ({ ...f, vertices: f.vertices.map((v) => ({ x: v.x + dx, y: v.y + dy })) })));
+  };
 
   // ── 幾何ヘルパー（表示用） ──
   const eaveEnds = (eaveId: string): { a: Point; b: Point } | null => {
@@ -529,6 +569,19 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
     if (mode !== 'calibrate') { if (cursorPt) setCursorPt(null); return; }
     const p = e.target.getStage().getPointerPosition();
     setCursorPt(p ? { x: p.x, y: p.y } : null);
+  };
+  // ホイールで図面（背景）をカーソル中心に拡大縮小。屋根の角は stage 座標のままなので、見やすくしてから角を合わせる。
+  const onStageWheel = (e: any) => {
+    if (!(bgOn && bgImg)) return;
+    e.evt.preventDefault();
+    const stage = e.target.getStage(); const ptr = stage?.getPointerPosition(); if (!ptr) return;
+    const oldScale = bgScale;
+    const factor = 1.08;
+    const newScale = Math.min(6, Math.max(0.1, e.evt.deltaY > 0 ? oldScale / factor : oldScale * factor));
+    if (newScale === oldScale) return;
+    const k = newScale / oldScale;
+    setBgScale(newScale);
+    setBgPos({ x: ptr.x - (ptr.x - bgPos.x) * k, y: ptr.y - (ptr.y - bgPos.y) * k }); // カーソル位置を固定して拡大
   };
   const onStageClick = (e: any) => {
     if (bgAdjust) return; // 図面の位置調整中は屋根の作図を止める
@@ -789,7 +842,7 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
                     {roofFormChosen && (
                       <div style={{ marginTop: 8 }}>
                         <div style={{ color: '#495057', fontSize: 13, marginBottom: 6 }}>
-                          <b>②</b> 屋根の<b>角をドラッグ</b>して、平面図の外周に合わせてください（棟・隅棟・軒・ケラバは形から自動で決まります）。
+                          <b>②</b> 青い<b>角つまみをドラッグ</b>して平面図の外周に合わせます（内側をドラッグで全体移動・図面はホイールで拡大／空きをドラッグで移動）。棟・隅棟・軒・ケラバは形から自動。
                         </div>
                         {isShed && (
                           <div style={{ background: '#fff9db', border: '1px solid #ffe08a', borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>
@@ -999,17 +1052,26 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
               {toast}
             </div>
           )}
-          <Stage width={W} height={H} onMouseDown={onStageClick} onMouseMove={onStageMove}>
+          <Stage width={W} height={H} onMouseDown={onStageClick} onMouseMove={onStageMove} onWheel={onStageWheel}>
             <Layer>
-              {/* 図面下地（トレース対象）。position調整中だけ操作可、それ以外は不可視のクリック透過。 */}
-              {bgOn && bgImg && <KonvaImage image={bgImg} x={bgPos.x} y={bgPos.y} scaleX={bgScale} scaleY={bgScale}
-                opacity={bgOpacity} listening={bgAdjust} draggable={bgAdjust}
-                onDragEnd={(e) => setBgPos({ x: e.target.x(), y: e.target.y() })} />}
+              {/* 図面下地（トレース対象）。選択モードでは図面をドラッグで移動できる（角つまみ・辺は上に載るので優先）。作図/縮尺合わせ中は止める。 */}
+              {(() => { const bgMovable = bgAdjust || (mode === 'select' && !drawingFace); return (
+              bgOn && bgImg && <KonvaImage image={bgImg} x={bgPos.x} y={bgPos.y} scaleX={bgScale} scaleY={bgScale}
+                opacity={bgOpacity} listening={bgMovable} draggable={bgMovable}
+                onDragMove={(e) => setBgPos({ x: e.target.x(), y: e.target.y() })}
+                onDragEnd={(e) => setBgPos({ x: e.target.x(), y: e.target.y() })} />); })()}
               {/* 屋根＋雨樋は「確定」までは仮の下書き＝半透明で表示（図面認識の結果ではない）。roofDoneで実線化。 */}
               <Group opacity={roofDone ? 1 : 0.5}>
-              {model.faces.map((f) => <Line key={f.id} points={flat(facePolygon(model, f))} closed
-                fill={hi.has(f.id) ? 'rgba(232,89,12,0.22)' : 'rgba(31,78,121,0.06)'} stroke="#c7d0da" strokeWidth={1}
-                dash={roofDone ? undefined : [8, 5]} />)}
+              {model.faces.map((f) => { const roofEditable = mode === 'select' && !drawingFace && !bgAdjust;
+                return <Line key={f.id} points={flat(facePolygon(model, f))} closed
+                fill={hi.has(f.id) ? 'rgba(232,89,12,0.22)' : 'rgba(31,78,121,0.10)'} stroke="#c7d0da" strokeWidth={1}
+                dash={roofDone ? undefined : [8, 5]}
+                draggable={roofEditable}
+                onMouseEnter={(e) => { if (roofEditable) { const s = e.target.getStage(); if (s) s.container().style.cursor = 'move'; } }}
+                onMouseLeave={(e) => { const s = e.target.getStage(); if (s) s.container().style.cursor = 'default'; }}
+                onDragStart={(e) => { const p = e.target.getStage()?.getPointerPosition(); if (p) onRoofGroupDragStart(p.x, p.y); }}
+                onDragMove={(e) => { const p = e.target.getStage()?.getPointerPosition(); if (p) onRoofGroupDragMove(p.x, p.y); e.target.position({ x: 0, y: 0 }); }}
+                onDragEnd={(e) => { e.target.position({ x: 0, y: 0 }); }} />; })}
               {model.edges.map((e) => {
                 const role = edgeRole(model, e); const a = V.get(e.v[0]); const b2 = V.get(e.v[1]); if (!a || !b2) return null;
                 const on = hi.has(e.id);
@@ -1062,13 +1124,22 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
               {calibration && <Line points={[calibration.p1.x, calibration.p1.y, calibration.p2.x, calibration.p2.y]} stroke="#f08c00" strokeWidth={2} dash={[4, 4]} />}
               {model.edges.map((e) => { const role = edgeRole(model, e); if (!role) return null; const a = V.get(e.v[0]); const b2 = V.get(e.v[1]); if (!a || !b2) return null;
                 return <Text key={'t' + e.id} x={(a.x + b2.x) / 2 - 8} y={(a.y + b2.y) / 2 - 8} text={ROLE_LABEL[role]} fontSize={11} fill={ROLE_COLOR[role]} />; })}
+              {/* 屋根の角つまみ（②の主操作＝ドラッグで図面に合わせる）。選択モードのみ・最前面・大きめで掴みやすく。 */}
+              {mode === 'select' && !drawingFace && !bgAdjust && vertexHandles.map((v, i) => (
+                <Circle key={'vh' + i} x={v.x} y={v.y} radius={9} fill="#fff" stroke="#1971c2" strokeWidth={2}
+                  shadowColor="#1971c2" shadowBlur={4} shadowOpacity={0.5} hitStrokeWidth={16} draggable
+                  onMouseEnter={(e) => { const s = e.target.getStage(); if (s) s.container().style.cursor = 'pointer'; }}
+                  onMouseLeave={(e) => { const s = e.target.getStage(); if (s) s.container().style.cursor = 'default'; }}
+                  onDragStart={() => onVertexDragStart(v.x, v.y)}
+                  onDragMove={(e) => onVertexDragMove(Math.round(e.target.x()), Math.round(e.target.y()))} />
+              ))}
             </Layer>
           </Stage>
           <div className="rs-hint">
             {mode === 'gutter' ? (routeHead
               ? '経路構築中：空きをクリックで途中点を追加（次:エルボ/排水を切替）。「排水(終端)」で終了。'
               : '軒(緑)クリック→軒樋／軒樋を選び軒上クリック→集水器／集水器を選び「経路を描く」→クリックで竪樋・エルボ・呼び樋・排水。（Undo/Redo可）')
-              : mode === 'select' ? 'プリセット／描画で屋根を編集。「雨樋を描く」で雨樋へ。' : '計測は次の段階です。'}
+              : mode === 'select' ? '青い角つまみをドラッグ＝形合わせ／屋根の内側をドラッグ＝全体移動／図面は空きをドラッグで移動・ホイールで拡大。' : '計測は次の段階です。'}
           </div>
         </div>
 
