@@ -2,12 +2,29 @@
 //   ★ここは「使える入口」。完全自動認識ではなく、図面を取り込み → 既存 Studio で人が確認・修正 → 数量確定 の一周目。
 //   PDF は1枚目を画像化して背景に使う（pdfjs を必要時だけ CDN から遅延ロード＝バンドルを太らせない。画像はオフラインでも動く）。
 import { useRef, useState } from 'react';
+import { inferScale, type ScaleHint } from '../geometry/scaleInference';
 
 export interface DrawingSet {
   planSrc: string | null;
   planName: string | null;
   elevationSrc: string | null;
   elevationName: string | null;
+  scaleHint?: ScaleHint | null;  // 平面図から推定した縮尺（提案・人が確認して確定）
+}
+
+const RENDER_SCALE = 2; // renderDocPage の既定倍率と一致させる（pxPerMeter は画像px基準）
+
+// 平面図ページのテキスト（座標つき）から縮尺を推定。取れなければ null。
+async function extractScaleHint(doc: any, pageNum: number): Promise<ScaleHint | null> {
+  try {
+    const page = await doc.getPage(pageNum);
+    const tc = await page.getTextContent();
+    const items = (tc.items as any[])
+      .filter((i) => i && typeof i.str === 'string' && Array.isArray(i.transform))
+      .map((i) => ({ str: i.str as string, x: i.transform[4] as number, y: i.transform[5] as number }));
+    const hint = inferScale(items, RENDER_SCALE);
+    return hint.pxPerMeter != null ? hint : null;
+  } catch { return null; }
 }
 
 function readAsDataURL(file: File): Promise<string> {
@@ -87,6 +104,13 @@ async function fileToImageSrc(file: File): Promise<string> {
   throw new Error('対応形式は PDF / 画像（PNG・JPG 等）です');
 }
 
+// 平面図：画像化＋縮尺推定をまとめて（PDFのみ縮尺を推定。画像は手動較正へ）。
+async function planWithHint(file: File): Promise<{ src: string; hint: ScaleHint | null }> {
+  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  if (isPdf) { const doc = await loadPdfDoc(file); const src = await renderDocPage(doc, 1); const hint = await extractScaleHint(doc, 1); return { src, hint }; }
+  return { src: await fileToImageSrc(file), hint: null };
+}
+
 interface ZoneProps {
   label: string;
   src: string | null;
@@ -147,6 +171,7 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
   const [extractErr, setExtractErr] = useState<string | null>(null);
   const [planPage, setPlanPage] = useState<number | null>(null);
   const [elevPage, setElevPage] = useState<number | null>(null);
+  const [planHint, setPlanHint] = useState<ScaleHint | null>(null); // 平面図から推定した縮尺（提案）
   const extractInputRef = useRef<HTMLInputElement>(null);
 
   // 指定ページを描画して 平面図/立面図 スロットへ。
@@ -155,7 +180,7 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
     try {
       const src = await renderDocPage(doc, page.n);
       const name = `${fileName} p${page.n}${page.title && page.title !== 'その他' ? '（' + page.title + '）' : ''}`;
-      if (which === 'plan') { setPlan({ src, name }); setPlanPage(page.n); } else { setElev({ src, name }); setElevPage(page.n); }
+      if (which === 'plan') { setPlan({ src, name }); setPlanPage(page.n); setPlanHint(await extractScaleHint(doc, page.n)); } else { setElev({ src, name }); setElevPage(page.n); }
     } catch {
       setErr((prev) => ({ ...prev, [which]: '該当ページの描画に失敗' }));
     } finally { setBusy((b) => ({ ...b, [which]: false })); }
@@ -185,9 +210,12 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
     setBusy((b) => ({ ...b, [which]: true }));
     setErr((e) => ({ ...e, [which]: null }));
     try {
-      const src = await fileToImageSrc(file);
-      const val = { src, name: file.name };
-      if (which === 'plan') setPlan(val); else setElev(val);
+      if (which === 'plan') {
+        const { src, hint } = await planWithHint(file);
+        setPlan({ src, name: file.name }); setPlanHint(hint);
+      } else {
+        setElev({ src: await fileToImageSrc(file), name: file.name });
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setErr((prev) => ({ ...prev, [which]: /pdf/i.test(msg) || msg.includes('import') ? 'PDF読込に失敗（オフライン時はPDF不可）。画像で入れてください' : msg }));
@@ -197,8 +225,8 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
   };
 
   const start = (withDrawings: boolean) => onStart(withDrawings
-    ? { planSrc: plan.src, planName: plan.name, elevationSrc: elev.src, elevationName: elev.name }
-    : { planSrc: null, planName: null, elevationSrc: null, elevationName: null });
+    ? { planSrc: plan.src, planName: plan.name, elevationSrc: elev.src, elevationName: elev.name, scaleHint: planHint }
+    : { planSrc: null, planName: null, elevationSrc: null, elevationName: null, scaleHint: null });
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: '28px 20px', fontFamily: 'system-ui, sans-serif' }}>
@@ -209,7 +237,7 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         <DropZone label="平面図" src={plan.src} name={plan.name} busy={busy.plan} error={err.plan}
-          onPick={(f) => pick('plan', f)} onClear={() => { setPlan({ src: null, name: null }); setErr((e) => ({ ...e, plan: null })); setPlanPage(null); }} />
+          onPick={(f) => pick('plan', f)} onClear={() => { setPlan({ src: null, name: null }); setErr((e) => ({ ...e, plan: null })); setPlanPage(null); setPlanHint(null); }} />
         <DropZone label="立面図" src={elev.src} name={elev.name} busy={busy.elev} error={err.elev}
           onPick={(f) => pick('elev', f)} onClear={() => { setElev({ src: null, name: null }); setErr((e) => ({ ...e, elev: null })); setElevPage(null); }} />
       </div>
@@ -255,6 +283,15 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
           </div>
         )}
       </div>
+
+      {planHint && planHint.pxPerMeter != null && (
+        <div style={{ marginTop: 12, padding: '8px 14px', background: '#ebfbee', border: '1px solid #b2f2bb', borderRadius: 10, fontSize: 13, color: '#2b8a3e', fontWeight: 700 }}>
+          📏 平面図から縮尺を検出：
+          {planHint.noteD ? `1/${planHint.noteD}` : '寸法から推定'}
+          {planHint.source === 'note+dimension' && planHint.agree === true ? '（縮尺表記と寸法が一致）' : planHint.source === 'note+dimension' && planHint.agree === false ? '（表記と寸法にズレあり・要確認）' : planHint.source === 'dimension' ? '（寸法チェーンから）' : ''}
+          <span style={{ fontWeight: 500, color: '#495057' }}>　→ 積算開始後に「この縮尺で設定」で確定できます（手動2点も可）。</span>
+        </div>
+      )}
 
       <div style={{ textAlign: 'center', marginTop: 24 }}>
         <button onClick={() => start(true)} disabled={!plan.src && !elev.src}

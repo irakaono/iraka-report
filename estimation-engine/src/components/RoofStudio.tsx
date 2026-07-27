@@ -24,8 +24,9 @@ import { defaultIntentCatalog, defaultProductCatalog, defaultAssemblyCatalog, ex
 import { drainDrawing } from '../geometry/drainDrawing';
 import { validateDrainModel } from '../geometry/drainValidator';
 import { serializeDocument, parseDocument, maxIdSuffix } from '../geometry/persistence';
-import { calibrateFrom2Points, DEV_PX_PER_METER } from '../geometry/calibration';
+import { calibrateFrom2Points, calibrationFromPxPerMeter, DEV_PX_PER_METER } from '../geometry/calibration';
 import type { Calibration } from '../geometry/calibration';
+import type { ScaleHint } from '../geometry/scaleInference';
 import AcceptancePanel from './AcceptancePanel';
 import { buildEstimate } from '../geometry/estimateExport';
 import type { GutterProgram } from '../geometry/acceptance';
@@ -115,10 +116,11 @@ const bottomEdgeIndex = (poly: Point[]): number => {
 interface RoofStudioProps {
   planSrc?: string | null;        // 平面図（背景トレース用・入口画面から）
   elevationSrc?: string | null;   // 立面図
+  scaleHint?: ScaleHint | null;   // 平面図から推定した縮尺（提案・人が確認して確定）
   onBackToDrawings?: () => void;  // 入口（図面ドロップ）へ戻る
 }
 
-export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: RoofStudioProps = {}) {
+export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToDrawings }: RoofStudioProps = {}) {
   const [faces, setFaces] = useState<FaceInput[]>(() => preset('gable'));
   const [draft, setDraft] = useState<Point[]>([]);
   const [drawingFace, setDrawingFace] = useState(false);
@@ -173,6 +175,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
   // ── スケール較正（L0.5）：px→m。較正が無ければ開発用 DEV_PX_PER_METER。全数量はこの scale で実寸化。 ──
   const [scale, setScale] = useState<number>(DEV_PX_PER_METER);
   const [calibration, setCalibration] = useState<Calibration | null>(null);
+  const [scaleProposalOpen, setScaleProposalOpen] = useState<boolean>(true); // 縮尺の自動提案バナー（人が確認して確定＝原則14）
   const [calPts, setCalPts] = useState<Point[]>([]); // 較正クリック中の2点（px）
   const [knownLen, setKnownLen] = useState<string>('0.91'); // 既知実寸(m)。既定=通り芯1マス0.91m
   const [showAcceptance, setShowAcceptance] = useState<boolean>(false); // 検証パネル
@@ -200,6 +203,21 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
       setToast('✓ 縮尺を設定しました'); window.setTimeout(() => setToast(null), 1100); // 成功体験を一瞬見せる
       setMode('select'); setShowIntro(false); // 縮尺確定 → 自動で「屋根をなぞる」へ
 
+    } catch (err) { setLoadError(err instanceof Error ? err.message : String(err)); }
+  };
+  // 縮尺の自動提案を採用（原則14＝人が確認して確定）。pxPerMeter は画像px基準なので、表示倍率 bgScale を掛けて stage px/m にする。
+  const applyScaleHint = () => {
+    if (!scaleHint || scaleHint.pxPerMeter == null) return;
+    const ppmStage = scaleHint.pxPerMeter * bgScale;
+    try {
+      const cal = calibrationFromPxPerMeter({
+        id: `cal-${idc.current++}`, drawingId: bgWhich, pxPerMeter: ppmStage,
+        method: scaleHint.source === 'dimension' ? 'dimension_line' : 'pdf_note',
+      });
+      setCalibration(cal); setScale(cal.pxPerMeter);
+      setScaleProposalOpen(false); setLoadError(null); setCursorPt(null);
+      setToast('✓ 縮尺を自動設定しました'); window.setTimeout(() => setToast(null), 1300);
+      setMode('select'); setShowIntro(false);
     } catch (err) { setLoadError(err instanceof Error ? err.message : String(err)); }
   };
   const nid = (p: string) => `${p}-${idc.current++}`;
@@ -648,6 +666,33 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
               </tbody>
             </table>
           )}
+        </div>
+      )}
+      {/* 縮尺の自動提案バナー（原則14＝AIは提案・人が確認して確定）。図面から縮尺表記/寸法で推定できたときだけ。 */}
+      {scaleHint && scaleHint.pxPerMeter != null && !calibration && scaleProposalOpen && (
+        <div style={{ background: '#e7f5ff', borderBottom: '1px solid #a5d8ff', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 20 }}>📏</span>
+          <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#1971c2' }}>
+              図面から縮尺を自動検出：{scaleHint.noteD ? `1/${scaleHint.noteD}` : '寸法から推定'}
+              {scaleHint.source === 'note+dimension' && scaleHint.agree === true && <span style={{ color: '#2b8a3e' }}>（縮尺表記と寸法が一致・高信頼）</span>}
+              {scaleHint.source === 'note+dimension' && scaleHint.agree === false && <span style={{ color: '#e8590c' }}>（表記と寸法にズレ・要確認）</span>}
+              {scaleHint.source === 'dimension' && <span style={{ color: '#495057', fontWeight: 600 }}>（寸法チェーンから・{scaleHint.dimSamples ?? 0}箇所）</span>}
+            </div>
+            <div style={{ fontSize: 12, color: '#495057', marginTop: 2 }}>
+              この縮尺で設定すると、面積・長さが実寸で出ます。念のため設定後に「1マス≒910mm」などで確認してください。
+            </div>
+          </div>
+          <button onClick={applyScaleHint}
+            style={{ fontSize: 14, fontWeight: 800, padding: '10px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', color: '#fff', background: '#1971c2', boxShadow: '0 2px 8px rgba(25,113,194,.3)' }}>
+            この縮尺で設定
+          </button>
+          <button onClick={() => { setScaleProposalOpen(false); setMode('calibrate'); setShowIntro(false); }}
+            style={{ fontSize: 13, fontWeight: 700, padding: '9px 14px', borderRadius: 8, border: '1px solid #74b0e6', cursor: 'pointer', color: '#1971c2', background: '#fff' }}>
+            手動で合わせる
+          </button>
+          <button onClick={() => setScaleProposalOpen(false)} title="閉じる"
+            style={{ fontSize: 16, padding: '4px 8px', borderRadius: 6, border: 'none', cursor: 'pointer', color: '#868e96', background: 'transparent' }}>×</button>
         </div>
       )}
       {/* ── AIナビ（初回ガイド）：現在地を常時表示し、次の一手だけを案内。専門用語は使わない。 ── */}

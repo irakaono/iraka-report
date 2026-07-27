@@ -3,7 +3,7 @@
 //   ★将来（寸法線クリック / スケールバー自動認識 / CADベクタ長取得）も同じ契約：method が変わるだけで pxPerMeter の意味は不変。
 import type { Point } from './roofModel';
 
-export type CalibrationMethod = 'manual_2pt' | 'dimension_line' | 'scale_bar' | 'cad_vector';
+export type CalibrationMethod = 'manual_2pt' | 'dimension_line' | 'scale_bar' | 'cad_vector' | 'pdf_note';
 
 export interface Calibration {
   id: string;
@@ -28,6 +28,15 @@ export function calibrateFrom2Points(args: {
   const px = pxDistance(p1, p2);
   if (!(px > 0)) throw new Error('較正2点が同一位置（px距離が0）');
   return { id, drawingId, pxPerMeter: px / sourceLength, sourceLength, p1, p2, method };
+}
+
+// pxPerMeter を直接与えて Calibration を作る（縮尺表記/寸法チェーンからの自動提案・原則14＝人が確認して確定）。
+export function calibrationFromPxPerMeter(args: {
+  id: string; drawingId: string; pxPerMeter: number; method?: CalibrationMethod;
+}): Calibration {
+  const { id, drawingId, pxPerMeter, method = 'pdf_note' } = args;
+  if (!(pxPerMeter > 0)) throw new Error('pxPerMeter は正が必要');
+  return { id, drawingId, pxPerMeter, sourceLength: 0, p1: { x: 0, y: 0 }, p2: { x: 0, y: 0 }, method };
 }
 
 // 較正が無いときの開発用フォールバック（旧 SCALE=50）。実測は必ず較正を通す。

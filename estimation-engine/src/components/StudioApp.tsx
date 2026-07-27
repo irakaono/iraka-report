@@ -16,6 +16,7 @@ export default function StudioApp() {
     <RoofStudio
       planSrc={drawings.planSrc}
       elevationSrc={drawings.elevationSrc}
+      scaleHint={drawings.scaleHint ?? null}
       onBackToDrawings={() => setPhase('landing')}
     />
   );

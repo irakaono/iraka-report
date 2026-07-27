@@ -5,7 +5,7 @@
  *   - precache は耐性版（allSettled）。1ファイル欠けても SW 更新ごと止めない（原則10）。
  *   - リリースのたびに CACHE_NAME を上げること（RELEASE_CHECKLIST 参照）。
  */
-const CACHE_NAME = 'iraka-field-v2.25.0'; // v2.25.0: [A]屋根入力の導線改善2＝「次へ進む」CTAを明確化・水下選択のフィードバック・屋根の形/水下を変えたら雨樋を組み直す（EaveNotFound解消）UNLOCK / v2.24.0: [A]屋根入力「形から始める」 / v2.23.0: [B]印刷改善②原因欄 / v2.22.0: [B]Phase0 Fixture Export
+const CACHE_NAME = 'iraka-field-v2.26.0'; // v2.26.0: [A]縮尺の自動判断＝PDFの縮尺表記(1/50等)＋寸法チェーンから pxPerMeter を推定し提案（人が確認して確定・note↔寸法クロスチェック）UNLOCK / v2.25.0: [A]屋根入力「次へ進む」導線＋雨樋組み直し / v2.24.0: [A]「形から始める」 / v2.23.0: [B]印刷改善② / v2.22.0: [B]Phase0 Fixture Export
 const ASSETS = [
   './portal.html',
   './index.html',
