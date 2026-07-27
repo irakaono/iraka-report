@@ -29,11 +29,13 @@ ok(!east!.overhangs.includes(7985) && !west!.overhangs.includes(7985), '遠い�
 // 立面ラベルが無ければ空（グルーピング不能）
 ok(readElevation([t('10', 0, 0), t('4', 8, 0)]).length === 0, 'ラベル無し→空');
 
-// Resolver：異なる勾配ごとに1屋根＋方位別 eave を束ねる（ドラフト）
+// Resolver：異なる勾配ごとに1屋根＋方位別 eave 辺を束ねる（合成契約 RoofConfiguration・ドラフト）
 const cfg = resolveRoofConfig(specs);
 ok(cfg.roofs.length === 2, `勾配2種→屋根2つ（実 ${cfg.roofs.length}）`);
-ok(cfg.roofs.some((r) => r.slope === 2) && cfg.roofs.some((r) => r.slope === 4), 'slope 2寸/4寸 が RoofConfig に入る');
-ok(cfg.roofs[0].eave?.east === 600 && cfg.roofs[0].eave?.west === 250, `eave 方位別（east600/west250・実 ${JSON.stringify(cfg.roofs[0].eave)}）`);
+ok(cfg.roofs.some((r) => r.slope === 2) && cfg.roofs.some((r) => r.slope === 4), 'slope 2寸/4寸 が RoofConfiguration に入る');
+const e0 = cfg.roofs[0].edges || [];
+ok(e0.some((e) => e.role === 'eave' && e.dir === 'east' && e.overhang === 600), `eave辺 east600（実 ${JSON.stringify(e0)}）`);
+ok(e0.some((e) => e.role === 'eave' && e.dir === 'west' && e.overhang === 250), 'eave辺 west250');
 ok(resolveRoofConfig([]).roofs.length === 1, '空入力→屋根1（フォールバック）');
 
 if (fails.length) { console.error('❌ recognizer FAIL:\n' + fails.map((f) => '  - ' + f).join('\n')); process.exit(1); }

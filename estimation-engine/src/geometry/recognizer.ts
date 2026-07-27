@@ -5,25 +5,17 @@
 // 原則21：Recognizer は Provider の一つ。
 //   責務：図面を読み、宣言的な RoofConfig（Configuration）を返す。Geometry は作らない・知らない。
 //   ★不変条件：Recognizer は Geometry を知らない／Geometry は Recognizer を知らない。契約は Configuration のみ。
-//   Recognizer は Reader（生の値）と Resolver（建築知識→Configuration）に分ける：
-//     PDF → [Reader] readElevation → 生の値(立面ごと) → [Resolver] resolveRoofConfig → RoofConfig
-//   Reader は OCR/抽出が変わっても壊れない。Resolver は建築知識だけ。
+//   Recognizer は Reader（生の値）と Resolver（建築知識→Roof Configuration）に分ける：
+//     PDF → [Reader] readElevation → 生の値(立面ごと) → [Resolver] resolveRoofConfig → RoofConfiguration
+//   Reader は OCR/抽出が変わっても壊れない。Resolver は屋根の建築知識だけ。契約＝roofConfig.ts。
 //   正の設計：claude/RECOGNIZER-ARCHITECTURE.md（R-1 契約 / R-2 Reader / R-3 Resolver）。
+import type { Dir, RoofConfiguration, RoofUnit, EdgeConfig } from './roofConfig';
+import { buildRoofConfiguration } from './roofConfig';
+export type { Dir } from './roofConfig'; // 方位は Roof Configuration 契約が正（後方互換 re-export）
 
-export type Dir = 'south' | 'east' | 'north' | 'west';
 export const DIR_JP: Record<string, Dir> = { 南: 'south', 東: 'east', 北: 'north', 西: 'west' };
 
-// Recognizer の戻り値（Geometry との唯一の seam）。宣言的・方位キー。
-export interface RoofSpec {
-  id: string;
-  slope?: number;                          // 寸
-  eave?: Partial<Record<Dir, number>>;     // 方位→軒の出(mm)
-  ridge?: Partial<Record<Dir, number>>;    // 片棟（水上の棟包み）位置→寸法(mm)
-  flashing?: Partial<Record<Dir, boolean>>;// 雨押え（水上が壁）
-}
-export interface RoofConfig { roofs: RoofSpec[] }
-
-// STEP2：立面ごとに読めた仕様（座標グルーピングの生結果）。STEP3 でこれを RoofConfig へ束ねる。
+// STEP2：立面ごとに読めた生の値（座標グルーピング）。STEP3 でこれを sub-Compiler が Roof Configuration へ束ねる。
 export interface ElevationSpec { dir: Dir; pitches: number[]; overhangs: number[] }
 
 export interface RecoToken { str: string; x: number; y: number }
@@ -73,18 +65,20 @@ export function readElevation(
     .map((d) => ({ dir: d, pitches: [...byDir.get(d)!.pitches].sort((a, b) => a - b), overhangs: [...byDir.get(d)!.overhangs].sort((a, b) => a - b) }));
 }
 
-// ── Resolver（R-3 第一版・ドラフト）：生の立面値 → RoofConfig（建築知識） ──
+// ── Resolver（R-3 第一版・ドラフト）：生の立面値 → RoofConfiguration（屋根の建築知識） ──
 //   正直な限界：どの軒の出がどの辺かの厳密割当は、平面の面数・真北・ドメイン規則が要る（R-3 本実装で締める）。
-//   第一版は「異なる勾配ごとに1つの屋根」を作り、読めた勾配・軒の出候補をドラフトとして束ねる（人が確認＝確認ファースト）。
-//   ★Geometry には触れない。返すのは Configuration だけ。
-export function resolveRoofConfig(readings: ElevationSpec[]): RoofConfig {
+//   第一版は「異なる勾配ごとに1つの屋根」を作り、方位別の軒の出を eave 辺として束ねる（人が確認＝確認ファースト）。
+//   ★Geometry には触れない。返すのは Roof Configuration（合成契約）だけ。Builder で束ねる。
+export function resolveRoofConfig(readings: ElevationSpec[]): RoofConfiguration {
   const pitches = Array.from(new Set(readings.flatMap((r) => r.pitches))).sort((a, b) => a - b);
-  const eaveByDir: Partial<Record<Dir, number>> = {};
-  for (const r of readings) { if (r.overhangs.length) eaveByDir[r.dir] = Math.min(...r.overhangs); } // 代表値（最小＝軒寄り）。詳細割当はR-3本実装。
-  const roofs: RoofSpec[] = (pitches.length ? pitches : [undefined]).map((slope, i) => ({
+  // 方位別の代表軒の出（最小＝軒寄り）を eave 辺に。詳細な辺割当は R-3 本実装。
+  const eaveEdges: EdgeConfig[] = readings
+    .filter((r) => r.overhangs.length)
+    .map((r) => ({ role: 'eave', dir: r.dir, overhang: Math.min(...r.overhangs) }));
+  const units: RoofUnit[] = (pitches.length ? pitches : [undefined]).map((slope, i) => ({
     id: `R${i + 1}`,
     ...(slope != null ? { slope } : {}),
-    ...(Object.keys(eaveByDir).length ? { eave: { ...eaveByDir } } : {}),
+    ...(eaveEdges.length ? { edges: eaveEdges.map((e) => ({ ...e })) } : {}),
   }));
-  return { roofs };
+  return buildRoofConfiguration(units);
 }
