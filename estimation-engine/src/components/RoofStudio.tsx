@@ -256,14 +256,32 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
 
   // ── Roof 編集（従来どおり／Command化は後） ──
   const confirmFace = () => { if (draft.length >= 3) { setFaces((fs) => [...fs, { vertices: draft, pitch: 5, eaveEdgeIndex: bottomEdgeIndex(draft) }]); setDraft([]); setDrawingFace(false); } };
-  // AIナビ③「形から始める」：屋根の形テンプレを置く（平面図の上に生成→人が角をドラッグして合わせる）。
+  // 屋根の形が変わったら、その形の軒から雨樋を組み直す（形を選び直しても前の雨樋が残らない＝EaveNotFound防止）。
+  const reseedDrainFor = (newFaces: FaceInput[]) => {
+    const m = buildRoofModelFromFaces(
+      newFaces.map((f) => ({ vertices: f.vertices, pitch: f.pitch, attrs: { trade: '屋根工事', item: '屋根材' }, eaveEdgeIndex: f.eaveEdgeIndex })),
+      { scale },
+    );
+    const proposal = autoProposeGutter(m);
+    const dModel = proposal.dropCount > 0 ? proposal.model : emptyDrainModel('DR-1', m.id);
+    setDrain(initHistory(dModel));
+    idc.current = Math.max(idc.current, maxIdSuffix(dModel) + 1);
+  };
+  // AIナビ③「形から始める」：屋根の形テンプレを置く（平面図の上に生成→人が角をドラッグして合わせる）。雨樋も組み直す。
   const chooseForm = (name: 'gable' | 'hipped' | 'shed') => {
-    setFaces(preset(name));
+    const nf = preset(name);
+    setFaces(nf);
+    reseedDrainFor(nf);
     setMode('select'); setDrawingFace(false); setDraft([]);
     setRoofFormChosen(true); setShowIntro(false); clearHi();
   };
-  // 片流れ（1面）の「水下＝軒」側を選ぶ（辺index）。水上は反対辺＝雨押え/片棟/つかみ込みの対象（積算反映は次段階）。
-  const setShedEave = (edgeIndex: number) => setFaces((fs) => (fs.length === 1 ? [{ ...fs[0], eaveEdgeIndex: edgeIndex }] : fs));
+  // 片流れ（1面）の「水下＝軒」側を選ぶ（辺index）。水上は反対辺＝雨押え/片棟/つかみ込みの対象（積算反映は次段階）。雨樋も水下に組み直す。
+  const chooseShedEave = (edgeIndex: number) => {
+    if (faces.length !== 1) return;
+    const nf: FaceInput[] = [{ ...faces[0], eaveEdgeIndex: edgeIndex }];
+    setFaces(nf);
+    reseedDrainFor(nf);
+  };
   const setPitch = (i: number, p: number) => setFaces((fs) => fs.map((f, j) => (j === i ? { ...f, pitch: p } : f)));
   const delFace = (i: number) => { setFaces((fs) => fs.filter((_, j) => j !== i)); clearHi(); };
 
@@ -735,7 +753,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
                             </div>
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                               {([['上', 0], ['右', 1], ['下', 2], ['左', 3]] as const).map(([label, idx]) => (
-                                <button key={idx} onClick={() => setShedEave(idx)}
+                                <button key={idx} onClick={() => chooseShedEave(idx)}
                                   className={faces[0]?.eaveEdgeIndex === idx ? 'on' : ''}
                                   style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 7, cursor: 'pointer',
                                     border: faces[0]?.eaveEdgeIndex === idx ? 'none' : '1px solid #f0b429',
@@ -745,16 +763,20 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
                                 </button>
                               ))}
                             </div>
-                            <div style={{ fontSize: 11, color: '#a86a00', marginTop: 6 }}>※水上の納まり（雨押え/片棟/つかみ込み）の積算反映は次の段階で入れます。</div>
+                            <div style={{ fontSize: 12, color: '#2b8a3e', fontWeight: 700, marginTop: 6 }}>
+                              ✓ 水下（軒）＝{({ 0: '上', 1: '右', 2: '下', 3: '左' } as Record<number, string>)[faces[0]?.eaveEdgeIndex ?? 0]} に設定。軒樋もこの辺に付きます。
+                            </div>
+                            <div style={{ fontSize: 11, color: '#a86a00', marginTop: 2 }}>※水上の納まり（雨押え/片棟/つかみ込み）の積算反映は次の段階で入れます。</div>
                           </div>
                         )}
                       </div>
                     )}
-                    <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, paddingTop: 8, borderTop: '1px dashed #d0e2f5' }}>
                       <button onClick={() => { setRoofDone(true); setMode('gutter'); }}
-                        style={{ fontSize: 14, fontWeight: 700, padding: '10px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', color: '#fff', background: '#1971c2', boxShadow: '0 2px 8px rgba(25,113,194,.3)' }}>
-                        屋根はこれでOK →
+                        style={{ fontSize: 15, fontWeight: 800, padding: '11px 22px', borderRadius: 8, border: 'none', cursor: 'pointer', color: '#fff', background: '#2b8a3e', boxShadow: '0 2px 8px rgba(43,138,62,.35)' }}>
+                        {roofFormChosen ? 'この屋根で確定 → 次へ進む' : '屋根はこれで確定 → 次へ進む'}
                       </button>
+                      <span style={{ fontSize: 12, color: '#6b7885' }}>形を選び、角を図面に合わせたら、このボタンで数量・見積へ進みます。</span>
                     </div>
                   </div>
                 ) : (

@@ -5,7 +5,7 @@
  *   - precache は耐性版（allSettled）。1ファイル欠けても SW 更新ごと止めない（原則10）。
  *   - リリースのたびに CACHE_NAME を上げること（RELEASE_CHECKLIST 参照）。
  */
-const CACHE_NAME = 'iraka-field-v2.24.0'; // v2.24.0: [A]積算スタジオ 屋根入力を「形から始める」導線に（AIナビ③で片流れ/切妻/寄棟を選ぶ→角を合わせる・平面図/立面図の役割を明示・片流れ水下選択）UNLOCK / v2.23.0: [B]印刷改善②原因欄全文表示 / v2.22.0: [B]Phase0 Fixture Export＋実データPDF4件 / [A]Phase A#2 採用版管理
+const CACHE_NAME = 'iraka-field-v2.25.0'; // v2.25.0: [A]屋根入力の導線改善2＝「次へ進む」CTAを明確化・水下選択のフィードバック・屋根の形/水下を変えたら雨樋を組み直す（EaveNotFound解消）UNLOCK / v2.24.0: [A]屋根入力「形から始める」 / v2.23.0: [B]印刷改善②原因欄 / v2.22.0: [B]Phase0 Fixture Export
 const ASSETS = [
   './portal.html',
   './index.html',
