@@ -59,6 +59,23 @@
     }));
   }
 
+  // 指定プレフィックスに一致する全エントリ {key, value(Blob)} を返す。フィクスチャ書き出し（Fixture Export）用。
+  function idbEntriesByPrefix(prefix) {
+    return idbOpen().then(db => new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.openCursor();
+      const out = [];
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (!cursor) { resolve(out); return; }
+        if (String(cursor.key).startsWith(prefix)) out.push({ key: cursor.key, value: cursor.value });
+        cursor.continue();
+      };
+      req.onerror = () => reject(req.error);
+    }));
+  }
+
   function idbDeleteByPrefix(prefix) {
     return idbOpen().then(db => new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -267,7 +284,7 @@
   }
 
   global.MediaManager = {
-    idbPut, idbGet, idbDelete, idbDeleteByPrefix, estimateStoredSize, formatBytes,
+    idbPut, idbGet, idbDelete, idbDeleteByPrefix, idbEntriesByPrefix, estimateStoredSize, formatBytes,
     trackObjectURL, revokeObjectURL,
     compressImageToBlobs, resizeBlobToBlob, drawToCanvasBlob,
     observeLazyPhoto, loadLazyPhoto,

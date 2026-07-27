@@ -576,7 +576,9 @@ body {
     <div class="draft-row">
       <input type="text" id="draftName" placeholder="例：山田邸 初回調査">
       <button class="primary" onclick="saveNamedDraft()">新規保存</button>
+      <button class="light" onclick="triggerFixtureImport()" title="書き出したフィクスチャ(.iraka-leak.json)を読み込む">⬆ 読み込み</button>
       <button class="light" onclick="closeDraftModal()">閉じる</button>
+      <input type="file" id="fixtureImportInput" accept=".json,application/json" style="display:none" onchange="importFixtureFile(this)">
     </div>
     <div id="currentDraftInfo" style="font-size:12px;color:#666;margin-bottom:8px;"></div>
     <div id="draftList"></div>
@@ -1840,6 +1842,94 @@ function deleteDraft(id){
   renderDraftList(); showStatus('下書きを削除しました');
 }
 
+// ===== フィクスチャ書き出し／読み戻し（Fixture Export / Import） =====
+// 目的：下書き（雨漏り調査報告書）を写真ごと1つの自己完結JSONファイルへ書き出す／読み戻す。
+//   localStorage/IndexedDB はブラウザを消すと失われる揮発領域。実案件（仁礼・石井・ライニング・入吉）を
+//   ファイルに固定できれば「唯一の取り返しのつかない項目＝フィクスチャ4件」を失わずに済む。
+//   ※これは印刷/入力補助レイヤーの追加（UNLOCK）であり、雨漏りOSの Architecture には非干渉。
+const FIXTURE_FORMAT = 'iraka-leak-report-fixture';
+const FIXTURE_VERSION = 1;
+const idbEntriesByPrefix = (p) => MediaManager.idbEntriesByPrefix(p);
+function blobToDataURL(blob){
+  return new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(r.result); r.onerror=()=>reject(r.error); r.readAsDataURL(blob); });
+}
+function dataURLToBlob(dataUrl){
+  const [head, b64] = String(dataUrl).split(',');
+  const mime = (head.match(/data:([^;]+)/)||[])[1] || 'application/octet-stream';
+  const bstr = atob(b64); let n=bstr.length; const u8=new Uint8Array(n);
+  while(n--){ u8[n]=bstr.charCodeAt(n); }
+  return new Blob([u8], { type: mime });
+}
+// 現在このセッションが使う CACHE_NAME（sw.js と揃える）。書き出したファイルにどのバージョンで作ったかを残す。
+const APP_CACHE_NAME = (typeof CACHE_NAME !== 'undefined') ? CACHE_NAME : 'iraka-field-v2.22.0';
+async function exportDraftToFile(id){
+  const drafts=getDrafts(); const d=drafts[id];
+  if(!d){ alert('下書きが見つかりません。'); return; }
+  try{
+    showStatus('フィクスチャを書き出し中...');
+    const prefix = `photo:${id}:`;
+    const entries = await idbEntriesByPrefix(prefix).catch(()=>[]);
+    const photos = [];
+    for(const e of entries){
+      if(!e.value) continue;
+      // draftId 非依存にするため、キーは `photo:${id}:` を外した相対キー（例 blk-3-img:thumb）で保存。
+      photos.push({ key: String(e.key).slice(prefix.length), type: e.value.type || '', dataUrl: await blobToDataURL(e.value) });
+    }
+    const payload = {
+      format: FIXTURE_FORMAT, version: FIXTURE_VERSION,
+      exportedAt: new Date().toISOString(), appCacheName: APP_CACHE_NAME,
+      draft: { name: d.name, updatedAt: d.updatedAt, data: d.data },
+      photos
+    };
+    const safeName = String(d.name||'report').replace(/[\\/:*?"<>|]/g,'_').slice(0,40);
+    const stamp = new Date().toISOString().slice(0,10);
+    const blob = new Blob([JSON.stringify(payload)], { type:'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download = `fixture-${safeName}-${stamp}.iraka-leak.json`; a.click();
+    URL.revokeObjectURL(url);
+    showStatus(`✓ 「${d.name}」を書き出しました（写真${photos.length}点）`);
+  }catch(err){
+    console.error('fixture export failed', err);
+    showStatus('⚠ 書き出しに失敗しました：' + (err && err.message || err), true);
+  }
+}
+function triggerFixtureImport(){ document.getElementById('fixtureImportInput')?.click(); }
+async function importFixtureFile(inputEl){
+  const file = inputEl.files && inputEl.files[0]; if(!file){ return; }
+  try{
+    showStatus('フィクスチャを読み込み中...');
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    if(!payload || payload.format !== FIXTURE_FORMAT || !payload.draft || !payload.draft.data){
+      throw new Error('このファイルは雨漏り報告書のフィクスチャではありません。');
+    }
+    const newId = makeId();
+    // 写真を新しい draftId 配下へ復元
+    for(const ph of (payload.photos||[])){
+      if(!ph || !ph.dataUrl) continue;
+      await idbPut(`photo:${newId}:${ph.key}`, dataURLToBlob(ph.dataUrl));
+    }
+    const drafts = getDrafts();
+    const baseName = payload.draft.name || '読み込んだ報告書';
+    let name = baseName; let n=2;
+    const existingNames = new Set(Object.values(drafts).map(x=>x.name));
+    while(existingNames.has(name)){ name = `${baseName}（読込${n++}）`; }
+    drafts[newId] = { id:newId, name, updatedAt: payload.draft.updatedAt || new Date().toISOString(), data: payload.draft.data };
+    const ok = setDrafts(drafts);
+    if(!ok) throw new Error('保存領域に書き込めませんでした（容量オーバーの可能性）。');
+    renderDraftList();
+    showStatus(`✓ フィクスチャ「${name}」を読み込みました（写真${(payload.photos||[]).length}点）。一覧の「開く」で確認できます。`);
+  }catch(err){
+    console.error('fixture import failed', err);
+    showStatus('⚠ 読み込みに失敗しました：' + (err && err.message || err), true);
+  }finally{
+    inputEl.value='';
+  }
+}
+window.exportDraftToFile = exportDraftToFile;
+window.triggerFixtureImport = triggerFixtureImport;
+window.importFixtureFile = importFixtureFile;
+
 function openDraftModal(){ document.getElementById('draftModal').style.display='flex'; renderDraftList(); updateCurrentDraftInfo(); }
 function closeDraftModal(){ document.getElementById('draftModal').style.display='none'; }
 function closeDraftModalOnBg(e){ if(e.target.id==='draftModal') closeDraftModal(); }
@@ -1857,6 +1947,7 @@ function renderDraftList(){
     <div class="actions">
       <button class="primary" onclick="openDraft('${d.id}')">開く</button>
       <button class="light" onclick="overwriteNamedDraft('${d.id}')">上書き</button>
+      <button class="light" onclick="exportDraftToFile('${d.id}')" title="写真ごとファイルへ書き出す（フィクスチャ保存）">⬇ 書き出し</button>
       <button class="danger" onclick="deleteDraft('${d.id}')">削除</button>
     </div></div>`).join('');
   updateCurrentDraftInfo();

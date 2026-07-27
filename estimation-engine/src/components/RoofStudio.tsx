@@ -4,7 +4,7 @@
 //   ★排水経路は Node/Edge Graph が唯一の真実。Studio は Graph を Polyline として編集・表示するだけ。
 //   モード: 屋根を描く / 雨樋を描く / 計測。雨樋は 軒樋→集水器→（竪樋→エルボ→呼び樋→排水）を Command で編集。
 //   ★入口で図面を入れると、屋根プリセット＋雨樋の自動提案で数量を即座に表示（人が上から修正して確定）。
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { Stage, Layer, Line, Circle, Rect, Text, Arrow, Group, Image as KonvaImage } from 'react-konva';
 import type { Point } from '../geometry/roofModel';
@@ -56,6 +56,14 @@ interface EstimationRevisionRec {
   id: string; sequence: number; createdAt: string; note?: string;
   geometryRevisionId: string; geometrySequence?: number; quotationSnapshot?: unknown; status?: string;
 }
+// 採用版の判断（原則19：判断は Estimation ではなく Project 側の Decision に残す）。
+// project.extensions.estimationDecision に { adoptedEstimationId, decidedBy, decidedAt, reason } として保存される。
+interface EstimationDecision {
+  adoptedEstimationId: string;   // どの版を採用したか（EstimationRevisionRec.id）
+  decidedBy?: string;            // 誰が
+  decidedAt: string;             // いつ（ISO8601）
+  reason?: string;               // なぜ
+}
 interface EstimationHost {
   projectId?: string | null;
   loadModel: () => Promise<string | null>;
@@ -65,6 +73,9 @@ interface EstimationHost {
   listRevisions?: () => Promise<EstimationRevisionRec[]>;
   saveRevision?: (payload: { model: string; quantitySnapshot?: unknown; quotationSnapshot?: unknown; note?: string; createdBy?: string }) => Promise<{ estimation: EstimationRevisionRec; geometryReused?: boolean }>;
   openRevision?: (geometryRevisionId: string) => Promise<string | null>;
+  // Phase A#2 採用版管理：判断は Project 側に持つ（原則19）。
+  getDecision?: () => Promise<EstimationDecision | null>;
+  setDecision?: (d: EstimationDecision) => Promise<EstimationDecision>;
 }
 function estimationHost(): EstimationHost | undefined {
   return typeof window !== 'undefined'
@@ -175,6 +186,8 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
   const [toast, setToast] = useState<string | null>(null);      // 成功トースト（✓縮尺を設定しました 等）
   const [showHistory, setShowHistory] = useState<boolean>(false);       // 積算履歴パネル（案件埋め込み時のみ）
   const [revisions, setRevisions] = useState<EstimationRevisionRec[]>([]); // 案件の Estimation 履歴（001/002…）
+  const [decision, setDecisionState] = useState<EstimationDecision | null>(null); // 採用版の判断（Project=SSOT・原則19）
+  const [adoptDraft, setAdoptDraft] = useState<{ id: string; by: string; reason: string } | null>(null); // 「採用」入力中（誰が・なぜ）
   const hasHistory = !!estimationHost()?.hasHistory;                     // 履歴機能が使える（?projectId 埋め込み）か
   const applyCalibration = (p1: Point, p2: Point) => {
     const m = Number(knownLen);
@@ -346,22 +359,38 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
     try { loadFromJson(await file.text()); } finally { e.target.value = ''; }
   };
   // 見積 Excel 出力：会社の「見積書書式」に完全一致（ExcelJS・罫線/結合/数値書式）。雨樋=WITH DOM価格、屋根=Roof Program価格。
+  //   estimate（buildEstimate の出力＝Projection）を受け取り、書式化して書き出す共通処理。原則20：見積は Geometry の射影。
+  const writeQuotationXlsx = async (estimate: unknown, filenameHint?: string) => {
+    const ExcelJS = await loadExcelJS();
+    const today = new Date().toISOString().slice(0, 10);
+    const customer = (window.prompt('宛名（お客様名）を入力（空欄可）', '') ?? '').trim();
+    const site = (window.prompt('現場住所を入力（空欄可）', '') ?? '').trim();
+    const wb = buildQuotationWorkbook(ExcelJS, estimate as Parameters<typeof buildQuotationWorkbook>[1], {
+      customer, site, title: '屋根・雨樋工事', work: '屋根・雨樋工事', validUntil: '発行後30日', date: today,
+    });
+    const buf = await wb.xlsx.writeBuffer();
+    const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    const a = document.createElement('a'); a.href = url; a.download = `甍AI-見積-${filenameHint ? filenameHint + '-' : ''}${today}.xlsx`; a.click();
+    URL.revokeObjectURL(url);
+    setExcelDone(true);
+    setLoadError(null);
+  };
+  // 現在キャンバスの状態から見積書を作成（新規版の下書き用）。
   const exportExcel = async () => {
     try {
-      const ExcelJS = await loadExcelJS();
-      const today = new Date().toISOString().slice(0, 10);
-      const customer = (window.prompt('宛名（お客様名）を入力（空欄可）', '') ?? '').trim();
-      const site = (window.prompt('現場住所を入力（空欄可）', '') ?? '').trim();
       const doc = buildEstimate(rq, dq, withdomGutter as unknown as GutterProgram, withdomRoof as unknown as GutterProgram, 0);
-      const wb = buildQuotationWorkbook(ExcelJS, doc, {
-        customer, site, title: '屋根・雨樋工事', work: '屋根・雨樋工事', validUntil: '発行後30日', date: today,
-      });
-      const buf = await wb.xlsx.writeBuffer();
-      const url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-      const a = document.createElement('a'); a.href = url; a.download = `甍AI-見積-${today}.xlsx`; a.click();
-      URL.revokeObjectURL(url);
-      setExcelDone(true);
-      setLoadError(null);
+      await writeQuotationXlsx(doc);
+    } catch (err) {
+      setLoadError('Excel出力に失敗（オフライン時は不可）: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+  // 採用版（既定）から見積書を作成：Project の Decision が指す版の見積スナップショット（＝その形状の射影・原則20）を出力する。
+  const exportAdoptedExcel = async () => {
+    if (!decision) return;
+    const rev = revisions.find((r) => r.id === decision.adoptedEstimationId);
+    if (!rev || rev.quotationSnapshot == null) { setLoadError('採用版の見積データが見つかりません（版が削除された可能性があります）'); return; }
+    try {
+      await writeQuotationXlsx(rev.quotationSnapshot, `採用-E${String(rev.sequence).padStart(3, '0')}`);
     } catch (err) {
       setLoadError('Excel出力に失敗（オフライン時は不可）: ' + (err instanceof Error ? err.message : String(err)));
     }
@@ -401,6 +430,30 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
   const refreshHistory = () => {
     const host = estimationHost();
     if (host?.listRevisions) host.listRevisions().then((rows) => setRevisions(rows || [])).catch(() => {});
+    refreshDecision();
+  };
+  // 採用版の判断（Decision）を Project から再読込（原則19：判断は Project=SSOT に置く）
+  const refreshDecision = () => {
+    const host = estimationHost();
+    if (host?.getDecision) host.getDecision().then((d) => setDecisionState(d || null)).catch(() => {});
+  };
+  // 「採用」開始：誰が・なぜ を入力するインライン欄を開く（いつ＝確定時に自動）
+  const beginAdopt = (rev: EstimationRevisionRec) => setAdoptDraft({ id: rev.id, by: decision?.decidedBy || '', reason: '' });
+  const cancelAdopt = () => setAdoptDraft(null);
+  // 採用を確定：Project 側 Decision に { adoptedEstimationId, decidedBy, decidedAt, reason } を保存する。
+  const confirmAdopt = () => {
+    if (!adoptDraft) return;
+    const host = estimationHost();
+    const d: EstimationDecision = {
+      adoptedEstimationId: adoptDraft.id,
+      decidedBy: adoptDraft.by.trim() || undefined,
+      decidedAt: new Date().toISOString(),
+      reason: adoptDraft.reason.trim() || undefined,
+    };
+    if (host?.setDecision) {
+      host.setDecision(d).then((saved) => { setDecisionState(saved || d); setAdoptDraft(null); flash('✓ 採用版を設定しました'); })
+        .catch(() => setLoadError('採用版の保存に失敗しました'));
+    } else { setDecisionState(d); setAdoptDraft(null); }
   };
   // 過去版を開く：当時の Geometry Revision を読み込む（数量・見積は Geometry から自動再計算＝Projection・原則20）
   const openRevision = (rev: EstimationRevisionRec) => {
@@ -421,6 +474,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
       host.loadModel().then((json) => { if (json) loadFromJson(json); }).catch(() => {});
     }
     if (host?.listRevisions) host.listRevisions().then((rows) => setRevisions(rows || [])).catch(() => {});
+    if (host?.getDecision) host.getDecision().then((d) => setDecisionState(d || null)).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const savedLabel = savedAt ? `💾 最終保存 ${new Date(savedAt).toLocaleString('ja-JP', { hour: '2-digit', minute: '2-digit', month: 'numeric', day: 'numeric' })}` : '未保存';
@@ -500,6 +554,25 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
             <span style={{ flex: 1 }} />
             <button onClick={saveEstimation} style={{ fontSize: 13, fontWeight: 700, padding: '7px 14px', borderRadius: 8, border: 'none', color: '#fff', background: '#1971c2', cursor: 'pointer' }}>＋ この状態を履歴に保存</button>
           </div>
+          {/* 採用版バナー（原則19：判断は Project 側の Decision＝誰が・いつ・なぜ）。採用版が見積出力の既定になる。 */}
+          {(() => {
+            const adopted = decision ? revisions.find((r) => r.id === decision.adoptedEstimationId) : undefined;
+            if (!decision) {
+              return <div style={{ fontSize: 12, color: '#868e96', padding: '2px 0 10px' }}>まだ採用版は決まっていません。見積に使う版を「採用」で1つ選ぶと、ここに（誰が・いつ・なぜ）を残し、見積出力の既定になります。</div>;
+            }
+            return (
+              <div style={{ background: '#ebfbee', border: '1px solid #b2f2bb', borderRadius: 8, padding: '9px 12px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#2b8a3e' }}>✓ 採用版：{adopted ? `Estimation-${String(adopted.sequence).padStart(3, '0')}` : '（この版は削除済み）'}</span>
+                <span style={{ fontSize: 12, color: '#495057' }}>
+                  {decision.decidedBy ? `決定：${decision.decidedBy}` : '決定者：未記入'}
+                  ・{new Date(decision.decidedAt).toLocaleString('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  {decision.reason ? `・理由：${decision.reason}` : ''}
+                </span>
+                <span style={{ flex: 1 }} />
+                {adopted && <button onClick={exportAdoptedExcel} title="採用版の見積スナップショット（その形状の射影）で見積書を作成" style={{ fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 7, border: 'none', color: '#fff', background: '#2b8a3e', cursor: 'pointer' }}>📊 採用版で見積書を作成</button>}
+              </div>
+            );
+          })()}
           {revisions.length === 0 ? (
             <div style={{ fontSize: 13, color: '#868e96', padding: '8px 0' }}>まだ履歴はありません。「積算保存」で最初の版（Estimation-001）ができます。</div>
           ) : (
@@ -507,20 +580,42 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
               <thead><tr style={{ color: '#868e96', textAlign: 'left' }}>
                 <th style={{ padding: '4px 8px' }}>版</th><th style={{ padding: '4px 8px' }}>日時</th>
                 <th style={{ padding: '4px 8px' }}>形状</th><th style={{ padding: '4px 8px', textAlign: 'right' }}>合計</th>
-                <th style={{ padding: '4px 8px' }}>メモ</th><th></th>
+                <th style={{ padding: '4px 8px' }}>メモ</th><th style={{ padding: '4px 8px' }}>採用</th><th></th>
               </tr></thead>
               <tbody>
                 {revisions.slice().reverse().map((r) => {
                   const total = (r.quotationSnapshot && typeof r.quotationSnapshot === 'object') ? (r.quotationSnapshot as { total?: number }).total : undefined;
+                  const isAdopted = decision?.adoptedEstimationId === r.id;
+                  const editing = adoptDraft?.id === r.id;
                   return (
-                    <tr key={r.id} style={{ borderTop: '1px solid #f1f3f5' }}>
+                    <Fragment key={r.id}>
+                    <tr style={{ borderTop: '1px solid #f1f3f5', background: isAdopted ? '#ebfbee' : undefined }}>
                       <td style={{ padding: '6px 8px', fontWeight: 700 }}>Estimation-{String(r.sequence).padStart(3, '0')}</td>
                       <td style={{ padding: '6px 8px', color: '#495057' }}>{new Date(r.createdAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
                       <td style={{ padding: '6px 8px', color: '#868e96' }}>Geometry-{String(r.geometrySequence ?? 0).padStart(3, '0')}</td>
                       <td style={{ padding: '6px 8px', textAlign: 'right' }}>{total != null ? `¥${Math.round(total).toLocaleString('ja-JP')}` : '—'}</td>
                       <td style={{ padding: '6px 8px', color: '#495057' }}>{r.note || ''}</td>
+                      <td style={{ padding: '6px 8px' }}>
+                        {isAdopted
+                          ? <span style={{ fontSize: 11, fontWeight: 800, color: '#2b8a3e', background: '#d3f9d8', borderRadius: 6, padding: '3px 8px' }}>✓ 採用中</span>
+                          : <button onClick={() => beginAdopt(r)} style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 7, border: '1px solid #b2f2bb', color: '#2b8a3e', background: '#fff', cursor: 'pointer' }}>採用</button>}
+                      </td>
                       <td style={{ padding: '6px 8px', textAlign: 'right' }}><button onClick={() => openRevision(r)} style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 7, border: '1px solid #74b0e6', color: '#1971c2', background: '#fff', cursor: 'pointer' }}>開く</button></td>
                     </tr>
+                    {editing && (
+                      <tr style={{ background: '#f8fff9' }}>
+                        <td colSpan={7} style={{ padding: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: '#2b8a3e' }}>Estimation-{String(r.sequence).padStart(3, '0')} を採用：</span>
+                            <input value={adoptDraft!.by} onChange={(e) => setAdoptDraft({ ...adoptDraft!, by: e.target.value })} placeholder="誰が（決定者）" style={{ fontSize: 12, padding: '5px 8px', borderRadius: 6, border: '1px solid #ced4da', width: 140 }} />
+                            <input value={adoptDraft!.reason} onChange={(e) => setAdoptDraft({ ...adoptDraft!, reason: e.target.value })} placeholder="なぜ（採用理由）" style={{ fontSize: 12, padding: '5px 8px', borderRadius: 6, border: '1px solid #ced4da', flex: 1, minWidth: 180 }} />
+                            <button onClick={confirmAdopt} style={{ fontSize: 12, fontWeight: 700, padding: '5px 14px', borderRadius: 7, border: 'none', color: '#fff', background: '#2b8a3e', cursor: 'pointer' }}>採用を確定</button>
+                            <button onClick={cancelAdopt} style={{ fontSize: 12, padding: '5px 10px', borderRadius: 7, border: '1px solid #ced4da', color: '#495057', background: '#fff', cursor: 'pointer' }}>取消</button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>
