@@ -17,6 +17,7 @@ export default function StudioApp() {
       planSrc={drawings.planSrc}
       elevationSrc={drawings.elevationSrc}
       scaleHint={drawings.scaleHint ?? null}
+      elevHint={drawings.elevHint ?? null}
       onBackToDrawings={() => setPhase('landing')}
     />
   );

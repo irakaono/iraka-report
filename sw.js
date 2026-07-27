@@ -5,7 +5,7 @@
  *   - precache は耐性版（allSettled）。1ファイル欠けても SW 更新ごと止めない（原則10）。
  *   - リリースのたびに CACHE_NAME を上げること（RELEASE_CHECKLIST 参照）。
  */
-const CACHE_NAME = 'iraka-field-v2.28.0'; // v2.28.0: [A]水上納まりをモデル化（雨押え/片棟/つかみ込み）＝片流れの水上は既定「雨押え」で軒樋を付けない・辺ごとに種別を選べる（roleOverride/原則12）UNLOCK / v2.27.0: [A]角つまみ・図面ドラッグ/ズーム / v2.26.0: [A]縮尺自動判断 / v2.25.0: [A]次へ進む導線
+const CACHE_NAME = 'iraka-field-v2.29.0'; // v2.29.0: [A]立面図から勾配(寸)・軒の出(mm)を推定して平面図に反映（提案→確認：勾配を全面に／軒の出ぶん外周を外側オフセット）UNLOCK / v2.28.0: [A]水上納まり＋辺ごと種別編集 / v2.27.0: [A]角つまみ・図面ドラッグ/ズーム / v2.26.0: [A]縮尺自動判断
 const ASSETS = [
   './portal.html',
   './index.html',

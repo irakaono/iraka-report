@@ -27,6 +27,8 @@ import { serializeDocument, parseDocument, maxIdSuffix } from '../geometry/persi
 import { calibrateFrom2Points, calibrationFromPxPerMeter, DEV_PX_PER_METER } from '../geometry/calibration';
 import type { Calibration } from '../geometry/calibration';
 import type { ScaleHint } from '../geometry/scaleInference';
+import { offsetPolygonOutward } from '../geometry/elevationInference';
+import type { ElevationHint } from '../geometry/elevationInference';
 import AcceptancePanel from './AcceptancePanel';
 import { buildEstimate } from '../geometry/estimateExport';
 import type { GutterProgram } from '../geometry/acceptance';
@@ -124,10 +126,11 @@ interface RoofStudioProps {
   planSrc?: string | null;        // 平面図（背景トレース用・入口画面から）
   elevationSrc?: string | null;   // 立面図
   scaleHint?: ScaleHint | null;   // 平面図から推定した縮尺（提案・人が確認して確定）
+  elevHint?: ElevationHint | null; // 立面図から推定した勾配・軒の出（提案）
   onBackToDrawings?: () => void;  // 入口（図面ドロップ）へ戻る
 }
 
-export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToDrawings }: RoofStudioProps = {}) {
+export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint, onBackToDrawings }: RoofStudioProps = {}) {
   const [faces, setFaces] = useState<FaceInput[]>(() => preset('gable'));
   const [roleOverrides, setRoleOverrides] = useState<Record<string, EdgeRole>>({}); // 辺ID→人が指定した種別（軒/ケラバ/雨押え…）。空=自動
   const [draft, setDraft] = useState<Point[]>([]);
@@ -185,6 +188,8 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
   const [calibration, setCalibration] = useState<Calibration | null>(null);
   const [scaleProposalOpen, setScaleProposalOpen] = useState<boolean>(true); // 縮尺の自動提案バナー（人が確認して確定＝原則14）
   const [autoImagePPM, setAutoImagePPM] = useState<number | null>(null);      // 自動縮尺：画像px基準のpx/m（表示倍率bgScaleに追従させる＝ズームしても数量が狂わない）
+  const [overhangMm, setOverhangMm] = useState<number>(0);                     // 適用済みの軒の出(mm)。差分で外周をオフセット
+  const [overhangInput, setOverhangInput] = useState<string>('');             // 軒の出 入力欄（立面図の推定で初期化）
   const [calPts, setCalPts] = useState<Point[]>([]); // 較正クリック中の2点（px）
   const [knownLen, setKnownLen] = useState<string>('0.91'); // 既知実寸(m)。既定=通り芯1マス0.91m
   const [showAcceptance, setShowAcceptance] = useState<boolean>(false); // 検証パネル
@@ -344,6 +349,24 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
   const setEdgeRole = (edgeId: string, value: string) => {
     setRoleOverrides((m) => { const n = { ...m }; if (value) n[edgeId] = value as EdgeRole; else delete n[edgeId]; return n; });
   };
+  // 立面図から：勾配（寸）を全屋根面に反映（提案→確認して適用）。
+  const applyPitchAll = (p: number) => { setFaces((fs) => fs.map((f) => ({ ...f, pitch: p }))); flash(`✓ 勾配 ${p}寸 を反映`); };
+  // 立面図から：軒の出(mm)ぶん外周を外側へオフセット（差分で適用＝値を変えても追従。壁の外周をなぞってから使う）。
+  const applyOverhang = (mm: number) => {
+    if (!(mm >= 0)) return;
+    const delta = mm - overhangMm;
+    if (delta !== 0 && scale > 0) {
+      const dpx = (delta / 1000) * scale;
+      setFaces((fs) => fs.map((f) => ({ ...f, vertices: offsetPolygonOutward(f.vertices, dpx) })));
+    }
+    setOverhangMm(mm);
+    flash(`✓ 軒の出 ${mm}mm を反映`);
+  };
+  // 立面図の推定値で軒の出入力欄を初期化（一度だけ）。
+  useEffect(() => {
+    if (elevHint?.overhang != null && overhangInput === '') setOverhangInput(String(elevHint.overhang));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elevHint]);
   const setPitch = (i: number, p: number) => setFaces((fs) => fs.map((f, j) => (j === i ? { ...f, pitch: p } : f)));
   const delFace = (i: number) => { setFaces((fs) => fs.filter((_, j) => j !== i)); clearHi(); };
 
@@ -901,6 +924,37 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
                             <div style={{ fontSize: 11, color: '#a86a00', marginTop: 2 }}>水上（反対辺）は既定で<b>雨押え</b>にし、軒樋は付けません。左の「辺」一覧で<b>片棟／つかみ込み</b>等に変えられます。</div>
                           </div>
                         )}
+                      </div>
+                    )}
+                    {elevHint && (elevHint.pitchCandidates.length > 0 || elevHint.overhang != null || elevHint.overhangCandidates.length > 0) && (
+                      <div style={{ marginTop: 10, background: '#f3f0ff', border: '1px solid #d0bfff', borderRadius: 8, padding: '9px 12px' }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: '#6741d9', marginBottom: 6 }}>📐 立面図から反映（提案・確認して適用）</div>
+                        {elevHint.pitchCandidates.length > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                            <span style={{ fontSize: 12, color: '#495057' }}>勾配：</span>
+                            {elevHint.pitchCandidates.map((p) => (
+                              <button key={p} onClick={() => applyPitchAll(p)}
+                                style={{ fontSize: 13, fontWeight: 700, padding: '5px 12px', borderRadius: 7, border: '1px solid #b197fc', color: '#6741d9', background: '#fff', cursor: 'pointer' }}>
+                                {p}寸 を全面に
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {(elevHint.overhang != null || elevHint.overhangCandidates.length > 0) && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 12, color: '#495057' }}>軒の出：</span>
+                            <input type="number" step={5} min={0} value={overhangInput} onChange={(e) => setOverhangInput(e.target.value)}
+                              style={{ width: 76, fontSize: 13, padding: '4px 6px', borderRadius: 6, border: '1px solid #ced4da' }} />
+                            <span style={{ fontSize: 12, color: '#495057' }}>mm</span>
+                            <button onClick={() => applyOverhang(Number(overhangInput) || 0)}
+                              style={{ fontSize: 13, fontWeight: 700, padding: '5px 12px', borderRadius: 7, border: 'none', color: '#fff', background: '#6741d9', cursor: 'pointer' }}>
+                              外周を外側に広げる
+                            </button>
+                            {overhangMm > 0 && <span style={{ fontSize: 11, color: '#6741d9' }}>（適用中 {overhangMm}mm）</span>}
+                            {elevHint.overhangCandidates.length > 1 && <span style={{ fontSize: 11, color: '#868e96' }}>候補：{elevHint.overhangCandidates.join('/')}</span>}
+                          </div>
+                        )}
+                        <div style={{ fontSize: 11, color: '#868e96', marginTop: 5 }}>※軒の出は「壁の外周をなぞってから」広げると正確です（縮尺確定が前提）。値を変えると外周が追従します。</div>
                       </div>
                     )}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, paddingTop: 8, borderTop: '1px dashed #d0e2f5' }}>
