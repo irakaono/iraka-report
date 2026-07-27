@@ -1,8 +1,10 @@
-// 甍AI Recognizer（図面→屋根仕様）— 原則21：Recognizer は Provider の一つ（Human/AI/GT と対等）。
-//   責務：図面を読み、宣言的な RoofConfig（Configuration）を返す。Geometry は作らない。
-//   立面図＝屋根仕様のデータソース（勾配・軒の出・水上納まり・方位）。平面図＝形状。
-//   ここは R-1（Configuration 契約）と R-2（STEP2 立面グルーピング）。STEP3 割当・UI統合は後段。
-//   正の設計：claude/RECOGNIZER-ARCHITECTURE.md。
+// 甍AI Recognizer（図面→Configuration の翻訳器）— 原則21：Recognizer は Provider の一つ。
+//   責務：図面を読み、宣言的な RoofConfig（Configuration）を返す。Geometry は作らない・知らない。
+//   ★不変条件：Recognizer は Geometry を知らない／Geometry は Recognizer を知らない。契約は Configuration のみ。
+//   Recognizer は Reader（生の値）と Resolver（建築知識→Configuration）に分ける：
+//     PDF → [Reader] readElevation → 生の値(立面ごと) → [Resolver] resolveRoofConfig → RoofConfig
+//   Reader は OCR/抽出が変わっても壊れない。Resolver は建築知識だけ。
+//   正の設計：claude/RECOGNIZER-ARCHITECTURE.md（R-1 契約 / R-2 Reader / R-3 Resolver）。
 
 export type Dir = 'south' | 'east' | 'north' | 'west';
 export const DIR_JP: Record<string, Dir> = { 南: 'south', 東: 'east', 北: 'north', 西: 'west' };
@@ -31,8 +33,9 @@ function num(s: string): number | null {
 }
 function dist(ax: number, ay: number, bx: number, by: number) { return Math.hypot(ax - bx, ay - by); }
 
-// STEP2：立面ラベル（南側立面図 等）へ、勾配三角の上り と 軒の出寸法 を最近傍で割り当てる。
-export function recognizeElevationSpec(
+// ── Reader（R-2）：立面ラベル（南側立面図 等）へ、勾配三角の上り と 軒の出寸法 を最近傍で割り当てた生の値 ──
+//   ここまでは「読む」だけ。どの Face/Edge かは Resolver（R-3）が建築知識で解決する。
+export function readElevation(
   tokens: RecoToken[],
   opts: { triNear?: number; ovNear?: number } = {},
 ): ElevationSpec[] {
@@ -64,4 +67,20 @@ export function recognizeElevationSpec(
   return (['south', 'east', 'north', 'west'] as Dir[])
     .filter((d) => byDir.has(d))
     .map((d) => ({ dir: d, pitches: [...byDir.get(d)!.pitches].sort((a, b) => a - b), overhangs: [...byDir.get(d)!.overhangs].sort((a, b) => a - b) }));
+}
+
+// ── Resolver（R-3 第一版・ドラフト）：生の立面値 → RoofConfig（建築知識） ──
+//   正直な限界：どの軒の出がどの辺かの厳密割当は、平面の面数・真北・ドメイン規則が要る（R-3 本実装で締める）。
+//   第一版は「異なる勾配ごとに1つの屋根」を作り、読めた勾配・軒の出候補をドラフトとして束ねる（人が確認＝確認ファースト）。
+//   ★Geometry には触れない。返すのは Configuration だけ。
+export function resolveRoofConfig(readings: ElevationSpec[]): RoofConfig {
+  const pitches = Array.from(new Set(readings.flatMap((r) => r.pitches))).sort((a, b) => a - b);
+  const eaveByDir: Partial<Record<Dir, number>> = {};
+  for (const r of readings) { if (r.overhangs.length) eaveByDir[r.dir] = Math.min(...r.overhangs); } // 代表値（最小＝軒寄り）。詳細割当はR-3本実装。
+  const roofs: RoofSpec[] = (pitches.length ? pitches : [undefined]).map((slope, i) => ({
+    id: `R${i + 1}`,
+    ...(slope != null ? { slope } : {}),
+    ...(Object.keys(eaveByDir).length ? { eave: { ...eaveByDir } } : {}),
+  }));
+  return { roofs };
 }

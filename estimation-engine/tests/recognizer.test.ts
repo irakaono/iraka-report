@@ -1,5 +1,5 @@
-// Recognizer STEP2（立面グルーピング）自己テスト。座標で 勾配三角・軒の出 を立面へ割り当てる。
-import { recognizeElevationSpec, DIR_JP, type RecoToken } from '../src/geometry/recognizer';
+// Recognizer 自己テスト：Reader（立面グルーピング）と Resolver（→RoofConfig ドラフト）。
+import { readElevation, resolveRoofConfig, DIR_JP, type RecoToken } from '../src/geometry/recognizer';
 
 let pass = 0; const fails: string[] = [];
 const ok = (c: boolean, l: string) => { if (c) pass++; else fails.push(l); };
@@ -17,7 +17,7 @@ const tokens: RecoToken[] = [
   // ノイズ（遠い数値）
   t('7985', 400, 300),
 ];
-const specs = recognizeElevationSpec(tokens);
+const specs = readElevation(tokens);
 const east = specs.find((s) => s.dir === 'east');
 const west = specs.find((s) => s.dir === 'west');
 ok(!!east && east.pitches.includes(2), `東立面→2寸（実 ${JSON.stringify(east)}）`);
@@ -27,7 +27,14 @@ ok(!!west && west.overhangs.includes(250), '西立面→軒の出250');
 ok(!east!.overhangs.includes(7985) && !west!.overhangs.includes(7985), '遠いノイズ(7985)は入らない');
 
 // 立面ラベルが無ければ空（グルーピング不能）
-ok(recognizeElevationSpec([t('10', 0, 0), t('4', 8, 0)]).length === 0, 'ラベル無し→空');
+ok(readElevation([t('10', 0, 0), t('4', 8, 0)]).length === 0, 'ラベル無し→空');
+
+// Resolver：異なる勾配ごとに1屋根＋方位別 eave を束ねる（ドラフト）
+const cfg = resolveRoofConfig(specs);
+ok(cfg.roofs.length === 2, `勾配2種→屋根2つ（実 ${cfg.roofs.length}）`);
+ok(cfg.roofs.some((r) => r.slope === 2) && cfg.roofs.some((r) => r.slope === 4), 'slope 2寸/4寸 が RoofConfig に入る');
+ok(cfg.roofs[0].eave?.east === 600 && cfg.roofs[0].eave?.west === 250, `eave 方位別（east600/west250・実 ${JSON.stringify(cfg.roofs[0].eave)}）`);
+ok(resolveRoofConfig([]).roofs.length === 1, '空入力→屋根1（フォールバック）');
 
 if (fails.length) { console.error('❌ recognizer FAIL:\n' + fails.map((f) => '  - ' + f).join('\n')); process.exit(1); }
 console.log(`✅ Recognizer(STEP2 立面グルーピング) test: 全 ${pass} 件合格（勾配三角・軒の出を方位へ割当）`);
