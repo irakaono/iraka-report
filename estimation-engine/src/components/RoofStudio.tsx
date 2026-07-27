@@ -182,6 +182,7 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
   const [guideOn, setGuideOn] = useState<boolean>(true);      // ガイド表示ON/OFF
   const [advanced, setAdvanced] = useState<boolean>(false);   // 詳細モード（上部ツールバーを畳む/展開）
   const [showIntro, setShowIntro] = useState<boolean>(true);  // 初回だけ画面中央に指示を重ねる
+  const [roofFormChosen, setRoofFormChosen] = useState<boolean>(false); // AIナビ③で屋根の形テンプレを選んだか（「角を合わせる」案内の出し分け）
   const [cursorPt, setCursorPt] = useState<Point | null>(null); // 縮尺合わせ中：カーソル追従ヒント用
   const [toast, setToast] = useState<string | null>(null);      // 成功トースト（✓縮尺を設定しました 等）
   const [showHistory, setShowHistory] = useState<boolean>(false);       // 積算履歴パネル（案件埋め込み時のみ）
@@ -255,6 +256,14 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
 
   // ── Roof 編集（従来どおり／Command化は後） ──
   const confirmFace = () => { if (draft.length >= 3) { setFaces((fs) => [...fs, { vertices: draft, pitch: 5, eaveEdgeIndex: bottomEdgeIndex(draft) }]); setDraft([]); setDrawingFace(false); } };
+  // AIナビ③「形から始める」：屋根の形テンプレを置く（平面図の上に生成→人が角をドラッグして合わせる）。
+  const chooseForm = (name: 'gable' | 'hipped' | 'shed') => {
+    setFaces(preset(name));
+    setMode('select'); setDrawingFace(false); setDraft([]);
+    setRoofFormChosen(true); setShowIntro(false); clearHi();
+  };
+  // 片流れ（1面）の「水下＝軒」側を選ぶ（辺index）。水上は反対辺＝雨押え/片棟/つかみ込みの対象（積算反映は次段階）。
+  const setShedEave = (edgeIndex: number) => setFaces((fs) => (fs.length === 1 ? [{ ...fs[0], eaveEdgeIndex: edgeIndex }] : fs));
   const setPitch = (i: number, p: number) => setFaces((fs) => fs.map((f, j) => (j === i ? { ...f, pitch: p } : f)));
   const delFace = (i: number) => { setFaces((fs) => fs.filter((_, j) => j !== i)); clearHi(); };
 
@@ -641,7 +650,9 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
         };
         // 現在ステップの案内文＋主ボタン
         const scalePicker = cur === 1; // ②は「寸法を選ぶ→両端クリック」の専用UI
+        const formPicker = cur === 2;  // ③は「屋根の形をえらぶ」専用UI（形から始める＝描画を楽に）
         const inCalibrating = mode === 'calibrate';
+        const isShed = faces.length === 1; // 片流れ（1面）＝水下/水上の指定対象
         let title = ''; let body = ''; const actions: { label: string; primary?: boolean; onClick: () => void }[] = [];
         if (cur === 1) {
           title = '次は縮尺を合わせます';
@@ -649,10 +660,8 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
             ? `図面上で、選んだ寸法の両端を2点クリックしてください（${calPts.length}/2）。`
             : '';
         } else if (cur === 2) {
-          title = '次は「屋根をなぞる」';
-          body = '上の「切妻・方形・片流れ」から近い形を選ぶか、「屋根を描く」で屋根の外周を囲みます。できたら右の「屋根はこれでOK」を押してください。';
-          actions.push({ label: '🏠 屋根を描く', primary: true, onClick: () => { setMode('select'); } });
-          actions.push({ label: '屋根はこれでOK →', onClick: () => { setRoofDone(true); setMode('gutter'); } });
+          title = '次は「屋根の形をえらぶ」';
+          body = '';
         } else if (cur === 3) {
           title = 'AIが数量を計算します';
           body = '雨樋がまだ入っていません。「雨樋を描く」を押すと、AIが軒樋・集水器・縦樋を自動で提案します。';
@@ -696,6 +705,57 @@ export default function RoofStudio({ planSrc, elevationSrc, onBackToDrawings }: 
                     </div>
                     <div style={{ color: '#495057', fontSize: 13 }}><b>②</b> 図面上で、その寸法の<b>両端を2点クリック</b>{inCalibrating ? `（いま ${calPts.length}/2）` : '（上の寸法を選ぶと始まります）'}</div>
                     {inCalibrating && calPts.length > 0 && <button onClick={() => setCalPts([])} style={{ marginTop: 6, fontSize: 12 }}>やり直す</button>}
+                  </div>
+                ) : formPicker ? (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ color: '#495057', fontSize: 13, marginBottom: 6 }}>
+                      <b>①</b> 屋根の形をえらぶ（<b>平面図＝真上から見た形</b>をなぞります。立面図は<b>勾配（何寸）</b>を読むときだけ）
+                    </div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                      {([['shed', '片流れ'], ['gable', '切妻'], ['hipped', '寄棟／方形']] as const).map(([k, label]) => (
+                        <button key={k} onClick={() => chooseForm(k)}
+                          style={{ fontSize: 14, fontWeight: 700, padding: '9px 16px', borderRadius: 8, cursor: 'pointer', border: '1px solid #74b0e6', color: '#1971c2', background: '#fff' }}>
+                          {label}
+                        </button>
+                      ))}
+                      <button onClick={() => { setMode('select'); setDrawingFace(true); setDraft([]); setRoofFormChosen(false); setShowIntro(false); }}
+                        style={{ fontSize: 13, fontWeight: 700, padding: '9px 14px', borderRadius: 8, cursor: 'pointer', border: '1px dashed #adb5bd', color: '#495057', background: '#fff' }}>
+                        自分で描く（変形屋根）
+                      </button>
+                    </div>
+                    {roofFormChosen && (
+                      <div style={{ marginTop: 8 }}>
+                        <div style={{ color: '#495057', fontSize: 13, marginBottom: 6 }}>
+                          <b>②</b> 屋根の<b>角をドラッグ</b>して、平面図の外周に合わせてください（棟・隅棟・軒・ケラバは形から自動で決まります）。
+                        </div>
+                        {isShed && (
+                          <div style={{ background: '#fff9db', border: '1px solid #ffe08a', borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>
+                            <div style={{ fontSize: 13, color: '#7a5a00', marginBottom: 6 }}>
+                              片流れ：<b>水下（＝軒）はどの辺？</b>（反対の水上は 雨押え／片棟／つかみ込み の対象）
+                            </div>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              {([['上', 0], ['右', 1], ['下', 2], ['左', 3]] as const).map(([label, idx]) => (
+                                <button key={idx} onClick={() => setShedEave(idx)}
+                                  className={faces[0]?.eaveEdgeIndex === idx ? 'on' : ''}
+                                  style={{ fontSize: 13, fontWeight: 700, padding: '6px 14px', borderRadius: 7, cursor: 'pointer',
+                                    border: faces[0]?.eaveEdgeIndex === idx ? 'none' : '1px solid #f0b429',
+                                    color: faces[0]?.eaveEdgeIndex === idx ? '#fff' : '#a86a00',
+                                    background: faces[0]?.eaveEdgeIndex === idx ? '#f08c00' : '#fff' }}>
+                                  {label}
+                                </button>
+                              ))}
+                            </div>
+                            <div style={{ fontSize: 11, color: '#a86a00', marginTop: 6 }}>※水上の納まり（雨押え/片棟/つかみ込み）の積算反映は次の段階で入れます。</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
+                      <button onClick={() => { setRoofDone(true); setMode('gutter'); }}
+                        style={{ fontSize: 14, fontWeight: 700, padding: '10px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', color: '#fff', background: '#1971c2', boxShadow: '0 2px 8px rgba(25,113,194,.3)' }}>
+                        屋根はこれでOK →
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
