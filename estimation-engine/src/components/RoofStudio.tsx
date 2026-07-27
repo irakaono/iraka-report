@@ -7,7 +7,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { Stage, Layer, Line, Circle, Rect, Text, Arrow, Group, Image as KonvaImage } from 'react-konva';
-import type { Point } from '../geometry/roofModel';
+import type { Point, EdgeRole } from '../geometry/roofModel';
 import { buildRoofModelFromFaces, faceArea, edgeLength, facePolygon } from '../geometry/roofModel';
 import { edgeRole, roofType } from '../geometry/roofEngine';
 import { roofQuantities } from '../geometry/roofQuantities';
@@ -85,8 +85,15 @@ function estimationHost(): EstimationHost | undefined {
 }
 
 const W = 720, H = 560;
-const ROLE_COLOR: Record<string, string> = { ridge: '#e03131', hip: '#e8590c', valley: '#1971c2', eave: '#2f9e44', gable: '#7048e8' };
-const ROLE_LABEL: Record<string, string> = { ridge: '棟', hip: '隅棟', valley: '谷', eave: '軒', gable: 'ケラバ' };
+const ROLE_COLOR: Record<string, string> = { ridge: '#e03131', hip: '#e8590c', valley: '#1971c2', eave: '#2f9e44', gable: '#7048e8', wall_flashing: '#c2255c', shed_ridge: '#d6336c', grip: '#0ca678' };
+const ROLE_LABEL: Record<string, string> = { ridge: '棟', hip: '隅棟', valley: '谷', eave: '軒', gable: 'ケラバ', wall_flashing: '雨押え', shed_ridge: '片棟', grip: 'つかみ込み' };
+// 辺の種別を人が選ぶときの選択肢（自動＝幾何にまかせる）。水上納まりは片流れ等の水上辺に。
+const ROLE_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: '自動' },
+  { value: 'eave', label: '軒' }, { value: 'gable', label: 'ケラバ' },
+  { value: 'ridge', label: '棟' }, { value: 'hip', label: '隅棟' }, { value: 'valley', label: '谷' },
+  { value: 'wall_flashing', label: '雨押え' }, { value: 'shed_ridge', label: '片棟' }, { value: 'grip', label: 'つかみ込み' },
+];
 const TYPE_LABEL: Record<string, string> = { shed: '片流れ', gable: '切妻', hip: '寄棟/方形', saltbox: '招き', lean_to: '差し掛け' };
 const GUTTER = '#1971c2', DROP = '#e8590c', FLOW = '#74c0fc';
 const DOWNSPOUT = '#495057', CONNECTOR = '#0ca678', ELBOW = '#f08c00', DRAINC = '#c2255c';
@@ -122,6 +129,7 @@ interface RoofStudioProps {
 
 export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToDrawings }: RoofStudioProps = {}) {
   const [faces, setFaces] = useState<FaceInput[]>(() => preset('gable'));
+  const [roleOverrides, setRoleOverrides] = useState<Record<string, EdgeRole>>({}); // 辺ID→人が指定した種別（軒/ケラバ/雨押え…）。空=自動
   const [draft, setDraft] = useState<Point[]>([]);
   const [drawingFace, setDrawingFace] = useState(false);
   const [hi, setHi] = useState<Set<string>>(new Set());
@@ -232,10 +240,15 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
   };
 
   // ── Runtime を読むだけ（Studio はロジックを持たない） ──
-  const model = useMemo(() => buildRoofModelFromFaces(
-    faces.map((f) => ({ vertices: f.vertices, pitch: f.pitch, attrs: { trade: '屋根工事', item: '屋根材' }, eaveEdgeIndex: f.eaveEdgeIndex })),
-    { scale },
-  ), [faces, scale]);
+  const model = useMemo(() => {
+    const m = buildRoofModelFromFaces(
+      faces.map((f) => ({ vertices: f.vertices, pitch: f.pitch, attrs: { trade: '屋根工事', item: '屋根材' }, eaveEdgeIndex: f.eaveEdgeIndex })),
+      { scale },
+    );
+    // 辺ごとの人の指定（roleOverride・原則12）を反映。辺IDは面内の出現順で安定。
+    for (const e of m.edges) { const ov = roleOverrides[e.id]; if (ov) e.roleOverride = ov; }
+    return m;
+  }, [faces, scale, roleOverrides]);
   const rq = useMemo(() => roofQuantities(model, scale), [model, scale]);
   const fuzu = useMemo(() => roofDrawing(model), [model]);
   const V = useMemo(() => new Map(model.vertices.map((v) => [v.id, v])), [model]);
@@ -284,31 +297,52 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
 
   // ── Roof 編集（従来どおり／Command化は後） ──
   const confirmFace = () => { if (draft.length >= 3) { setFaces((fs) => [...fs, { vertices: draft, pitch: 5, eaveEdgeIndex: bottomEdgeIndex(draft) }]); setDraft([]); setDrawingFace(false); } };
-  // 屋根の形が変わったら、その形の軒から雨樋を組み直す（形を選び直しても前の雨樋が残らない＝EaveNotFound防止）。
-  const reseedDrainFor = (newFaces: FaceInput[]) => {
+  // faces から Roof モデルを構築（roleOverride 反映）。純粋計算用の共通処理。
+  const buildModel = (newFaces: FaceInput[], overrides: Record<string, EdgeRole>) => {
     const m = buildRoofModelFromFaces(
       newFaces.map((f) => ({ vertices: f.vertices, pitch: f.pitch, attrs: { trade: '屋根工事', item: '屋根材' }, eaveEdgeIndex: f.eaveEdgeIndex })),
       { scale },
     );
+    for (const e of m.edges) { const ov = overrides[e.id]; if (ov) e.roleOverride = ov; }
+    return m;
+  };
+  // 屋根の形が変わったら、その形の軒から雨樋を組み直す（形を選び直しても前の雨樋が残らない＝EaveNotFound防止）。
+  //   overrides を反映してから提案するので、水上（雨押え等）には軒樋が付かない。
+  const reseedDrainFor = (newFaces: FaceInput[], overrides: Record<string, EdgeRole> = roleOverrides) => {
+    const m = buildModel(newFaces, overrides);
     const proposal = autoProposeGutter(m);
     const dModel = proposal.dropCount > 0 ? proposal.model : emptyDrainModel('DR-1', m.id);
     setDrain(initHistory(dModel));
     idc.current = Math.max(idc.current, maxIdSuffix(dModel) + 1);
   };
-  // AIナビ③「形から始める」：屋根の形テンプレを置く（平面図の上に生成→人が角をドラッグして合わせる）。雨樋も組み直す。
+  // 片流れ（1面）の水上辺（＝軒＝水下 の反対）の辺IDを返す。
+  const shedTopEdgeId = (newFaces: FaceInput[]): string | null => {
+    if (newFaces.length !== 1) return null;
+    const m = buildModel(newFaces, {});
+    const b = m.faces[0]?.boundary; if (!b || b.length < 4) return null;
+    const eaveIdx = newFaces[0].eaveEdgeIndex ?? 0;
+    return b[(eaveIdx + 2) % b.length] ?? null;
+  };
+  // AIナビ③「形から始める」：屋根の形テンプレを置く。片流れは水上を既定で「雨押え」にして軒樋を1本に（水上に軒樋を付けない）。
   const chooseForm = (name: 'gable' | 'hipped' | 'shed') => {
     const nf = preset(name);
-    setFaces(nf);
-    reseedDrainFor(nf);
+    let ov: Record<string, EdgeRole> = {};
+    if (name === 'shed') { const top = shedTopEdgeId(nf); if (top) ov = { [top]: 'wall_flashing' }; }
+    setFaces(nf); setRoleOverrides(ov); reseedDrainFor(nf, ov);
     setMode('select'); setDrawingFace(false); setDraft([]);
     setRoofFormChosen(true); setShowIntro(false); clearHi();
   };
-  // 片流れ（1面）の「水下＝軒」側を選ぶ（辺index）。水上は反対辺＝雨押え/片棟/つかみ込みの対象（積算反映は次段階）。雨樋も水下に組み直す。
+  // 片流れの「水下＝軒」側を選ぶ。反対の水上を既定「雨押え」にし、軒樋を水下だけに組み直す（水上には付けない）。
   const chooseShedEave = (edgeIndex: number) => {
     if (faces.length !== 1) return;
     const nf: FaceInput[] = [{ ...faces[0], eaveEdgeIndex: edgeIndex }];
-    setFaces(nf);
-    reseedDrainFor(nf);
+    const top = shedTopEdgeId(nf);
+    const ov: Record<string, EdgeRole> = top ? { [top]: 'wall_flashing' } : {};
+    setFaces(nf); setRoleOverrides(ov); reseedDrainFor(nf, ov);
+  };
+  // 辺ごとに種別を人が指定（自動＝空）。原則12：人の判断が創発より優先。
+  const setEdgeRole = (edgeId: string, value: string) => {
+    setRoleOverrides((m) => { const n = { ...m }; if (value) n[edgeId] = value as EdgeRole; else delete n[edgeId]; return n; });
   };
   const setPitch = (i: number, p: number) => setFaces((fs) => fs.map((f, j) => (j === i ? { ...f, pitch: p } : f)));
   const delFace = (i: number) => { setFaces((fs) => fs.filter((_, j) => j !== i)); clearHi(); };
@@ -864,7 +898,7 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
                             <div style={{ fontSize: 12, color: '#2b8a3e', fontWeight: 700, marginTop: 6 }}>
                               ✓ 水下（軒）＝{({ 0: '上', 1: '右', 2: '下', 3: '左' } as Record<number, string>)[faces[0]?.eaveEdgeIndex ?? 0]} に設定。軒樋もこの辺に付きます。
                             </div>
-                            <div style={{ fontSize: 11, color: '#a86a00', marginTop: 2 }}>※水上の納まり（雨押え/片棟/つかみ込み）の積算反映は次の段階で入れます。</div>
+                            <div style={{ fontSize: 11, color: '#a86a00', marginTop: 2 }}>水上（反対辺）は既定で<b>雨押え</b>にし、軒樋は付けません。左の「辺」一覧で<b>片棟／つかみ込み</b>等に変えられます。</div>
                           </div>
                         )}
                       </div>
@@ -986,13 +1020,21 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, onBackToD
                 <button className="rs-del" onClick={() => delFace(i)}>✕</button></span>
             </div>
           ))}
-          <h4>辺（{model.edges.length}）</h4>
+          <h4>辺（{model.edges.length}）<small style={{ fontWeight: 400, color: '#868e96' }}>　種別は1辺ずつ選べます</small></h4>
           {model.edges.map((e) => {
             const role = edgeRole(model, e);
+            const overridden = !!roleOverrides[e.id];
             return (
               <div key={e.id} className={'rs-item' + (hi.has(e.id) ? ' hi' : '')} onMouseEnter={() => highlightElement(e.id)} onMouseLeave={clearHi}
                 onClick={() => { if (mode === 'gutter' && role === 'eave') addOrSelectRun(e.id); }}>
-                <span><b style={{ color: role ? ROLE_COLOR[role] : '#888' }}>{role ? ROLE_LABEL[role] : '—'}</b> {e.id}</span>
+                <span>
+                  <b style={{ color: role ? ROLE_COLOR[role] : '#888' }}>{role ? ROLE_LABEL[role] : '—'}</b>
+                  <select value={roleOverrides[e.id] ?? ''} onClick={(ev) => ev.stopPropagation()} onChange={(ev) => setEdgeRole(e.id, ev.target.value)}
+                    title={overridden ? '手動で種別を指定中（選び直せます）' : '自動判定（変えたい辺だけ選ぶ）'}
+                    style={{ marginLeft: 6, fontSize: 11, padding: '1px 2px', border: overridden ? '1px solid #1971c2' : '1px solid #ced4da', borderRadius: 4, background: overridden ? '#e7f5ff' : '#fff' }}>
+                    {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </span>
                 <span className="rs-row-r">{(edgeLength(model, e) / scale).toFixed(2)}m</span>
               </div>
             );

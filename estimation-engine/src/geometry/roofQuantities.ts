@@ -20,6 +20,9 @@ const ROLE: Record<EdgeRole, { label: string; ratio: (pitch: number) => number }
   hip:    { label: '隅棟長', ratio: (p) => stretch.hip(p) },   // 平面対角長 基準
   valley: { label: '谷長',   ratio: (p) => stretch.valley(p) },
   gable:  { label: 'ケラバ長', ratio: (p) => stretch.area(p) }, // 登り＝面積伸び率
+  wall_flashing: { label: '雨押え長', ratio: () => 1 },        // 水上：壁との取合い（水平）。軒樋は付かない
+  shed_ridge:    { label: '片棟長',   ratio: () => 1 },        // 水上：片流れの棟包み（水平）
+  grip:          { label: 'つかみ込み長', ratio: () => 1 },    // 水上：軒と同仕様の水切（水平）。軒樋は付かない
 };
 
 /**
@@ -55,7 +58,7 @@ export function roofQuantities(model: RoofModel, scale: number): QuantityResult[
     acc[role]!.value += real;
     acc[role]!.ev.push({ kind: 'edge', id: e.id, contribution: real });
   }
-  (['ridge', 'hip', 'valley', 'gable', 'eave'] as EdgeRole[]).forEach((role) => {
+  (['ridge', 'hip', 'valley', 'gable', 'eave', 'wall_flashing', 'shed_ridge', 'grip'] as EdgeRole[]).forEach((role) => {
     const a = acc[role];
     if (a && a.ev.length) out.push({ key: role + 'Length', label: ROLE[role].label, value: a.value, unit: 'm', evidence: a.ev });
   });

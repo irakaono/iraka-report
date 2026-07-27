@@ -3,7 +3,9 @@
 //   役割の創発(edgeRole) / タイプ(roofType) / 数量(roofQuantities) は次の刻みで追加する。
 //   保存するのは RoofModel（幾何＋属性）だけ。面積・長さ等はすべて派生（式）。
 
-export type EdgeRole = 'ridge' | 'hip' | 'valley' | 'eave' | 'gable';
+// 基本役割（幾何から創発）＋ 水上の納まり（人が指定＝roleOverride。片流れの水上等）。
+//   wall_flashing=雨押え / shed_ridge=片棟 / grip=つかみ込み（軒と同仕様だが軒樋は付かない）。
+export type EdgeRole = 'ridge' | 'hip' | 'valley' | 'eave' | 'gable' | 'wall_flashing' | 'shed_ridge' | 'grip';
 export type RoofType = 'shed' | 'gable' | 'hip' | 'saltbox' | 'lean_to';
 export type AnnotationKind =
   | 'gutter_eave' | 'gutter_down' | 'gutter_valley'
