@@ -4,6 +4,17 @@
 import { useRef, useState } from 'react';
 import { inferScale, type ScaleHint } from '../geometry/scaleInference';
 import { inferElevation, type ElevationHint } from '../geometry/elevationInference';
+import { coalesceTextItems, type RawGlyph } from '../geometry/pdfText';
+
+// pdf.js の textContent（グリフ単位のことがある）を語・数値トークンに結合して返す。
+async function pageTokens(doc: any, pageNum: number) {
+  const page = await doc.getPage(pageNum);
+  const tc = await page.getTextContent();
+  const glyphs: RawGlyph[] = (tc.items as any[])
+    .filter((i) => i && typeof i.str === 'string' && Array.isArray(i.transform))
+    .map((i) => ({ str: i.str as string, x: i.transform[4] as number, y: i.transform[5] as number, w: (i.width as number) || 0, fs: Math.hypot(i.transform[0], i.transform[1]) || 6 }));
+  return coalesceTextItems(glyphs);
+}
 
 export interface DrawingSet {
   planSrc: string | null;
@@ -19,11 +30,7 @@ const RENDER_SCALE = 2; // renderDocPage の既定倍率と一致させる（pxP
 // 平面図ページのテキスト（座標つき）から縮尺を推定。取れなければ null。
 async function extractScaleHint(doc: any, pageNum: number): Promise<ScaleHint | null> {
   try {
-    const page = await doc.getPage(pageNum);
-    const tc = await page.getTextContent();
-    const items = (tc.items as any[])
-      .filter((i) => i && typeof i.str === 'string' && Array.isArray(i.transform))
-      .map((i) => ({ str: i.str as string, x: i.transform[4] as number, y: i.transform[5] as number }));
+    const items = await pageTokens(doc, pageNum);  // グリフ結合済み（1文字ずつの図面でも "1/50"/"910" を復元）
     const hint = inferScale(items, RENDER_SCALE);
     return hint.pxPerMeter != null ? hint : null;
   } catch { return null; }
@@ -116,11 +123,7 @@ async function planWithHint(file: File): Promise<{ src: string; hint: ScaleHint 
 // 立面図ページのテキスト（座標つき）から勾配・軒の出を推定。取れなければ null。
 async function extractElevHint(doc: any, pageNum: number): Promise<ElevationHint | null> {
   try {
-    const page = await doc.getPage(pageNum);
-    const tc = await page.getTextContent();
-    const items = (tc.items as any[])
-      .filter((i) => i && typeof i.str === 'string' && Array.isArray(i.transform))
-      .map((i) => ({ str: i.str as string, x: i.transform[4] as number, y: i.transform[5] as number }));
+    const items = await pageTokens(doc, pageNum);  // グリフ結合済み
     const hint = inferElevation(items);
     return (hint.pitch != null || hint.overhang != null) ? hint : null;
   } catch { return null; }

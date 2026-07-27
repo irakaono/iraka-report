@@ -43,9 +43,9 @@ export function pitchCandidates(items: ElevTextItem[]): number[] {
   return out;
 }
 
-// 軒の出候補（mm）。「軒先/軒の出/軒出/樋先」ラベル近傍(≤80pt)の 150〜900mm を拾う。
+// 軒の出候補（mm）。「軒先/軒の出/樋先/けらば/妻」等のラベル近傍(≤80pt)の 150〜900mm を拾う。
 export function overhangCandidates(items: ElevTextItem[]): number[] {
-  const labels = items.filter((i) => /軒先|軒の出|軒出|樋先/.test(i.str));
+  const labels = items.filter((i) => /軒先|軒の出|軒出|樋先|けらば|ケラバ|妻/.test(i.str));
   const out: number[] = [];
   for (const lb of labels) {
     for (const it of items) {
