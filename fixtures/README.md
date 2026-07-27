@@ -12,14 +12,25 @@
 ADR は「**唯一の取り返しのつかない項目＝フィクスチャ4件を失わないこと**」と書いている。
 だから4件を **1つの自己完結 JSON ファイル**（写真も base64 で同梱）としてここに固定し、Git で残す。
 
+## このフォルダの2種類
+
+| 種類 | 拡張子 | 何か | 状態 |
+|---|---|---|---|
+| **印刷ベースライン（実データ）** | `.pdf` | 実際に発行した調査報告書の印刷形。**取り返しのつかない実データ本体**。印刷改善の視覚的 Regression 基準（before）。 | ✅ **4件 固定済み（2026-07-27）** |
+| **再読込用フィクスチャ** | `.iraka-leak.json` | `index.html` で再表示・再印刷できる下書き（写真同梱）。印刷改善の PASS 判定を**アプリ上で**回すのに使う。 | ⏳ 各端末から「⬇ 書き出し」で追加（下記手順） |
+
+> **PDF は再読込できない**（アプリに読み戻せない）。だが**実データの本体＝失ってはいけないもの**であり、
+> 「空欄を印刷しない」バッチ前後の**見た目の比較基準**になる。まずこれを固定した＝Phase 0 の実データ確保は達成。
+> アプリ上で自動的に再描画して検証したい場合は、下の手順で `.iraka-leak.json` を足す。
+
 ## 4件（ADR §6 Canonical Modeling Cases）
 
-| ファイル名（推奨） | 案件 | 実態 | 役割 |
-|---|---|---|---|
-| `01-nire.iraka-leak.json`   | 仁礼 | 初回調査・**Round1 のみ** | 最小形（単一Round） |
-| `02-ishii.iraka-leak.json`  | 石井 | 雨漏り**2系統** ＋ 雨樋の**付随所見** | 複数Hypothesis＋incidentalFinding |
-| `03-lining.iraka-leak.json` | ライニング | 地点**11箇所** | 多地点（source→destination 多数） |
-| `04-irushi.iraka-leak.json` | 入吉 | 雨漏り**3** ＋ 水漏れ**1** | 複数Hypothesis（Canonical Case #4） |
+| PDFベースライン（固定済み） | 案件 | 実態 | 役割 | 再読込JSON（推奨名） |
+|---|---|---|---|---|
+| `01-仁礼工業（初回調査）.pdf` | 仁礼 | 初回調査・**Round1 のみ** | 最小形（単一Round） | `01-nire.iraka-leak.json` |
+| `02-石井製作所.pdf` | 石井 | 雨漏り**2系統** ＋ 雨樋の**付随所見** | 複数Hypothesis＋incidentalFinding | `02-ishii.iraka-leak.json` |
+| `03-ライニングコンテナー.pdf` | ライニング | 地点**11箇所** | 多地点（source→destination 多数） | `03-lining.iraka-leak.json` |
+| `04-入吉（散水調査）.pdf` | 入吉 | 雨漏り**3** ＋ 水漏れ**1**（散水調査） | 複数Hypothesis（Canonical Case #4） | `04-irushi.iraka-leak.json` |
 
 > 注（ADR §6）：この分類は Ground Truth ではない。フィクスチャの目的は **実案件を固定すること**。
 > Hypothesis の切り方はデータモデル検証時に見直してよい。
