@@ -10,7 +10,7 @@
 //     Reconciler… 候補同士を整合して確定する（器へ Observation を集約→Roof Configuration）。
 //   雨漏りOS対応：Reader=Observation ／ Analyzer=Hypothesis を作る ／ Reconciler=Evidence を統合して結論。
 //
-//     平面PDF →[Plan Reader] PlanReading(外周/壁/北矢印/寸法) →[Plan Analyzer] analyzePlan → RoofUnit候補 ┐
+//     平面PDF →[Vector Reader] VecReading →[Geometry Reader] GeometryReading(トポロジ) →[Plan Analyzer] analyzePlan → RoofUnit候補 ┐
 //     立面PDF →[Elev Reader] トークン →[Elev Analyzer] readElevation → ElevationSpec(勾配/軒/納まり)      ├→[Reconciler] reconcileRoofConfig → RoofConfiguration
 //                                                                                                          ┘
 //   ★Reader は推論しないので、AIモデル/OCR/LiDAR/写真を差し替えても壊れない。Analyzer だけ建築知識を持つ。
@@ -19,6 +19,7 @@
 //   正の設計：claude/RECOGNIZER-ARCHITECTURE.md（Reader / Analyzer / Reconciler の三層）。
 import type { Dir, RoofConfiguration, RoofUnit, EdgeConfig, RoofUnitRole } from './roofConfig';
 import { buildRoofConfiguration } from './roofConfig';
+import type { GeometryReading, Side } from './planReader'; // 共通幾何ランタイム（屋根/方位を知らない）
 export type { Dir, RoofUnitRole } from './roofConfig'; // 方位・系統は Roof Configuration 契約が正（後方互換 re-export）
 
 export const DIR_JP: Record<string, Dir> = { 南: 'south', 東: 'east', 北: 'north', 西: 'west' };
@@ -89,49 +90,57 @@ export function readElevation(
 // 立面の勾配・軒・納まり候補づくりの現代語彙エイリアス（＝Elevation Analyzer）。readElevation は歴史的な名前。
 export const analyzeElevation = readElevation;
 
-// ══ Plan Reader（R-2b・描いてあるものだけ）══ ★推論しない。線・壁・北矢印・寸法・壁取り合い“候補”まで。
-//   壁で囲まれた領域（PlanRegion）は「そこに閉じた領域が在る」という幾何的事実であって、「主屋根/下屋」の判断ではない。
-export interface PlanRegion {
-  id: string;
-  area: number;         // 面積（相対でよい）。大小の比較にだけ使う
-  facing?: Dir[];       // 外周線から、その領域が外に面する方位（幾何的事実）
-  wallSides?: Dir[];    // 他棟/上階の壁に取り合う辺の方位（壁取り合い“候補”＝幾何的事実）
+// ══ Plan Analyzer（R-2b・建築知識で候補を作る）══ GeometryReading（純トポロジ）→ RoofUnit候補。
+//   Geometry Reader は屋根も方位も知らない（共通ランタイム）。ここで初めて建築知識を使う：
+//     最大ループ＝主屋根、隣接ループ＝下屋（Lean-to）、共有辺＝壁取り合い、Side→方位（北矢印）で外周方位。
+const NEAR = (p: number, q: number) => Math.abs(p - q) < 1e-3;
+const SIDE_ORDER: Side[] = ['top', 'right', 'bottom', 'left'];
+const DIR_BY_SIDE: Dir[] = ['north', 'east', 'south', 'west']; // 北矢印=上(0°) のとき top=north
+function sideToDir(side: Side, northDeg = 0): Dir {
+  const steps = ((Math.round((northDeg || 0) / 90) % 4) + 4) % 4;
+  return DIR_BY_SIDE[(SIDE_ORDER.indexOf(side) + steps) % 4];
 }
-export interface PlanReading {
-  regions?: PlanRegion[]; // 壁で囲まれた領域（幾何）。RoofUnit の判断はまだしない
-  northDeg?: number;      // 北矢印（描いてある向き）
-  // outline/walls/columns/grid/dimensions … 生のマークを足しても Reader は推論しない
-}
-
-// ══ Plan Analyzer（R-2b・建築知識で候補を作る）══ PlanReading（描いてあるもの）→ RoofUnit候補。
-//   ここで初めて「この壁で囲まれた領域は主屋根らしい/下屋らしい」という建築知識を使う（＝Hypothesis を作る）。
 export interface RoofUnitCandidate {
   role: RoofUnitRole;      // 主屋根/下屋/玄関下屋（Analyzer の判断＝候補）
   facing?: Dir[];          // その系統が面する方位（立面 Observation を集める鍵）
   dir?: Dir;               // 主に面する1方位（facing 省略時の後方互換）
   name?: string;           // 人が読む名（「東下屋」など）
-  wallAdjacent?: boolean;  // 壁取り合い（Plan Reader の wallSides から Analyzer が判断）。true=雨押え/false=つかみ込み
+  wallAdjacent?: boolean;  // 壁取り合い（Adjacency から Analyzer が判断）。true=雨押え/false=つかみ込み
 }
 export interface PlanAnalysis {
   units: RoofUnitCandidate[];  // 建築知識で作った RoofUnit候補（器の候補）
   northDeg?: number;
   faceCount?: number;
 }
-// Plan Analyzer 本体（第一版）：最大領域＝主屋根、他＝下屋。壁取り合いは wallSides の有無から。
-//   ★これは Analyzer（判断）であって Reader ではない。外周認識が入ったら PlanReading が本物で埋まる。
-export function analyzePlan(reading: PlanReading): PlanAnalysis {
-  const regions = (reading.regions ?? []).slice().sort((a, b) => b.area - a.area); // 大きい順＝主屋根が先頭
+// Plan Analyzer 本体（第一版）：トポロジ（loops/adjacency/bbox）＋北矢印 → RoofUnit候補。
+export function analyzePlan(geo: GeometryReading, opts: { northDeg?: number } = {}): PlanAnalysis {
+  const north = opts.northDeg ?? 0;
+  const loops = geo.loops.slice().sort((a, b) => b.area - a.area); // 大きい順＝主屋根が先頭
   const DIR_NAME: Record<Dir, string> = { south: '南', east: '東', north: '北', west: '西' };
-  const units: RoofUnitCandidate[] = regions.map((r, i) => {
+  // ループごとの「共有辺の Side」（Adjacency＝壁取り合いの幾何的証拠）。
+  const shared = new Map<string, Set<Side>>();
+  for (const l of geo.loops) shared.set(l.id, new Set());
+  for (const adj of geo.adjacency) { shared.get(adj.a)?.add(adj.aSide); shared.get(adj.b)?.add(adj.bSide); }
+  const onBbox = (r: { x0: number; y0: number; x1: number; y1: number }): Side[] => {
+    const s: Side[] = [];
+    if (NEAR(r.y0, geo.bbox.y0)) s.push('top');
+    if (NEAR(r.x1, geo.bbox.x1)) s.push('right');
+    if (NEAR(r.y1, geo.bbox.y1)) s.push('bottom');
+    if (NEAR(r.x0, geo.bbox.x0)) s.push('left');
+    return s;
+  };
+  const units: RoofUnitCandidate[] = loops.map((l, i) => {
     const role: RoofUnitRole = i === 0 ? 'main' : 'lower';
-    // 主屋根の水上は片棟＝つかみ込み（下屋が主屋根の壁に取り合っても、それは主屋根の水上ではない）。
-    // 下屋は上階の壁に取り合う辺（wallSides）が在れば水上＝雨押え、無ければ独立＝つかみ込み。
-    const wallAdjacent = role === 'main' ? false : (r.wallSides?.length ?? 0) > 0;
-    const facing = r.facing?.length ? r.facing : undefined;
-    const name = role === 'main' ? '主屋根' : (facing && facing.length === 1 ? `${DIR_NAME[facing[0]]}下屋` : '下屋');
-    return { role, name, wallAdjacent, ...(facing ? { facing } : {}) };
+    const sh = shared.get(l.id) ?? new Set<Side>();
+    // 外周＝bbox境界に在り、かつ他ループと共有していない辺（＝外に面する）。共有辺＝壁側。
+    const facing = onBbox(l.rect).filter((s) => !sh.has(s)).map((s) => sideToDir(s, north));
+    // 主屋根の水上は片棟＝つかみ込み（下屋が主屋根壁に取り合っても、それは主屋根の水上ではない）。
+    // 下屋は壁取り合い（共有辺）が在れば水上＝雨押え、無ければ独立＝つかみ込み。
+    const wallAdjacent = role === 'main' ? false : sh.size > 0;
+    const name = role === 'main' ? '主屋根' : (facing.length === 1 ? `${DIR_NAME[facing[0]]}下屋` : '下屋');
+    return { role, name, wallAdjacent, ...(facing.length ? { facing } : {}) };
   });
-  return { units, ...(reading.northDeg != null ? { northDeg: reading.northDeg } : {}), faceCount: regions.length };
+  return { units, ...(opts.northDeg != null ? { northDeg: north } : {}), faceCount: loops.length };
 }
 
 export interface RoofObservations {

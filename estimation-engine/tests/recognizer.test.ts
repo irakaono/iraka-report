@@ -1,6 +1,6 @@
 // Recognizer 自己テスト：三層（Reader／Analyzer／Reconciler）。
 //   Elevation Analyzer(readElevation)・Plan Analyzer(analyzePlan)・Reconciler(reconcileRoofConfig)。
-import { readElevation, analyzePlan, reconcileRoofConfig, DIR_JP, type RecoToken } from '../src/geometry/recognizer';
+import { readElevation, reconcileRoofConfig, DIR_JP, type RecoToken } from '../src/geometry/recognizer';
 
 let pass = 0; const fails: string[] = [];
 const ok = (c: boolean, l: string) => { if (c) pass++; else fails.push(l); };
@@ -82,22 +82,7 @@ ok((wallOn.roofs[0].edges || []).some((e) => e.role === 'flashing'), '主屋根�
 const wallOff = reconcileRoofConfig({ elevations: specs, plan: { units: [{ role: 'lower', dir: 'east', wallAdjacent: false }] } });
 ok((wallOff.roofs[0].edges || []).some((e) => e.role === 'grip'), '下屋でも壁に当たらなければ→つかみ込み（壁が正）');
 
-// ★Plan Analyzer：描いてある領域（Plan Reader 出力）から RoofUnit候補を建築知識で作る。
-//   最大領域＝主屋根（壁取り合いなし→つかみ込み）、小領域＝下屋（壁取り合いあり→雨押え）。
-const analysis = analyzePlan({ northDeg: 0, regions: [
-  { id: 'A', area: 100, facing: ['west'] },                 // 最大＝主屋根・壁なし
-  { id: 'B', area: 20, facing: ['east'], wallSides: ['west'] }, // 小＝下屋・西で壁取り合い
-] });
-ok(analysis.units.length === 2 && analysis.faceCount === 2, 'Plan Analyzer→候補2・faceCount2');
-ok(analysis.units[0].role === 'main' && analysis.units[0].wallAdjacent === false && analysis.units[0].name === '主屋根', '最大領域＝主屋根（壁なし）');
-ok(analysis.units[1].role === 'lower' && analysis.units[1].wallAdjacent === true && analysis.units[1].name === '東下屋', '小領域＝東下屋（壁あり）');
-
-// ★三層通し：Plan Analyzer の候補 → Reconciler が立面を集約 → 主屋根つかみ込み(西4寸)／東下屋雨押え(東2寸・軒600)。
-const full = reconcileRoofConfig({ elevations: specs, plan: analysis });
-ok(full.roofs.length === 2, '三層通し→系統2');
-ok(full.roofs[0].slope === 4 && (full.roofs[0].edges || []).some((e) => e.role === 'grip'), '主屋根＝西4寸・つかみ込み');
-ok(full.roofs[1].slope === 2 && (full.roofs[1].edges || []).some((e) => e.role === 'flashing')
-  && (full.roofs[1].edges || []).some((e) => e.role === 'eave' && e.dir === 'east' && e.overhang === 600), '東下屋＝東2寸・軒600・雨押え');
+// （Plan Analyzer と四段通しは planReader.test.ts で検証。ここは Elevation Analyzer と Reconciler が対象。）
 
 if (fails.length) { console.error('❌ recognizer FAIL:\n' + fails.map((f) => '  - ' + f).join('\n')); process.exit(1); }
 console.log(`✅ Recognizer(STEP2 立面グルーピング) test: 全 ${pass} 件合格（勾配三角・軒の出を方位へ割当）`);

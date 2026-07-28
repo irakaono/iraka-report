@@ -13,18 +13,23 @@ const rect = (x0: number, y0: number, x1: number, y1: number) => [
 ];
 const segments: VecSegment[] = [...rect(0, 0, 100, 80), ...rect(100, 20, 160, 70)];
 
-// ── Geometry Reader：線分 → 閉領域2つ・外周・壁取り合い候補 ──
-const reading = readGeometry({ segments, northDeg: 0 });
-ok(reading.regions!.length === 2, `閉領域2つ（実 ${reading.regions!.length}）`);
-const big = reading.regions!.slice().sort((a, b) => b.area - a.area)[0];
-const small = reading.regions!.slice().sort((a, b) => b.area - a.area)[1];
+// ── Geometry Reader：線分 → 純トポロジ（loops/adjacency/containment）。★屋根も方位も知らない。 ──
+const geo = readGeometry(segments);
+ok(geo.loops.length === 2, `閉ループ2つ（実 ${geo.loops.length}）`);
+const big = geo.loops.slice().sort((a, b) => b.area - a.area)[0];
+const small = geo.loops.slice().sort((a, b) => b.area - a.area)[1];
 ok(big.area === 8000 && small.area === 3000, `面積 主8000/下屋3000（実 ${big.area}/${small.area}）`);
-ok((big.wallSides || []).includes('east'), '主屋根の東辺＝下屋が取り合う（壁接続を検出）');
-ok((small.wallSides || []).includes('west') && (small.facing || []).includes('east'), '下屋：西で壁取り合い・東が外周（軒側）');
-ok(!(big.facing || []).includes('east'), '主屋根の東は外周ではない（下屋がある）');
+ok(geo.adjacency.length === 1, '隣接1組（主屋根と下屋が辺を共有）');
+const adj = geo.adjacency[0];
+ok((adj.a === big.id && adj.aSide === 'right' && adj.bSide === 'left') || (adj.a === small.id && adj.aSide === 'left' && adj.bSide === 'right'),
+  `共有辺の Side（主=right/下屋=left）（実 ${JSON.stringify(adj)}）`);
+ok(geo.containment.length === 0, '内包なし（並置）');
+ok(geo.bbox.x0 === 0 && geo.bbox.x1 === 160 && geo.bbox.y0 === 0 && geo.bbox.y1 === 80, '全体外接 bbox');
+// ★Geometry Reader は屋根・方位・壁取り合いを持たない（純トポロジ）。
+ok(!('facing' in (big as object)) && !('wallSides' in (big as object)), 'Loop は方位/壁取り合いを持たない（意味は Analyzer）');
 
-// ── Plan Analyzer：領域 → RoofUnit候補（最大＝主屋根/壁なし、他＝下屋/壁取り合いで雨押え） ──
-const analysis = analyzePlan(reading);
+// ── Plan Analyzer：トポロジ → RoofUnit候補（最大＝主屋根/壁なし、他＝下屋/壁取り合いで雨押え） ──
+const analysis = analyzePlan(geo, { northDeg: 0 });
 ok(analysis.units[0].role === 'main' && analysis.units[0].wallAdjacent === false, '主屋根候補＝壁なし（片棟＝つかみ込み）');
 ok(analysis.units[1].role === 'lower' && analysis.units[1].wallAdjacent === true && analysis.units[1].name === '東下屋', '下屋候補＝東下屋・壁取り合い（雨押え）');
 
@@ -43,8 +48,8 @@ ok(!(m.edges || []).some((e) => e.role === 'grip' || e.role === 'flashing'), '�
 ok(d.role === 'lower' && d.slope === 2 && (d.edges || []).some((e) => e.role === 'flashing')
   && (d.edges || []).some((e) => e.role === 'eave' && e.dir === 'east' && e.overhang === 600), '東下屋＝2寸・軒600・雨押え');
 
-// 領域が無ければ空（Reader は捏造しない）。
-ok(readGeometry({ segments: [] }).regions!.length === 0, '線分なし→領域なし（捏造しない）');
+// 線分が無ければループ無し（Reader は捏造しない）。
+ok(readGeometry([]).loops.length === 0, '線分なし→ループなし（捏造しない）');
 
 if (fails.length) { console.error('❌ planReader FAIL:\n' + fails.map((f) => '  - ' + f).join('\n')); process.exit(1); }
 console.log(`✅ planReader test: 全 ${pass} 件合格（Vector→Geometry→Plan Analyzer→Reconciler の四段通し）`);
