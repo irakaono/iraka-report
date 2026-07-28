@@ -5,7 +5,7 @@
  *   - precache は耐性版（allSettled）。1ファイル欠けても SW 更新ごと止めない（原則10）。
  *   - リリースのたびに CACHE_NAME を上げること（RELEASE_CHECKLIST 参照）。
  */
-const CACHE_NAME = 'iraka-field-v2.32.0'; // v2.32.0: [A]確認カードで複数検出を全部表示＝勾配2寸/4寸・軒の出250/300/600 をチップで提示（クリックで選択・面/辺ごと割当は次段R-3） / v2.31.0: [A]グリフ結合で自動検出強化 / v2.30.0: [A]確認カード / v2.29.0: [A]立面から勾配・軒の出
+const CACHE_NAME = 'iraka-field-v2.33.0'; // v2.33.0: [A]R-2.5 Readerの見える化＝確認カードに「立面ごとにAIがこう読みました（勾配/軒の出/片棟/雨押え等）」を表示（Reader/Resolverを独立評価・意味を混ぜない） / v2.32.0: [A]複数検出を全部チップ表示 / v2.31.0: [A]グリフ結合
 const ASSETS = [
   './portal.html',
   './index.html',

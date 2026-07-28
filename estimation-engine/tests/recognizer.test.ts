@@ -14,6 +14,8 @@ const tokens: RecoToken[] = [
   t('10', 790, 455), t('2', 800, 450), t('軒先/樋先', 780, 450), t('600', 800, 448),
   // 西の勾配三角（10 と 4）＋軒先250
   t('10', 790, 120), t('4', 800, 115), t('軒先', 780, 118), t('250', 800, 116),
+  // 屋根用語ラベル（東立面の近くに片棟・雨押え）
+  t('片棟', 810, 460), t('雨押え', 815, 445),
   // ノイズ（遠い数値）
   t('7985', 400, 300),
 ];
@@ -25,6 +27,8 @@ ok(!!east && east.overhangs.includes(600), '東立面→軒の出600');
 ok(!!west && west.pitches.includes(4), `西立面→4寸（実 ${JSON.stringify(west)}）`);
 ok(!!west && west.overhangs.includes(250), '西立面→軒の出250');
 ok(!east!.overhangs.includes(7985) && !west!.overhangs.includes(7985), '遠いノイズ(7985)は入らない');
+ok(!!east && east.labels.includes('片棟') && east.labels.includes('雨押え'), `東立面ラベル→片棟/雨押え（実 ${JSON.stringify(east!.labels)}）`);
+ok(!!west && !west.labels.includes('片棟'), '西立面には片棟ラベルが付かない（最寄り＝東）');
 
 // 立面ラベルが無ければ空（グルーピング不能）
 ok(readElevation([t('10', 0, 0), t('4', 8, 0)]).length === 0, 'ラベル無し→空');

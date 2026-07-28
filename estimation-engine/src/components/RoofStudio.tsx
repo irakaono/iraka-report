@@ -29,6 +29,7 @@ import type { Calibration } from '../geometry/calibration';
 import type { ScaleHint } from '../geometry/scaleInference';
 import { offsetPolygonOutward } from '../geometry/elevationInference';
 import type { ElevationHint } from '../geometry/elevationInference';
+import type { ElevationSpec } from '../geometry/recognizer';
 import AcceptancePanel from './AcceptancePanel';
 import { buildEstimate } from '../geometry/estimateExport';
 import type { GutterProgram } from '../geometry/acceptance';
@@ -126,11 +127,12 @@ interface RoofStudioProps {
   planSrc?: string | null;        // 平面図（背景トレース用・入口画面から）
   elevationSrc?: string | null;   // 立面図
   scaleHint?: ScaleHint | null;   // 平面図から推定した縮尺（提案・人が確認して確定）
-  elevHint?: ElevationHint | null; // 立面図から推定した勾配・軒の出（提案）
+  elevHint?: ElevationHint | null; // 立面図から推定した勾配・軒の出（集計候補）
+  elevReadings?: ElevationSpec[];  // 立面ごとの Reader 結果（R-2.5 見える化）
   onBackToDrawings?: () => void;  // 入口（図面ドロップ）へ戻る
 }
 
-export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint, onBackToDrawings }: RoofStudioProps = {}) {
+export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint, elevReadings, onBackToDrawings }: RoofStudioProps = {}) {
   const [faces, setFaces] = useState<FaceInput[]>(() => preset('gable'));
   const [roleOverrides, setRoleOverrides] = useState<Record<string, EdgeRole>>({}); // 辺ID→人が指定した種別（軒/ケラバ/雨押え…）。空=自動
   const [draft, setDraft] = useState<Point[]>([]);
@@ -757,6 +759,25 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
                 </div>
               );
             })()}
+            {/* R-2.5：立面ごとの Reader 結果をそのまま見せる（AIがちゃんと読めているかの安心＋Reader/Resolverを独立評価）。 */}
+            {elevReadings && elevReadings.length > 0 && (
+              <div style={{ marginTop: 12, background: '#f8f9fa', border: '1px solid #e9ecef', borderRadius: 8, padding: '9px 12px' }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: '#495057', marginBottom: 5 }}>AIが図面をこう読みました（立面ごと・読み取り根拠）</div>
+                {elevReadings.map((r) => {
+                  const jp = ({ south: '南', east: '東', north: '北', west: '西' } as Record<string, string>)[r.dir];
+                  return (
+                    <div key={r.dir} style={{ fontSize: 12, color: '#343a40', padding: '2px 0' }}>
+                      <b style={{ color: '#1971c2' }}>■{jp}立面</b>{'　'}
+                      {r.pitches.length ? `勾配 ${r.pitches.join('/')}寸　` : ''}
+                      {r.overhangs.length ? `軒の出 ${r.overhangs.join('/')}　` : ''}
+                      {r.labels.length ? r.labels.join('・') : ''}
+                      {(!r.pitches.length && !r.overhangs.length && !r.labels.length) ? '（数値なし）' : ''}
+                    </div>
+                  );
+                })}
+                <div style={{ fontSize: 10.5, color: '#adb5bd', marginTop: 5 }}>※これは「読めた事実」。どの面・どの辺かの割当は次段（Resolver）。雨押えの辺と軒の出の辺は別に扱います。</div>
+              </div>
+            )}
             <div style={{ fontSize: 11, color: '#868e96', margin: '12px 0 14px' }}>
               ※今は<b>屋根の外周だけ</b>、この後に図面へ合わせて角を動かします（他は設定済み）。外周の自動認識が入れば、それも確認だけになります。
             </div>

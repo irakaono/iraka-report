@@ -16,11 +16,19 @@ export type { Dir } from './roofConfig'; // 方位は Roof Configuration 契約�
 export const DIR_JP: Record<string, Dir> = { 南: 'south', 東: 'east', 北: 'north', 西: 'west' };
 
 // STEP2：立面ごとに読めた生の値（座標グルーピング）。STEP3 でこれを sub-Compiler が Roof Configuration へ束ねる。
-export interface ElevationSpec { dir: Dir; pitches: number[]; overhangs: number[] }
+//   labels＝その立面の近くに在った屋根用語（片棟/雨押え/けらば/軒先…）。★Reader は「在った」までで、
+//   どの辺かの判断はしない（例：雨押えの辺と軒の出の辺は別。混ぜない＝Resolverの仕事）。
+export interface ElevationSpec { dir: Dir; pitches: number[]; overhangs: number[]; labels: string[] }
 
 export interface RecoToken { str: string; x: number; y: number }
 
 const OVERHANG_LABEL = /軒先|軒の出|軒出|樋先|けらば|ケラバ|妻/;
+// 立面の近くに在れば「読めた」として拾う屋根用語（Reader は在否のみ・役割割当は Resolver）。
+const ROOF_TERMS: { re: RegExp; label: string }[] = [
+  { re: /片棟/, label: '片棟' }, { re: /雨押え|雨押|水切/, label: '雨押え' },
+  { re: /けらば|ケラバ/, label: 'けらば' }, { re: /太陽光|ソーラー|ＰＶ|PV/, label: '太陽光' },
+  { re: /ガルバリウム|ガルバ|GL鋼板/, label: 'ガルバリウム' }, { re: /雪止/, label: '雪止め' },
+];
 function num(s: string): number | null {
   const t = s.trim();
   if (!/^\d+(?:\.\d+)?$/.test(t.replace(/,/g, ''))) return null;
@@ -47,8 +55,8 @@ export function readElevation(
     return best!.dir;
   };
   const nums = tokens.map((t) => ({ v: num(t.str), x: t.x, y: t.y })).filter((n): n is { v: number; x: number; y: number } => n.v != null);
-  const byDir = new Map<Dir, { pitches: Set<number>; overhangs: Set<number> }>();
-  const get = (d: Dir) => { let e = byDir.get(d); if (!e) { e = { pitches: new Set(), overhangs: new Set() }; byDir.set(d, e); } return e; };
+  const byDir = new Map<Dir, { pitches: Set<number>; overhangs: Set<number>; labels: Set<string> }>();
+  const get = (d: Dir) => { let e = byDir.get(d); if (!e) { e = { pitches: new Set(), overhangs: new Set(), labels: new Set() }; byDir.set(d, e); } return e; };
 
   // 勾配三角：'10' の近傍にある 0.5〜12 の数字（上り＝寸）
   for (const t of tokens.filter((t) => t.str === '10')) {
@@ -60,9 +68,13 @@ export function readElevation(
   for (const lb of tokens.filter((t) => OVERHANG_LABEL.test(t.str))) {
     for (const n of nums) { if (n.v < 150 || n.v > 900) continue; if (dist(n.x, n.y, lb.x, lb.y) <= ovNear) get(nearestDir(lb.x, lb.y)).overhangs.add(n.v); }
   }
+  // 屋根用語（片棟/雨押え/けらば/太陽光/屋根材…）が在れば、最寄りの立面に「読めた」として記録（在否のみ）。
+  for (const t of tokens) {
+    for (const term of ROOF_TERMS) { if (term.re.test(t.str)) { get(nearestDir(t.x, t.y)).labels.add(term.label); break; } }
+  }
   return (['south', 'east', 'north', 'west'] as Dir[])
     .filter((d) => byDir.has(d))
-    .map((d) => ({ dir: d, pitches: [...byDir.get(d)!.pitches].sort((a, b) => a - b), overhangs: [...byDir.get(d)!.overhangs].sort((a, b) => a - b) }));
+    .map((d) => ({ dir: d, pitches: [...byDir.get(d)!.pitches].sort((a, b) => a - b), overhangs: [...byDir.get(d)!.overhangs].sort((a, b) => a - b), labels: [...byDir.get(d)!.labels] }));
 }
 
 // ── Resolver（R-3 第一版・ドラフト）：生の立面値 → RoofConfiguration（屋根の建築知識） ──

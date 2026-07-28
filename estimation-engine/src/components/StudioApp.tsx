@@ -18,6 +18,7 @@ export default function StudioApp() {
       elevationSrc={drawings.elevationSrc}
       scaleHint={drawings.scaleHint ?? null}
       elevHint={drawings.elevHint ?? null}
+      elevReadings={drawings.elevReadings ?? []}
       onBackToDrawings={() => setPhase('landing')}
     />
   );

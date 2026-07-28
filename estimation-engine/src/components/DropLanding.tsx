@@ -4,6 +4,7 @@
 import { useRef, useState } from 'react';
 import { inferScale, type ScaleHint } from '../geometry/scaleInference';
 import { inferElevation, type ElevationHint } from '../geometry/elevationInference';
+import { readElevation, type ElevationSpec } from '../geometry/recognizer';
 import { coalesceTextItems, type RawGlyph } from '../geometry/pdfText';
 
 // pdf.js の textContent（グリフ単位のことがある）を語・数値トークンに結合して返す。
@@ -22,7 +23,8 @@ export interface DrawingSet {
   elevationSrc: string | null;
   elevationName: string | null;
   scaleHint?: ScaleHint | null;      // 平面図から推定した縮尺（提案・人が確認して確定）
-  elevHint?: ElevationHint | null;   // 立面図から推定した勾配・軒の出（提案）
+  elevHint?: ElevationHint | null;   // 立面図から推定した勾配・軒の出（集計候補）
+  elevReadings?: ElevationSpec[];    // 立面ごとの Reader 結果（R-2.5 見える化用）
 }
 
 const RENDER_SCALE = 2; // renderDocPage の既定倍率と一致させる（pxPerMeter は画像px基準）
@@ -121,17 +123,18 @@ async function planWithHint(file: File): Promise<{ src: string; hint: ScaleHint 
 }
 
 // 立面図ページのテキスト（座標つき）から勾配・軒の出を推定。取れなければ null。
-async function extractElevHint(doc: any, pageNum: number): Promise<ElevationHint | null> {
+async function extractElev(doc: any, pageNum: number): Promise<{ hint: ElevationHint | null; readings: ElevationSpec[] }> {
   try {
     const items = await pageTokens(doc, pageNum);  // グリフ結合済み
     const hint = inferElevation(items);
-    return (hint.pitch != null || hint.overhang != null) ? hint : null;
-  } catch { return null; }
+    const readings = readElevation(items);          // 立面ごとの Reader 結果
+    return { hint: (hint.pitch != null || hint.overhang != null) ? hint : null, readings };
+  } catch { return { hint: null, readings: [] }; }
 }
-async function elevWithHint(file: File): Promise<{ src: string; hint: ElevationHint | null }> {
+async function elevWithHint(file: File): Promise<{ src: string; hint: ElevationHint | null; readings: ElevationSpec[] }> {
   const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-  if (isPdf) { const doc = await loadPdfDoc(file); const src = await renderDocPage(doc, 1); const hint = await extractElevHint(doc, 1); return { src, hint }; }
-  return { src: await fileToImageSrc(file), hint: null };
+  if (isPdf) { const doc = await loadPdfDoc(file); const src = await renderDocPage(doc, 1); const { hint, readings } = await extractElev(doc, 1); return { src, hint, readings }; }
+  return { src: await fileToImageSrc(file), hint: null, readings: [] };
 }
 
 interface ZoneProps {
@@ -195,7 +198,8 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
   const [planPage, setPlanPage] = useState<number | null>(null);
   const [elevPage, setElevPage] = useState<number | null>(null);
   const [planHint, setPlanHint] = useState<ScaleHint | null>(null); // 平面図から推定した縮尺（提案）
-  const [elevHint, setElevHint] = useState<ElevationHint | null>(null); // 立面図から推定した勾配・軒の出（提案）
+  const [elevHint, setElevHint] = useState<ElevationHint | null>(null); // 立面図から推定した勾配・軒の出（集計候補）
+  const [elevReadings, setElevReadings] = useState<ElevationSpec[]>([]); // 立面ごとの Reader 結果（R-2.5）
   const extractInputRef = useRef<HTMLInputElement>(null);
 
   // 指定ページを描画して 平面図/立面図 スロットへ。
@@ -204,7 +208,8 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
     try {
       const src = await renderDocPage(doc, page.n);
       const name = `${fileName} p${page.n}${page.title && page.title !== 'その他' ? '（' + page.title + '）' : ''}`;
-      if (which === 'plan') { setPlan({ src, name }); setPlanPage(page.n); setPlanHint(await extractScaleHint(doc, page.n)); } else { setElev({ src, name }); setElevPage(page.n); setElevHint(await extractElevHint(doc, page.n)); }
+      if (which === 'plan') { setPlan({ src, name }); setPlanPage(page.n); setPlanHint(await extractScaleHint(doc, page.n)); }
+      else { setElev({ src, name }); setElevPage(page.n); const ev = await extractElev(doc, page.n); setElevHint(ev.hint); setElevReadings(ev.readings); }
     } catch {
       setErr((prev) => ({ ...prev, [which]: '該当ページの描画に失敗' }));
     } finally { setBusy((b) => ({ ...b, [which]: false })); }
@@ -238,8 +243,8 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
         const { src, hint } = await planWithHint(file);
         setPlan({ src, name: file.name }); setPlanHint(hint);
       } else {
-        const { src, hint } = await elevWithHint(file);
-        setElev({ src, name: file.name }); setElevHint(hint);
+        const { src, hint, readings } = await elevWithHint(file);
+        setElev({ src, name: file.name }); setElevHint(hint); setElevReadings(readings);
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -250,8 +255,8 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
   };
 
   const start = (withDrawings: boolean) => onStart(withDrawings
-    ? { planSrc: plan.src, planName: plan.name, elevationSrc: elev.src, elevationName: elev.name, scaleHint: planHint, elevHint }
-    : { planSrc: null, planName: null, elevationSrc: null, elevationName: null, scaleHint: null, elevHint: null });
+    ? { planSrc: plan.src, planName: plan.name, elevationSrc: elev.src, elevationName: elev.name, scaleHint: planHint, elevHint, elevReadings }
+    : { planSrc: null, planName: null, elevationSrc: null, elevationName: null, scaleHint: null, elevHint: null, elevReadings: [] });
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: '28px 20px', fontFamily: 'system-ui, sans-serif' }}>
@@ -264,7 +269,7 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
         <DropZone label="平面図" src={plan.src} name={plan.name} busy={busy.plan} error={err.plan}
           onPick={(f) => pick('plan', f)} onClear={() => { setPlan({ src: null, name: null }); setErr((e) => ({ ...e, plan: null })); setPlanPage(null); setPlanHint(null); }} />
         <DropZone label="立面図" src={elev.src} name={elev.name} busy={busy.elev} error={err.elev}
-          onPick={(f) => pick('elev', f)} onClear={() => { setElev({ src: null, name: null }); setErr((e) => ({ ...e, elev: null })); setElevPage(null); setElevHint(null); }} />
+          onPick={(f) => pick('elev', f)} onClear={() => { setElev({ src: null, name: null }); setErr((e) => ({ ...e, elev: null })); setElevPage(null); setElevHint(null); setElevReadings([]); }} />
       </div>
 
       {/* 複数ページPDFから自動抽出 */}
