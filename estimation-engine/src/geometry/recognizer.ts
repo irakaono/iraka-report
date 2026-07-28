@@ -2,16 +2,21 @@
 //   ★スコープ：甍AI は屋根専門。ここで扱う Configuration は常に「Roof Configuration」
 //     （屋根勾配・軒の出・雨押え・片棟・ケラバ・雨樋・屋根材のみ）。建物全体は 小泉建設AI＝別プロジェクト。
 //   正の設計：claude/CONFIGURATION_ARCHITECTURE.md（親）／claude/RECOGNIZER-ARCHITECTURE.md（本章）。
-// 原則21：Recognizer は Provider の一つ。
-//   責務：図面を読み、宣言的な RoofConfig（Configuration）を返す。Geometry は作らない・知らない。
-//   ★不変条件：Recognizer は Geometry を知らない／Geometry は Recognizer を知らない。契約は Configuration のみ。
-//   Recognizer は Reader（読めた事実＝Observation）と Reconciler（複数Observationの統合→Roof Configuration）に分ける：
-//     PDF → [Reader] readElevation → Observation(立面ごと)  ┐
-//     平面の面数・真北 → Observation                        ├→ [Reconciler] reconcileRoofConfig → RoofConfiguration
-//   ★屋根面は最初から在るのではなく、立面+平面+真北を突き合わせた「整合(Reconcile)」の結果として確定する。
-//     ＝「割当」ではなく「統合」。雨漏りOSの Observation/Evidence/Reconcile と同じ思想。
-//   Reader は OCR/抽出が変わっても壊れない。Reconciler は屋根の建築知識で証拠を整合。契約＝roofConfig.ts。
-//   正の設計：claude/RECOGNIZER-ARCHITECTURE.md（R-1 契約 / R-2 Reader / R-3 Reconciler）。
+// 原則21：Recognizer は Provider の一つ。契約＝roofConfig.ts（Geometry は作らない・知らない）。
+//
+//   ★Recognizer は三層（責務分離）：
+//     Reader    … 描いてあるものだけ読む（線・壁・北矢印・寸法・立面のトークン）。★一切推論しない。
+//     Analyzer  … 建築知識で「候補」を作る（壁で囲まれた領域→RoofUnit候補／トークン→勾配・軒）。
+//     Reconciler… 候補同士を整合して確定する（器へ Observation を集約→Roof Configuration）。
+//   雨漏りOS対応：Reader=Observation ／ Analyzer=Hypothesis を作る ／ Reconciler=Evidence を統合して結論。
+//
+//     平面PDF →[Plan Reader] PlanReading(外周/壁/北矢印/寸法) →[Plan Analyzer] analyzePlan → RoofUnit候補 ┐
+//     立面PDF →[Elev Reader] トークン →[Elev Analyzer] readElevation → ElevationSpec(勾配/軒/納まり)      ├→[Reconciler] reconcileRoofConfig → RoofConfiguration
+//                                                                                                          ┘
+//   ★Reader は推論しないので、AIモデル/OCR/LiDAR/写真を差し替えても壊れない。Analyzer だけ建築知識を持つ。
+//   ★屋根系統（Roof Unit）は Reader の Observation でも Reconciler の出力でもなく、Plan Analyzer が作る「候補」。
+//     Reconciler はその器へ Observation を集約するだけ（雨漏りOS の Case←Evidence と同型）。
+//   正の設計：claude/RECOGNIZER-ARCHITECTURE.md（Reader / Analyzer / Reconciler の三層）。
 import type { Dir, RoofConfiguration, RoofUnit, EdgeConfig, RoofUnitRole } from './roofConfig';
 import { buildRoofConfiguration } from './roofConfig';
 export type { Dir, RoofUnitRole } from './roofConfig'; // 方位・系統は Roof Configuration 契約が正（後方互換 re-export）
@@ -40,8 +45,9 @@ function num(s: string): number | null {
 }
 function dist(ax: number, ay: number, bx: number, by: number) { return Math.hypot(ax - bx, ay - by); }
 
-// ── Reader（R-2）：立面ラベル（南側立面図 等）へ、勾配三角の上り と 軒の出寸法 を最近傍で割り当てた生の値 ──
-//   ここまでは「読む」だけ。どの Face/Edge かは Resolver（R-3）が建築知識で解決する。
+// ── Elevation Analyzer（R-2a）：立面のトークン（Reader 出力）→ 立面ごとの勾配・軒の出・納まりラベル候補 ──
+//   入力トークン列は Elevation Reader（pdfText グリフ結合）が出す「描いてあるもの」。ここで勾配三角の上りや
+//   軒の出寸法を最近傍で束ねる＝建築知識による候補づくり。どの Face/Edge かは Reconciler が整合で確定する。
 export function readElevation(
   tokens: RecoToken[],
   opts: { triNear?: number; ovNear?: number } = {},
@@ -80,49 +86,71 @@ export function readElevation(
     .map((d) => ({ dir: d, pitches: [...byDir.get(d)!.pitches].sort((a, b) => a - b), overhangs: [...byDir.get(d)!.overhangs].sort((a, b) => a - b), labels: [...byDir.get(d)!.labels] }));
 }
 
-// ── Reader は二段（責務分離）：Plan Reader と Elevation Reader ──
-//   ★Roof Unit（器）は Observation でも、Reconciler の出力でもない。「Plan Observation が発見した器」。
-//     平面図も一つの Observation：Plan Reader が平面を読み、器（RoofUnit候補）＋外周＋真北＋階層＋壁取り合いを出す。
-//     Elevation Reader は立面を読み、勾配・軒・納まりを出す。
-//   Reconciler は器を作らない：Plan Observation が発見した器へ Elevation Observation を流し込むだけ。
-//     ＝雨漏りOS の Case←Evidence と同型（Case=器 を作らず、器へ Evidence を集める）。
-//   将来センサー（ドローン点群・LiDAR・写真）が増えても、全部 Observation として器へ足されるだけ。器は不変。
+// 立面の勾配・軒・納まり候補づくりの現代語彙エイリアス（＝Elevation Analyzer）。readElevation は歴史的な名前。
+export const analyzeElevation = readElevation;
 
-// Elevation Reader の出力（立面ごと）は ElevationSpec（上の定義）。
-// Plan Reader が発見する器（1系統）の観測。壁取り合い（壁有＝雨押え／壁に当たらない片棟＝つかみ込み）も平面が持つ。
-export interface RoofUnitObservation {
-  role: RoofUnitRole;      // 主屋根/下屋/玄関下屋（平面の階層構造＝設計者の単位）
-  facing?: Dir[];          // その系統が面する方位（複数可。寄棟は四方）。立面 Observation を集める鍵
+// ══ Plan Reader（R-2b・描いてあるものだけ）══ ★推論しない。線・壁・北矢印・寸法・壁取り合い“候補”まで。
+//   壁で囲まれた領域（PlanRegion）は「そこに閉じた領域が在る」という幾何的事実であって、「主屋根/下屋」の判断ではない。
+export interface PlanRegion {
+  id: string;
+  area: number;         // 面積（相対でよい）。大小の比較にだけ使う
+  facing?: Dir[];       // 外周線から、その領域が外に面する方位（幾何的事実）
+  wallSides?: Dir[];    // 他棟/上階の壁に取り合う辺の方位（壁取り合い“候補”＝幾何的事実）
+}
+export interface PlanReading {
+  regions?: PlanRegion[]; // 壁で囲まれた領域（幾何）。RoofUnit の判断はまだしない
+  northDeg?: number;      // 北矢印（描いてある向き）
+  // outline/walls/columns/grid/dimensions … 生のマークを足しても Reader は推論しない
+}
+
+// ══ Plan Analyzer（R-2b・建築知識で候補を作る）══ PlanReading（描いてあるもの）→ RoofUnit候補。
+//   ここで初めて「この壁で囲まれた領域は主屋根らしい/下屋らしい」という建築知識を使う（＝Hypothesis を作る）。
+export interface RoofUnitCandidate {
+  role: RoofUnitRole;      // 主屋根/下屋/玄関下屋（Analyzer の判断＝候補）
+  facing?: Dir[];          // その系統が面する方位（立面 Observation を集める鍵）
   dir?: Dir;               // 主に面する1方位（facing 省略時の後方互換）
   name?: string;           // 人が読む名（「東下屋」など）
-  wallAdjacent?: boolean;  // 壁取り合い（Plan Observation）。true=水上が壁=雨押え／false=壁に当たらない片棟=つかみ込み
+  wallAdjacent?: boolean;  // 壁取り合い（Plan Reader の wallSides から Analyzer が判断）。true=雨押え/false=つかみ込み
 }
-// Plan Reader の出力（平面図＝一つの Observation）。器の発見源。
-export interface PlanObservation {
-  units: RoofUnitObservation[];  // 平面が発見した器（主屋根・下屋・玄関下屋…）
-  northDeg?: number;             // 真北（北矢印・優先①）
-  faceCount?: number;            // 外周認識の副産物（面数）
-  // outline?, wallAdjacency? … 将来（外周点列・壁取り合いの詳細）を足しても器は不変
+export interface PlanAnalysis {
+  units: RoofUnitCandidate[];  // 建築知識で作った RoofUnit候補（器の候補）
+  northDeg?: number;
+  faceCount?: number;
 }
+// Plan Analyzer 本体（第一版）：最大領域＝主屋根、他＝下屋。壁取り合いは wallSides の有無から。
+//   ★これは Analyzer（判断）であって Reader ではない。外周認識が入ったら PlanReading が本物で埋まる。
+export function analyzePlan(reading: PlanReading): PlanAnalysis {
+  const regions = (reading.regions ?? []).slice().sort((a, b) => b.area - a.area); // 大きい順＝主屋根が先頭
+  const DIR_NAME: Record<Dir, string> = { south: '南', east: '東', north: '北', west: '西' };
+  const units: RoofUnitCandidate[] = regions.map((r, i) => {
+    const role: RoofUnitRole = i === 0 ? 'main' : 'lower';
+    const wallAdjacent = (r.wallSides?.length ?? 0) > 0; // 壁に取り合う辺が在れば水上は雨押え
+    const facing = r.facing?.length ? r.facing : undefined;
+    const name = role === 'main' ? '主屋根' : (facing && facing.length === 1 ? `${DIR_NAME[facing[0]]}下屋` : '下屋');
+    return { role, name, wallAdjacent, ...(facing ? { facing } : {}) };
+  });
+  return { units, ...(reading.northDeg != null ? { northDeg: reading.northDeg } : {}), faceCount: regions.length };
+}
+
 export interface RoofObservations {
-  plan?: PlanObservation;             // Plan Reader（器の発見源＝平面 Observation）
-  elevations?: ElevationSpec[];       // Elevation Reader（立面ごとの勾配/軒/納まり）
-  // 後方互換：器や面数を直接渡す旧経路（plan にまとめる前の呼び出し）。
-  hierarchy?: RoofUnitObservation[];  // = plan.units（旧）
-  faceCount?: number;                 // = plan.faceCount（旧）
-  northDeg?: number;                  // = plan.northDeg（旧）
+  plan?: PlanAnalysis;              // Plan Analyzer の出力（RoofUnit候補＝器の候補）
+  elevations?: ElevationSpec[];     // Elevation Analyzer の出力（立面ごとの勾配/軒/納まり）
+  // 後方互換：候補や面数を直接渡す旧経路（plan にまとめる前の呼び出し）。
+  hierarchy?: RoofUnitCandidate[];  // = plan.units（旧）
+  faceCount?: number;               // = plan.faceCount（旧）
+  northDeg?: number;                // = plan.northDeg（旧）
 }
 
 // 水上の納まり（WITHDOM＝片棟/軒 仕様）：壁取り合いがあれば雨押え、無ければつかみ込み（壁に当たらない片棟）。
-//   壁取り合いの観測が無ければ、系統の性格で既定（主屋根＝壁なし→つかみ込み／下屋＝壁あり→雨押え）。
-function topRole(u: RoofUnitObservation): EdgeConfig['role'] {
+//   壁取り合いの判断が無ければ、系統の性格で既定（主屋根＝壁なし→つかみ込み／下屋＝壁あり→雨押え）。
+function topRole(u: RoofUnitCandidate): EdgeConfig['role'] {
   const wall = u.wallAdjacent ?? (u.role !== 'main');
   return wall ? 'flashing' : 'grip';
 }
 
-// 器（1つの Roof Unit）へ集めた立面 Observation から、その系統の勾配・軒・水上を確定する。
+// ══ Reconciler（R-3）══ 候補（器）へ Elevation Observation を集約し、器ごとに勾配・軒・水上を確定する。
 //   gathered＝この器に属する立面の読み。fallbackPitch＝器が方位を持たない/読めない時の代表勾配。
-function resolveUnit(u: RoofUnitObservation, id: string, gathered: ElevationSpec[], fallbackPitch?: number): RoofUnit {
+function resolveUnit(u: RoofUnitCandidate, id: string, gathered: ElevationSpec[], fallbackPitch?: number): RoofUnit {
   const facing = u.facing?.length ? u.facing : (u.dir != null ? [u.dir] : []);
   const pitches = gathered.flatMap((r) => r.pitches);
   const slope = (pitches.length ? Math.min(...pitches) : undefined) ?? fallbackPitch;
