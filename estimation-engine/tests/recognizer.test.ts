@@ -82,7 +82,7 @@ ok((wallOn.roofs[0].edges || []).some((e) => e.role === 'flashing'), '主屋根�
 const wallOff = reconcileRoofConfig({ elevations: specs, plan: { units: [{ role: 'lower', dir: 'east', wallAdjacent: false }] } });
 ok((wallOff.roofs[0].edges || []).some((e) => e.role === 'grip'), '下屋でも壁に当たらなければ→つかみ込み（壁が正）');
 
-// （Plan Analyzer と四段通しは planReader.test.ts で検証。ここは Elevation Analyzer と Reconciler が対象。）
+// （Plan Analyzer と四段通しは topology.test.ts で検証。ここは Elevation Analyzer と Reconciler が対象。）
 
 if (fails.length) { console.error('❌ recognizer FAIL:\n' + fails.map((f) => '  - ' + f).join('\n')); process.exit(1); }
 console.log(`✅ Recognizer(STEP2 立面グルーピング) test: 全 ${pass} 件合格（勾配三角・軒の出を方位へ割当）`);

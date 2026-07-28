@@ -10,7 +10,7 @@
 //     Reconciler… 候補同士を整合して確定する（器へ Observation を集約→Roof Configuration）。
 //   雨漏りOS対応：Reader=Observation ／ Analyzer=Hypothesis を作る ／ Reconciler=Evidence を統合して結論。
 //
-//     平面PDF →[Vector Reader] VecReading →[Geometry Reader] GeometryReading(トポロジ) →[Plan Analyzer] analyzePlan → RoofUnit候補 ┐
+//     平面PDF →[Vector Reader] VecReading →[Topology Compiler] TopologyIR →[Plan Analyzer] analyzePlan → RoofUnit候補 ┐
 //     立面PDF →[Elev Reader] トークン →[Elev Analyzer] readElevation → ElevationSpec(勾配/軒/納まり)      ├→[Reconciler] reconcileRoofConfig → RoofConfiguration
 //                                                                                                          ┘
 //   ★Reader は推論しないので、AIモデル/OCR/LiDAR/写真を差し替えても壊れない。Analyzer だけ建築知識を持つ。
@@ -19,7 +19,7 @@
 //   正の設計：claude/RECOGNIZER-ARCHITECTURE.md（Reader / Analyzer / Reconciler の三層）。
 import type { Dir, RoofConfiguration, RoofUnit, EdgeConfig, RoofUnitRole } from './roofConfig';
 import { buildRoofConfiguration } from './roofConfig';
-import type { GeometryReading, Side } from './planReader'; // 共通幾何ランタイム（屋根/方位を知らない）
+import type { TopologyIR, Side } from './topology'; // Topology Compiler の出力（共通幾何ランタイム契約・屋根/方位を知らない）
 export type { Dir, RoofUnitRole } from './roofConfig'; // 方位・系統は Roof Configuration 契約が正（後方互換 re-export）
 
 export const DIR_JP: Record<string, Dir> = { 南: 'south', 東: 'east', 北: 'north', 西: 'west' };
@@ -90,8 +90,8 @@ export function readElevation(
 // 立面の勾配・軒・納まり候補づくりの現代語彙エイリアス（＝Elevation Analyzer）。readElevation は歴史的な名前。
 export const analyzeElevation = readElevation;
 
-// ══ Plan Analyzer（R-2b・建築知識で候補を作る）══ GeometryReading（純トポロジ）→ RoofUnit候補。
-//   Geometry Reader は屋根も方位も知らない（共通ランタイム）。ここで初めて建築知識を使う：
+// ══ Plan Analyzer（R-2b・建築知識で候補を作る）══ TopologyIR（純トポロジ）→ RoofUnit候補。
+//   Topology Compiler は屋根も方位も知らない（共通ランタイム）。ここで初めて建築知識を使う：
 //     最大ループ＝主屋根、隣接ループ＝下屋（Lean-to）、共有辺＝壁取り合い、Side→方位（北矢印）で外周方位。
 const NEAR = (p: number, q: number) => Math.abs(p - q) < 1e-3;
 const SIDE_ORDER: Side[] = ['top', 'right', 'bottom', 'left'];
@@ -112,8 +112,8 @@ export interface PlanAnalysis {
   northDeg?: number;
   faceCount?: number;
 }
-// Plan Analyzer 本体（第一版）：トポロジ（loops/adjacency/bbox）＋北矢印 → RoofUnit候補。
-export function analyzePlan(geo: GeometryReading, opts: { northDeg?: number } = {}): PlanAnalysis {
+// Plan Analyzer 本体（第一版）：Topology IR（loops/adjacency/bbox）＋北矢印 → RoofUnit候補。
+export function analyzePlan(geo: TopologyIR, opts: { northDeg?: number } = {}): PlanAnalysis {
   const north = opts.northDeg ?? 0;
   const loops = geo.loops.slice().sort((a, b) => b.area - a.area); // 大きい順＝主屋根が先頭
   const DIR_NAME: Record<Dir, string> = { south: '南', east: '東', north: '北', west: '西' };

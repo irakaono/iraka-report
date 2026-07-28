@@ -1,11 +1,13 @@
-// 甍AI Geometry Reader ＝ 共通幾何ランタイム（★屋根も建築も知らない。純粋トポロジのみ）。
-//   ★Architecture FROZEN（2026-07-28）：Geometry Reader の責務は Points / Segments / Loops / Adjacency / Containment まで。
+// 甍AI Topology Compiler ＝ 共通幾何ランタイム（★屋根も建築も知らない。純粋トポロジのみ）。
+//   ★これは「読む(Reader)」ではなく「入力プリミティブをフォーマット非依存の Topology IR へコンパイルする」処理。
+//     Compiler 系列（Topology IR → Geometry IR → Quantity IR → Material IR → BOM）の先頭に一直線で並ぶ。
+//   ★Architecture FROZEN（2026-07-28）：責務は Points / Segments / Loops / Adjacency / Containment / BBox まで。
 //     「壁取り合い候補」「主屋根/下屋」「外に面する方位」は幾何ではなく建築の意味＝Plan Analyzer の仕事（ここには置かない）。
-//   だから Geometry Reader は 屋根・基礎・外壁・部屋・土地境界・雨漏りOS の全てで使える（甍AI 共通ランタイム）。
+//   だから Topology IR は 屋根・基礎・外壁・部屋・土地境界・雨漏りOS の全てで使える＝**Geometry Runtime の契約**。
 //
 //   入力アダプタ（フォーマット依存）：Vector Reader … PDF/DWG/IFC/BIM/LiDAR/点群/写真 → VecReading（線/文字/円弧/寸法）。
-//   幾何ランタイム（不変）        ：Geometry Reader … VecReading の線分 → GeometryReading（トポロジ）。
-//   正の設計：claude/RECOGNIZER-ARCHITECTURE.md（三層＋Plan Reader 二段／Geometry Reader Freeze）。
+//   幾何ランタイム（不変・FROZEN）  ：Topology Compiler … VecReading の線分 → TopologyIR。
+//   正の設計：claude/RECOGNIZER-ARCHITECTURE.md（三層＋Plan Reader 二段／Topology Compiler Freeze）。
 
 // ── Vector Reader（入力アダプタ）の出力：描いてある生プリミティブ。★推論しない。差し替えはここだけ。 ──
 export interface VecSegment { x1: number; y1: number; x2: number; y2: number }
@@ -17,13 +19,13 @@ export interface VecReading {
 }
 export type VectorReader<TInput> = (input: TInput) => VecReading;
 
-// ── Geometry Reader の出力＝純粋トポロジ（屋根/建築を知らない）。方位も意味も持たない。 ──
+// ── Topology IR＝Topology Compiler の出力＝純粋トポロジ（屋根/建築を知らない・Geometry Runtime 契約）。 ──
 export type Side = 'top' | 'right' | 'bottom' | 'left'; // ★幾何スクリーン基準（北ではない）。方位変換は Analyzer。
 export interface Pt { x: number; y: number }
 export interface Loop { id: string; rect: { x0: number; y0: number; x1: number; y1: number }; area: number } // 閉ループ（第一版＝矩形）
 export interface LoopAdjacency { a: string; b: string; aSide: Side; bSide: Side }  // 2ループが辺を共有（幾何的事実）
 export interface LoopContainment { outer: string; inner: string }                  // ループがループを内包（幾何的事実）
-export interface GeometryReading {
+export interface TopologyIR {
   points: Pt[];
   segments: VecSegment[];
   loops: Loop[];
@@ -78,8 +80,8 @@ const strictInside = (inner: Rect, outer: Rect) =>
   inner.x0 >= outer.x0 - EPS && inner.x1 <= outer.x1 + EPS && inner.y0 >= outer.y0 - EPS && inner.y1 <= outer.y1 + EPS &&
   (inner.x1 - inner.x0) * (inner.y1 - inner.y0) < (outer.x1 - outer.x0) * (outer.y1 - outer.y0) - EPS;
 
-// Geometry Reader：線分 → トポロジ（Points/Segments/Loops/Adjacency/Containment）。★屋根も方位も知らない。
-export function readGeometry(segments: VecSegment[]): GeometryReading {
+// Topology Compiler：線分 → Topology IR（Points/Segments/Loops/Adjacency/Containment/BBox）。★屋根も方位も知らない。
+export function compileTopology(segments: VecSegment[]): TopologyIR {
   const rects = rectsFromSegments(segments);
   const loops: Loop[] = rects.map((r, i) => ({ id: `L${i + 1}`, rect: { ...r }, area: (r.x1 - r.x0) * (r.y1 - r.y0) }));
   // 点（ループ四隅の重複除去）。

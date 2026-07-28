@@ -1,6 +1,6 @@
-// Plan Reader 自己テスト：Vector Reader（線分）→ Geometry Reader（閉領域/外周/壁取り合い）
-//   → Plan Analyzer（RoofUnit候補）→ Reconciler（立面を器へ集約）。★Reader は推論しない。
-import { readGeometry, type VecSegment } from '../src/geometry/planReader';
+// Topology 自己テスト：Vector Reader（線分）→ Topology Compiler（Topology IR）
+//   → Plan Analyzer（RoofUnit候補）→ Reconciler（立面を器へ集約）。★Compiler は屋根/建築を知らない。
+import { compileTopology, type VecSegment } from '../src/geometry/topology';
 import { analyzePlan, reconcileRoofConfig, type ElevationSpec } from '../src/geometry/recognizer';
 
 let pass = 0; const fails: string[] = [];
@@ -13,8 +13,8 @@ const rect = (x0: number, y0: number, x1: number, y1: number) => [
 ];
 const segments: VecSegment[] = [...rect(0, 0, 100, 80), ...rect(100, 20, 160, 70)];
 
-// ── Geometry Reader：線分 → 純トポロジ（loops/adjacency/containment）。★屋根も方位も知らない。 ──
-const geo = readGeometry(segments);
+// ── Topology Compiler：線分 → Topology IR（loops/adjacency/containment）。★屋根も方位も知らない。 ──
+const geo = compileTopology(segments);
 ok(geo.loops.length === 2, `閉ループ2つ（実 ${geo.loops.length}）`);
 const big = geo.loops.slice().sort((a, b) => b.area - a.area)[0];
 const small = geo.loops.slice().sort((a, b) => b.area - a.area)[1];
@@ -25,7 +25,7 @@ ok((adj.a === big.id && adj.aSide === 'right' && adj.bSide === 'left') || (adj.a
   `共有辺の Side（主=right/下屋=left）（実 ${JSON.stringify(adj)}）`);
 ok(geo.containment.length === 0, '内包なし（並置）');
 ok(geo.bbox.x0 === 0 && geo.bbox.x1 === 160 && geo.bbox.y0 === 0 && geo.bbox.y1 === 80, '全体外接 bbox');
-// ★Geometry Reader は屋根・方位・壁取り合いを持たない（純トポロジ）。
+// ★Topology Compiler は屋根・方位・壁取り合いを持たない（純トポロジ）。
 ok(!('facing' in (big as object)) && !('wallSides' in (big as object)), 'Loop は方位/壁取り合いを持たない（意味は Analyzer）');
 
 // ── Plan Analyzer：トポロジ → RoofUnit候補（最大＝主屋根/壁なし、他＝下屋/壁取り合いで雨押え） ──
@@ -49,7 +49,7 @@ ok(d.role === 'lower' && d.slope === 2 && (d.edges || []).some((e) => e.role ===
   && (d.edges || []).some((e) => e.role === 'eave' && e.dir === 'east' && e.overhang === 600), '東下屋＝2寸・軒600・雨押え');
 
 // 線分が無ければループ無し（Reader は捏造しない）。
-ok(readGeometry([]).loops.length === 0, '線分なし→ループなし（捏造しない）');
+ok(compileTopology([]).loops.length === 0, '線分なし→ループなし（捏造しない）');
 
-if (fails.length) { console.error('❌ planReader FAIL:\n' + fails.map((f) => '  - ' + f).join('\n')); process.exit(1); }
-console.log(`✅ planReader test: 全 ${pass} 件合格（Vector→Geometry→Plan Analyzer→Reconciler の四段通し）`);
+if (fails.length) { console.error('❌ topology FAIL:\n' + fails.map((f) => '  - ' + f).join('\n')); process.exit(1); }
+console.log(`✅ topology test: 全 ${pass} 件合格（Vector→Topology Compiler→Plan Analyzer→Reconciler の四段通し）`);
