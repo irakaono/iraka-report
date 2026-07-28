@@ -30,6 +30,7 @@ import type { ScaleHint } from '../geometry/scaleInference';
 import { offsetPolygonOutward } from '../geometry/elevationInference';
 import type { ElevationHint } from '../geometry/elevationInference';
 import type { ElevationSpec } from '../geometry/recognizer';
+import { preset, buildDraftFaces, shedFace, suggestFaceCount } from '../geometry/draftFaces';
 import AcceptancePanel from './AcceptancePanel';
 import { buildEstimate } from '../geometry/estimateExport';
 import type { GutterProgram } from '../geometry/acceptance';
@@ -104,19 +105,6 @@ const DOWNSPOUT = '#495057', CONNECTOR = '#0ca678', ELBOW = '#f08c00', DRAINC = 
 interface FaceInput { vertices: Point[]; pitch: number; eaveEdgeIndex: number }
 type Mode = 'select' | 'gutter' | 'measure' | 'calibrate';
 
-function preset(name: 'gable' | 'hipped' | 'shed'): FaceInput[] {
-  if (name === 'gable') return [
-    { vertices: [{ x: 150, y: 100 }, { x: 550, y: 100 }, { x: 550, y: 250 }, { x: 150, y: 250 }], pitch: 5, eaveEdgeIndex: 0 },
-    { vertices: [{ x: 150, y: 250 }, { x: 550, y: 250 }, { x: 550, y: 400 }, { x: 150, y: 400 }], pitch: 5, eaveEdgeIndex: 2 },
-  ];
-  if (name === 'hipped') return [
-    { vertices: [{ x: 150, y: 100 }, { x: 550, y: 100 }, { x: 350, y: 250 }], pitch: 5, eaveEdgeIndex: 0 },
-    { vertices: [{ x: 550, y: 100 }, { x: 550, y: 400 }, { x: 350, y: 250 }], pitch: 5, eaveEdgeIndex: 0 },
-    { vertices: [{ x: 550, y: 400 }, { x: 150, y: 400 }, { x: 350, y: 250 }], pitch: 5, eaveEdgeIndex: 0 },
-    { vertices: [{ x: 150, y: 400 }, { x: 150, y: 100 }, { x: 350, y: 250 }], pitch: 5, eaveEdgeIndex: 0 },
-  ];
-  return [{ vertices: [{ x: 200, y: 150 }, { x: 520, y: 150 }, { x: 520, y: 380 }, { x: 200, y: 380 }], pitch: 5, eaveEdgeIndex: 0 }];
-}
 const bottomEdgeIndex = (poly: Point[]): number => {
   let best = 0, bestY = -Infinity;
   for (let j = 0; j < poly.length; j++) { const my = (poly[j].y + poly[(j + 1) % poly.length].y) / 2; if (my > bestY) { bestY = my; best = j; } }
@@ -197,6 +185,9 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
   const [reviewForm, setReviewForm] = useState<'shed' | 'gable' | 'hipped'>('shed');
   const [reviewPitch, setReviewPitch] = useState<string>('5');
   const [reviewOverhang, setReviewOverhang] = useState<string>('');
+  const [reviewExtra, setReviewExtra] = useState<number>(0); // 主屋根に足す「下屋（別の屋根面）」の枚数。下書きの面数＝主屋根＋この数
+  // 立面の読み（勾配の異なり数）から下書きの面数を推定（異勾配＝別面の証拠）。片流れ2つなら 2 → 追加 1。
+  const suggestedFaceCount = useMemo(() => suggestFaceCount((elevReadings ?? []).map((r) => r.pitches)), [elevReadings]);
   const [calPts, setCalPts] = useState<Point[]>([]); // 較正クリック中の2点（px）
   const [knownLen, setKnownLen] = useState<string>('0.91'); // 既知実寸(m)。既定=通り芯1マス0.91m
   const [showAcceptance, setShowAcceptance] = useState<boolean>(false); // 検証パネル
@@ -335,21 +326,53 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
     const eaveIdx = newFaces[0].eaveEdgeIndex ?? 0;
     return b[(eaveIdx + 2) % b.length] ?? null;
   };
-  // AIナビ③「形から始める」：屋根の形テンプレを置く。片流れは水上を既定で「雨押え」にして軒樋を1本に（水上に軒樋を付けない）。
+  // AIナビ③「形から始める」：屋根の形テンプレを置く。片流れの水上は既定で「つかみ込み（軒仕様・壁に当たらない片棟）」にして
+  //   軒樋を1本に（水上に軒樋を付けない）。WITHDOM＝片棟/軒 仕様。壁に取り合う下屋だけ「雨押え」（辺クリックで変更可）。
   const chooseForm = (name: 'gable' | 'hipped' | 'shed') => {
     const nf = preset(name);
     let ov: Record<string, EdgeRole> = {};
-    if (name === 'shed') { const top = shedTopEdgeId(nf); if (top) ov = { [top]: 'wall_flashing' }; }
+    if (name === 'shed') { const top = shedTopEdgeId(nf); if (top) ov = { [top]: 'grip' }; }
     setFaces(nf); setRoleOverrides(ov); reseedDrainFor(nf, ov);
     setMode('select'); setDrawingFace(false); setDraft([]);
     setRoofFormChosen(true); setShowIntro(false); clearHi();
   };
-  // 片流れの「水下＝軒」側を選ぶ。反対の水上を既定「雨押え」にし、軒樋を水下だけに組み直す（水上には付けない）。
+  // 指定の面群の「水上辺（軒の対辺）」IDへ、指定の役割（つかみ込み/雨押え等）を付ける。
+  //   ★辺IDは面内の出現順で安定（先に現れる面の辺IDは後続の面を足しても変わらない）。全面から作った Model で引く。
+  const topEdgeOverridesFor = (allFaces: FaceInput[], faceIndices: number[], role: EdgeRole): Record<string, EdgeRole> => {
+    const m = buildModel(allFaces, {});
+    const ov: Record<string, EdgeRole> = {};
+    for (const fi of faceIndices) {
+      const b = m.faces[fi]?.boundary; if (!b || b.length < 4) continue;
+      const eaveIdx = allFaces[fi]?.eaveEdgeIndex ?? 0;
+      const top = b[(eaveIdx + 2) % b.length]; // 水上＝軒の対辺
+      if (top) ov[top] = role;
+    }
+    return ov;
+  };
+  // 下書きを「主屋根＋下屋 extra 枚」で組む（面数を実際の屋根に合わせる＝積算精度の起点）。
+  //   水上の既定：下屋（壁有）＝雨押え／壁に当たらない片棟＝つかみ込み（軒仕様）。WITHDOM＝片棟/軒 仕様。
+  const seedDraft = (form: 'gable' | 'hipped' | 'shed', extra: number, pitch: number): FaceInput[] => {
+    const { faces: nf, gripFaceIndices, flashingFaceIndices } = buildDraftFaces(form, extra, pitch);
+    const ov = { ...topEdgeOverridesFor(nf, gripFaceIndices, 'grip'), ...topEdgeOverridesFor(nf, flashingFaceIndices, 'wall_flashing') };
+    setFaces(nf); setRoleOverrides(ov); reseedDrainFor(nf, ov);
+    setMode('select'); setDrawingFace(false); setDraft([]);
+    setRoofFormChosen(true); setShowIntro(false); clearHi();
+    return nf;
+  };
+  // 編集中に「下屋（別の屋根面）」を1枚足す（2階・3階で下屋に後から気づいたとき）。下屋は壁に取り合う → 水上は既定「雨押え」。
+  const addShedFace = () => {
+    const i = faces.length;
+    const nf: FaceInput[] = [...faces, shedFace(180 + (i % 3) * 42, 190 + (i % 5) * 30, faces[0]?.pitch ?? 5)];
+    const ov = { ...roleOverrides, ...topEdgeOverridesFor(nf, [nf.length - 1], 'wall_flashing') };
+    setFaces(nf); setRoleOverrides(ov); reseedDrainFor(nf, ov); clearHi();
+    flash('✓ 下屋（片流れ）を1面追加しました');
+  };
+  // 片流れの「水下＝軒」側を選ぶ。反対の水上を既定「つかみ込み（軒仕様）」にし、軒樋を水下だけに組み直す（水上には付けない）。
   const chooseShedEave = (edgeIndex: number) => {
     if (faces.length !== 1) return;
     const nf: FaceInput[] = [{ ...faces[0], eaveEdgeIndex: edgeIndex }];
     const top = shedTopEdgeId(nf);
-    const ov: Record<string, EdgeRole> = top ? { [top]: 'wall_flashing' } : {};
+    const ov: Record<string, EdgeRole> = top ? { [top]: 'grip' } : {};
     setFaces(nf); setRoleOverrides(ov); reseedDrainFor(nf, ov);
   };
   // 辺ごとに種別を人が指定（自動＝空）。原則12：人の判断が創発より優先。
@@ -377,14 +400,15 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
     if (elevHint?.pitch != null) setReviewPitch(String(elevHint.pitch));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [elevHint]);
+  // 立面の読みから推定した面数を確認カードの初期値に（主屋根＋追加＝推定面数）。片流れ2つなら 追加=1。
+  useEffect(() => { setReviewExtra(Math.max(0, suggestedFaceCount - 1)); }, [suggestedFaceCount]);
   // 確認カードの「この内容で進む」＝AIの理解を一括適用（形・縮尺・勾配・軒の出・雨樋）。編集画面には入らない＝確認ファースト。
   const confirmReview = () => {
     const p = Number(reviewPitch) || 5;
     const mm = Number(reviewOverhang) || 0;
-    chooseForm(reviewForm);                 // 形＋雨樋（水上は雨押え・軒樋1本）
+    seedDraft(reviewForm, reviewExtra, p); // 形＋下屋の枚数＋勾配（面数を実際に合わせる）＋雨樋（片流れの水上は雨押え）
     let effScale = scale;
     if (scaleHint?.pxPerMeter != null) { applyScaleHint(); effScale = scaleHint.pxPerMeter * bgScale; }
-    applyPitchAll(p);
     if (mm > 0) applyOverhang(mm, effScale);
     setRoofFormChosen(true);
     setReviewOpen(false); setShowIntro(false);
@@ -717,6 +741,21 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
                       <option value="shed">片流れ</option><option value="gable">切妻</option><option value="hipped">寄棟／方形</option>
                     </select>
                     <span style={{ fontSize: 11, color: '#adb5bd', marginLeft: 8 }}>※形の自動判定は今後。ご確認ください</span>
+                  </Row>
+                  <Row label="屋根面の数" ok={suggestedFaceCount > 1}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <b style={{ fontSize: 14, color: '#1a2530' }}>{1 + reviewExtra} 面</b>
+                      <span style={{ fontSize: 12, color: '#868e96' }}>（主屋根＋下屋</span>
+                      <button onClick={() => setReviewExtra((v) => Math.max(0, v - 1))}
+                        style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #ced4da', background: '#fff', cursor: 'pointer', fontWeight: 800, color: '#495057' }}>−</button>
+                      <b style={{ minWidth: 14, textAlign: 'center' }}>{reviewExtra}</b>
+                      <button onClick={() => setReviewExtra((v) => Math.min(8, v + 1))}
+                        style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #ced4da', background: '#fff', cursor: 'pointer', fontWeight: 800, color: '#495057' }}>＋</button>
+                      <span style={{ fontSize: 12, color: '#868e96' }}>枚）</span>
+                    </span>
+                    {suggestedFaceCount > 1
+                      ? <span style={{ fontSize: 11, color: '#e8590c', marginLeft: 8 }}>AIは勾配{suggestedFaceCount}種→<b>{suggestedFaceCount}面</b>と読みました</span>
+                      : <span style={{ fontSize: 11, color: '#adb5bd', marginLeft: 8 }}>片流れ2つ→2面／2階・3階の下屋はその分ふやす</span>}
                   </Row>
                   <Row label="縮尺" ok={!!(scaleHint && scaleHint.pxPerMeter != null)}>
                     {scaleHint && scaleHint.pxPerMeter != null
@@ -1149,9 +1188,10 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
       {/* サブツールバー（モード依存） */}
       <div className="rs-sub">
         {mode === 'select' && <>
-          <button onClick={() => { setFaces(preset('gable')); }}>切妻</button>
-          <button onClick={() => { setFaces(preset('hipped')); }}>方形</button>
-          <button onClick={() => { setFaces(preset('shed')); }}>片流れ</button>
+          <button onClick={() => chooseForm('gable')}>切妻</button>
+          <button onClick={() => chooseForm('hipped')}>方形</button>
+          <button onClick={() => chooseForm('shed')} title="片流れ。水上は既定で「つかみ込み（軒仕様・壁に当たらない片棟）」">片流れ</button>
+          <button onClick={addShedFace} title="2階・3階の下屋（別の屋根面）を1枚足す。下屋は壁に取り合う → 水上は既定で雨押え">＋下屋（片流れ）</button>
           <button className={drawingFace ? 'on' : ''} onClick={() => { setDrawingFace(true); setDraft([]); }}>＋屋根面を描く</button>
           <button onClick={confirmFace} disabled={draft.length < 3}>確定</button>
           <button onClick={() => setFaces([])}>屋根全消去</button>
