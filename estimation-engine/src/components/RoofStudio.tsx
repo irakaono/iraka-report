@@ -722,11 +722,34 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
                       : <span style={{ color: '#e8590c', fontSize: 13 }}>読めませんでした → 次で手動合わせ</span>}
                   </Row>
                   <Row label="勾配" ok={elevHint?.pitch != null}>
-                    <input type="number" step={0.5} min={0} value={reviewPitch} onChange={(e) => setReviewPitch(e.target.value)} style={{ ...selStyle, width: 68 }} /> 寸
-                    {elevHint?.pitchCandidates && elevHint.pitchCandidates.length > 1 && <span style={{ fontSize: 11, color: '#868e96', marginLeft: 8 }}>候補：{elevHint.pitchCandidates.join('/')}寸</span>}
+                    <input type="number" step={0.5} min={0} value={reviewPitch} onChange={(e) => setReviewPitch(e.target.value)} style={{ ...selStyle, width: 60 }} /> 寸
+                    {(elevHint?.pitchCandidates ?? []).length > 0 && (
+                      <span style={{ display: 'inline-flex', gap: 5, flexWrap: 'wrap', marginLeft: 8, verticalAlign: 'middle' }}>
+                        {(elevHint!.pitchCandidates).map((p) => (
+                          <button key={p} onClick={() => setReviewPitch(String(p))}
+                            style={{ fontSize: 12, fontWeight: 700, padding: '3px 9px', borderRadius: 6, cursor: 'pointer',
+                              border: Number(reviewPitch) === p ? 'none' : '1px solid #b197fc',
+                              color: Number(reviewPitch) === p ? '#fff' : '#6741d9',
+                              background: Number(reviewPitch) === p ? '#6741d9' : '#fff' }}>{p}寸</button>
+                        ))}
+                      </span>
+                    )}
+                    {(elevHint?.pitchCandidates ?? []).length > 1 && <span style={{ fontSize: 11, color: '#e8590c', marginLeft: 8 }}>複数検出（面ごとの割当は次段）</span>}
                   </Row>
                   <Row label="軒の出" ok={elevHint?.overhang != null}>
-                    <input type="number" step={5} min={0} value={reviewOverhang} onChange={(e) => setReviewOverhang(e.target.value)} style={{ ...selStyle, width: 84 }} /> mm
+                    <input type="number" step={5} min={0} value={reviewOverhang} onChange={(e) => setReviewOverhang(e.target.value)} style={{ ...selStyle, width: 76 }} /> mm
+                    {(elevHint?.overhangCandidates ?? []).length > 0 && (
+                      <span style={{ display: 'inline-flex', gap: 5, flexWrap: 'wrap', marginLeft: 8, verticalAlign: 'middle' }}>
+                        {(elevHint!.overhangCandidates).map((o) => (
+                          <button key={o} onClick={() => setReviewOverhang(String(o))}
+                            style={{ fontSize: 12, fontWeight: 700, padding: '3px 9px', borderRadius: 6, cursor: 'pointer',
+                              border: Number(reviewOverhang) === o ? 'none' : '1px solid #b197fc',
+                              color: Number(reviewOverhang) === o ? '#fff' : '#6741d9',
+                              background: Number(reviewOverhang) === o ? '#6741d9' : '#fff' }}>{o}</button>
+                        ))}
+                      </span>
+                    )}
+                    {(elevHint?.overhangCandidates ?? []).length > 1 && <span style={{ fontSize: 11, color: '#e8590c', marginLeft: 8 }}>複数検出（辺ごとの割当は次段）</span>}
                   </Row>
                   <Row label="雨樋" ok>
                     <span style={{ fontSize: 13, color: '#495057' }}>自動（{reviewForm === 'shed' ? '水下の片側' : '軒に配置'}）</span>
