@@ -1,5 +1,5 @@
-// Recognizer 自己テスト：Reader（立面グルーピング）と Resolver（→RoofConfig ドラフト）。
-import { readElevation, resolveRoofConfig, DIR_JP, type RecoToken } from '../src/geometry/recognizer';
+// Recognizer 自己テスト：Reader（立面グルーピング）と Reconciler（Observation統合→RoofConfiguration）。
+import { readElevation, reconcileRoofConfig, DIR_JP, type RecoToken } from '../src/geometry/recognizer';
 
 let pass = 0; const fails: string[] = [];
 const ok = (c: boolean, l: string) => { if (c) pass++; else fails.push(l); };
@@ -33,14 +33,16 @@ ok(!!west && !west.labels.includes('片棟'), '西立面には片棟ラベルが
 // 立面ラベルが無ければ空（グルーピング不能）
 ok(readElevation([t('10', 0, 0), t('4', 8, 0)]).length === 0, 'ラベル無し→空');
 
-// Resolver：異なる勾配ごとに1屋根＋方位別 eave 辺を束ねる（合成契約 RoofConfiguration・ドラフト）
-const cfg = resolveRoofConfig(specs);
-ok(cfg.roofs.length === 2, `勾配2種→屋根2つ（実 ${cfg.roofs.length}）`);
+// Reconciler：異なる勾配は異なる屋根面（東2寸+西4寸→面2つ）＋方位別 eave 辺（合成契約・ドラフト）
+const cfg = reconcileRoofConfig({ elevations: specs });
+ok(cfg.roofs.length === 2, `異勾配2種→屋根2面（実 ${cfg.roofs.length}）`);
 ok(cfg.roofs.some((r) => r.slope === 2) && cfg.roofs.some((r) => r.slope === 4), 'slope 2寸/4寸 が RoofConfiguration に入る');
 const e0 = cfg.roofs[0].edges || [];
 ok(e0.some((e) => e.role === 'eave' && e.dir === 'east' && e.overhang === 600), `eave辺 east600（実 ${JSON.stringify(e0)}）`);
 ok(e0.some((e) => e.role === 'eave' && e.dir === 'west' && e.overhang === 250), 'eave辺 west250');
-ok(resolveRoofConfig([]).roofs.length === 1, '空入力→屋根1（フォールバック）');
+// 面数の整合：Geometry（平面）の面数があれば優先
+ok(reconcileRoofConfig({ elevations: specs, faceCount: 3 }).roofs.length === 3, 'faceCount優先→面3');
+ok(reconcileRoofConfig({}).roofs.length === 1, '観測なし→屋根1（フォールバック）');
 
 if (fails.length) { console.error('❌ recognizer FAIL:\n' + fails.map((f) => '  - ' + f).join('\n')); process.exit(1); }
 console.log(`✅ Recognizer(STEP2 立面グルーピング) test: 全 ${pass} 件合格（勾配三角・軒の出を方位へ割当）`);

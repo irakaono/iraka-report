@@ -5,10 +5,13 @@
 // 原則21：Recognizer は Provider の一つ。
 //   責務：図面を読み、宣言的な RoofConfig（Configuration）を返す。Geometry は作らない・知らない。
 //   ★不変条件：Recognizer は Geometry を知らない／Geometry は Recognizer を知らない。契約は Configuration のみ。
-//   Recognizer は Reader（生の値）と Resolver（建築知識→Roof Configuration）に分ける：
-//     PDF → [Reader] readElevation → 生の値(立面ごと) → [Resolver] resolveRoofConfig → RoofConfiguration
-//   Reader は OCR/抽出が変わっても壊れない。Resolver は屋根の建築知識だけ。契約＝roofConfig.ts。
-//   正の設計：claude/RECOGNIZER-ARCHITECTURE.md（R-1 契約 / R-2 Reader / R-3 Resolver）。
+//   Recognizer は Reader（読めた事実＝Observation）と Reconciler（複数Observationの統合→Roof Configuration）に分ける：
+//     PDF → [Reader] readElevation → Observation(立面ごと)  ┐
+//     平面の面数・真北 → Observation                        ├→ [Reconciler] reconcileRoofConfig → RoofConfiguration
+//   ★屋根面は最初から在るのではなく、立面+平面+真北を突き合わせた「整合(Reconcile)」の結果として確定する。
+//     ＝「割当」ではなく「統合」。雨漏りOSの Observation/Evidence/Reconcile と同じ思想。
+//   Reader は OCR/抽出が変わっても壊れない。Reconciler は屋根の建築知識で証拠を整合。契約＝roofConfig.ts。
+//   正の設計：claude/RECOGNIZER-ARCHITECTURE.md（R-1 契約 / R-2 Reader / R-3 Reconciler）。
 import type { Dir, RoofConfiguration, RoofUnit, EdgeConfig } from './roofConfig';
 import { buildRoofConfiguration } from './roofConfig';
 export type { Dir } from './roofConfig'; // 方位は Roof Configuration 契約が正（後方互換 re-export）
@@ -77,19 +80,29 @@ export function readElevation(
     .map((d) => ({ dir: d, pitches: [...byDir.get(d)!.pitches].sort((a, b) => a - b), overhangs: [...byDir.get(d)!.overhangs].sort((a, b) => a - b), labels: [...byDir.get(d)!.labels] }));
 }
 
-// ── Resolver（R-3 第一版・ドラフト）：生の立面値 → RoofConfiguration（屋根の建築知識） ──
-//   正直な限界：どの軒の出がどの辺かの厳密割当は、平面の面数・真北・ドメイン規則が要る（R-3 本実装で締める）。
-//   第一版は「異なる勾配ごとに1つの屋根」を作り、方位別の軒の出を eave 辺として束ねる（人が確認＝確認ファースト）。
-//   ★Geometry には触れない。返すのは Roof Configuration（合成契約）だけ。Builder で束ねる。
-export function resolveRoofConfig(readings: ElevationSpec[]): RoofConfiguration {
+// ── Reconciler（R-3）：複数の Observation を突き合わせて Roof Configuration を作る（割当ではなく統合） ──
+//   入力は Observation 群：Reader（立面）＋ Geometry（平面の面数）＋ 真北。
+//   推論の芯：異なる勾配は異なる屋根面（東2寸+西4寸→面2つ）。同じ勾配なら同一面かもしれない。
+//   ★屋根面は整合の結果として確定する。★Geometry には触れない。返すのは Roof Configuration だけ。
+//   第一版（ドラフト）：面数＝geometry優先→無ければ異勾配数。勾配を面へ、方位別の軒の出を eave 辺に。
+//   軒辺と雨押え辺の厳密割当・真北整合は R-3 本実装で締める（今は人が確認＝確認ファースト）。
+export interface RoofObservations {
+  elevations?: ElevationSpec[];   // Reader（立面ごとの読み取り＝Observation）
+  faceCount?: number;             // Geometry（平面の面数＝Observation）
+  northDeg?: number;              // 真北（方位整合＝Observation）
+}
+export function reconcileRoofConfig(obs: RoofObservations): RoofConfiguration {
+  const readings = obs.elevations ?? [];
   const pitches = Array.from(new Set(readings.flatMap((r) => r.pitches))).sort((a, b) => a - b);
-  // 方位別の代表軒の出（最小＝軒寄り）を eave 辺に。詳細な辺割当は R-3 本実装。
+  // 方位別の代表軒の出（最小＝軒寄り）を eave 辺に。辺の厳密割当は R-3 本実装。
   const eaveEdges: EdgeConfig[] = readings
     .filter((r) => r.overhangs.length)
     .map((r) => ({ role: 'eave', dir: r.dir, overhang: Math.min(...r.overhangs) }));
-  const units: RoofUnit[] = (pitches.length ? pitches : [undefined]).map((slope, i) => ({
+  // 面数の整合：平面の面数があれば優先、無ければ「異なる勾配の数」を面数の証拠とする。
+  const nRoofs = (obs.faceCount && obs.faceCount > 0) ? obs.faceCount : (pitches.length || 1);
+  const units: RoofUnit[] = Array.from({ length: nRoofs }, (_, i) => ({
     id: `R${i + 1}`,
-    ...(slope != null ? { slope } : {}),
+    ...(pitches.length ? { slope: pitches[Math.min(i, pitches.length - 1)] } : {}),
     ...(eaveEdges.length ? { edges: eaveEdges.map((e) => ({ ...e })) } : {}),
   }));
   return buildRoofConfiguration(units);
