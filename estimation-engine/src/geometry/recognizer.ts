@@ -124,7 +124,9 @@ export function analyzePlan(reading: PlanReading): PlanAnalysis {
   const DIR_NAME: Record<Dir, string> = { south: '南', east: '東', north: '北', west: '西' };
   const units: RoofUnitCandidate[] = regions.map((r, i) => {
     const role: RoofUnitRole = i === 0 ? 'main' : 'lower';
-    const wallAdjacent = (r.wallSides?.length ?? 0) > 0; // 壁に取り合う辺が在れば水上は雨押え
+    // 主屋根の水上は片棟＝つかみ込み（下屋が主屋根の壁に取り合っても、それは主屋根の水上ではない）。
+    // 下屋は上階の壁に取り合う辺（wallSides）が在れば水上＝雨押え、無ければ独立＝つかみ込み。
+    const wallAdjacent = role === 'main' ? false : (r.wallSides?.length ?? 0) > 0;
     const facing = r.facing?.length ? r.facing : undefined;
     const name = role === 'main' ? '主屋根' : (facing && facing.length === 1 ? `${DIR_NAME[facing[0]]}下屋` : '下屋');
     return { role, name, wallAdjacent, ...(facing ? { facing } : {}) };
