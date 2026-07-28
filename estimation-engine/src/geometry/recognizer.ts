@@ -80,29 +80,45 @@ export function readElevation(
     .map((d) => ({ dir: d, pitches: [...byDir.get(d)!.pitches].sort((a, b) => a - b), overhangs: [...byDir.get(d)!.overhangs].sort((a, b) => a - b), labels: [...byDir.get(d)!.labels] }));
 }
 
-// ── Reconciler（R-3）：Roof Unit（器）へ Observation を集約し、器ごとに確定する ──
-//   ★Roof Unit は Reconciler の「出力」ではなく「整合を行う単位（器）」。
-//     設計者が建物を考えた単位（主屋根・下屋・玄関下屋）が先に在り、そこへ各方位の Observation を集める。
-//     ＝雨漏りOS の Case←Evidence と同じ（Evidence から Case を作らない。Case に Evidence を集める）。
-//         Roof Unit └ Observations（East/West/North/South/Plan）→ Reconcile → 勾配/軒/水上/雨樋 を確定
-//     将来（太陽光・雪止め・天窓…）も「Unit に Observation が増えるだけ」。設計は変わらない。
-//   真北の優先：①平面の北矢印（最も信頼）②立面の名称（南/東立面）③不一致は確認カードで質問。
-//   系統（器）が観測できないときだけ、面数（geometry優先→異勾配数）から器を仮生成するフォールバックに落ちる。
+// ── Reader は二段（責務分離）：Plan Reader と Elevation Reader ──
+//   ★Roof Unit（器）は Observation でも、Reconciler の出力でもない。「Plan Observation が発見した器」。
+//     平面図も一つの Observation：Plan Reader が平面を読み、器（RoofUnit候補）＋外周＋真北＋階層＋壁取り合いを出す。
+//     Elevation Reader は立面を読み、勾配・軒・納まりを出す。
+//   Reconciler は器を作らない：Plan Observation が発見した器へ Elevation Observation を流し込むだけ。
+//     ＝雨漏りOS の Case←Evidence と同型（Case=器 を作らず、器へ Evidence を集める）。
+//   将来センサー（ドローン点群・LiDAR・写真）が増えても、全部 Observation として器へ足されるだけ。器は不変。
+
+// Elevation Reader の出力（立面ごと）は ElevationSpec（上の定義）。
+// Plan Reader が発見する器（1系統）の観測。壁取り合い（壁有＝雨押え／壁に当たらない片棟＝つかみ込み）も平面が持つ。
 export interface RoofUnitObservation {
-  role: RoofUnitRole;   // 主屋根/下屋/玄関下屋（平面の階層構造＝設計者の単位）
-  facing?: Dir[];       // その系統が面する方位（複数可。寄棟は四方）。ここへ立面 Observation を集める鍵
-  dir?: Dir;            // 主に面する1方位（facing 省略時の後方互換）
-  name?: string;        // 人が読む名（「東下屋」など）
+  role: RoofUnitRole;      // 主屋根/下屋/玄関下屋（平面の階層構造＝設計者の単位）
+  facing?: Dir[];          // その系統が面する方位（複数可。寄棟は四方）。立面 Observation を集める鍵
+  dir?: Dir;               // 主に面する1方位（facing 省略時の後方互換）
+  name?: string;           // 人が読む名（「東下屋」など）
+  wallAdjacent?: boolean;  // 壁取り合い（Plan Observation）。true=水上が壁=雨押え／false=壁に当たらない片棟=つかみ込み
+}
+// Plan Reader の出力（平面図＝一つの Observation）。器の発見源。
+export interface PlanObservation {
+  units: RoofUnitObservation[];  // 平面が発見した器（主屋根・下屋・玄関下屋…）
+  northDeg?: number;             // 真北（北矢印・優先①）
+  faceCount?: number;            // 外周認識の副産物（面数）
+  // outline?, wallAdjacency? … 将来（外周点列・壁取り合いの詳細）を足しても器は不変
 }
 export interface RoofObservations {
-  elevations?: ElevationSpec[];       // Reader（立面ごとの読み取り＝Observation）
-  faceCount?: number;                 // Geometry（平面の面数＝Observation）
-  northDeg?: number;                  // 真北（方位整合＝Observation・優先①北矢印）
-  hierarchy?: RoofUnitObservation[];  // 屋根系統（建物の階層構造＝器の一覧。主屋根＋下屋…）
+  plan?: PlanObservation;             // Plan Reader（器の発見源＝平面 Observation）
+  elevations?: ElevationSpec[];       // Elevation Reader（立面ごとの勾配/軒/納まり）
+  // 後方互換：器や面数を直接渡す旧経路（plan にまとめる前の呼び出し）。
+  hierarchy?: RoofUnitObservation[];  // = plan.units（旧）
+  faceCount?: number;                 // = plan.faceCount（旧）
+  northDeg?: number;                  // = plan.northDeg（旧）
 }
 
-// 水上の納まり既定（WITHDOM＝片棟/軒 仕様）：主屋根＝つかみ込み（壁に当たらない片棟）／下屋・玄関下屋＝雨押え（壁有）。
-function topRole(role: RoofUnitRole): EdgeConfig['role'] { return role === 'main' ? 'grip' : 'flashing'; }
+// 水上の納まり（WITHDOM＝片棟/軒 仕様）：壁取り合いがあれば雨押え、無ければつかみ込み（壁に当たらない片棟）。
+//   壁取り合いの観測が無ければ、系統の性格で既定（主屋根＝壁なし→つかみ込み／下屋＝壁あり→雨押え）。
+function topRole(u: RoofUnitObservation): EdgeConfig['role'] {
+  const wall = u.wallAdjacent ?? (u.role !== 'main');
+  return wall ? 'flashing' : 'grip';
+}
 
 // 器（1つの Roof Unit）へ集めた立面 Observation から、その系統の勾配・軒・水上を確定する。
 //   gathered＝この器に属する立面の読み。fallbackPitch＝器が方位を持たない/読めない時の代表勾配。
@@ -117,18 +133,21 @@ function resolveUnit(u: RoofUnitObservation, id: string, gathered: ElevationSpec
     edges.push({ role: 'eave', dir: d, ...(ov != null ? { overhang: ov } : {}) });
   }
   // 水上の納まり（つかみ込み/雨押え）は片流れ＝1方向の系統だけ。多方向（寄棟/切妻）の頂部は棟で、Shape 確定に委ねる。
-  if (facing.length <= 1) edges.push({ role: topRole(u.role) });
+  if (facing.length <= 1) edges.push({ role: topRole(u) });
   return { id, role: u.role, ...(u.name ? { name: u.name } : {}), ...(slope != null ? { slope } : {}), edges };
 }
 
 export function reconcileRoofConfig(obs: RoofObservations): RoofConfiguration {
   const readings = obs.elevations ?? [];
   const pitches = Array.from(new Set(readings.flatMap((r) => r.pitches))).sort((a, b) => a - b);
+  // Plan Observation を正とし、旧経路（hierarchy/faceCount 直渡し）を後方互換で受ける。
+  const planUnits = obs.plan?.units ?? obs.hierarchy;
+  const faceCount = obs.plan?.faceCount ?? obs.faceCount;
 
-  // ★本筋：屋根系統（器）が在れば、各器へ Observation を集めて確定する。
-  if (obs.hierarchy && obs.hierarchy.length) {
+  // ★本筋：Plan Observation が発見した器があれば、各器へ Elevation Observation を集めて確定する。
+  if (planUnits && planUnits.length) {
     const mainPitch = pitches.length ? pitches[0] : undefined;
-    const units = obs.hierarchy.map((u, i) => {
+    const units = planUnits.map((u, i) => {
       const facing = u.facing?.length ? u.facing : (u.dir != null ? [u.dir] : []);
       const gathered = readings.filter((r) => facing.includes(r.dir)); // 器へ Observation を集約
       return resolveUnit(u, `R${i + 1}`, gathered, mainPitch);
@@ -136,11 +155,11 @@ export function reconcileRoofConfig(obs: RoofObservations): RoofConfiguration {
     return buildRoofConfiguration(units);
   }
 
-  // フォールバック（器が観測できない）：方位別の軒の出を eave 辺に、面数＝geometry優先→異勾配数で器を仮生成。
+  // フォールバック（器が観測できない＝Plan Reader 未／外周未認識）：面数＝geometry優先→異勾配数で器を仮生成。
   const eaveEdges: EdgeConfig[] = readings
     .filter((r) => r.overhangs.length)
     .map((r) => ({ role: 'eave', dir: r.dir, overhang: Math.min(...r.overhangs) }));
-  const nRoofs = (obs.faceCount && obs.faceCount > 0) ? obs.faceCount : (pitches.length || 1);
+  const nRoofs = (faceCount && faceCount > 0) ? faceCount : (pitches.length || 1);
   const units: RoofUnit[] = Array.from({ length: nRoofs }, (_, i) => ({
     id: `R${i + 1}`,
     ...(pitches.length ? { slope: pitches[Math.min(i, pitches.length - 1)] } : {}),

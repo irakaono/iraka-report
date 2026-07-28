@@ -68,5 +68,18 @@ ok(he.some((e) => e.role === 'eave' && e.dir === 'east' && e.overhang === 600)
   && he.some((e) => e.role === 'eave' && e.dir === 'west' && e.overhang === 250), '寄棟の軒＝東600・西250を器へ集約');
 ok(!he.some((e) => e.role === 'grip' || e.role === 'flashing'), '多方向（寄棟）は水上納まりを付けない（頂部は棟＝Shape確定へ）');
 
+// ★二段 Reader：Plan Observation が発見した器へ Elevation Observation を流し込む（plan 経由）。
+const viaPlan = reconcileRoofConfig({
+  elevations: specs,
+  plan: { units: [{ role: 'main', dir: 'west', name: '主屋根' }, { role: 'lower', dir: 'east', name: '東下屋' }], northDeg: 0, faceCount: 2 },
+});
+ok(viaPlan.roofs.length === 2 && viaPlan.roofs[0].role === 'main' && viaPlan.roofs[1].name === '東下屋', 'plan.units の器へ集約（旧 hierarchy と同結果）');
+
+// ★壁取り合い（Plan Observation）が水上納まりを決める：wallAdjacent で grip↔flashing が反転する。
+const wallOn = reconcileRoofConfig({ elevations: specs, plan: { units: [{ role: 'main', dir: 'west', wallAdjacent: true }] } });
+ok((wallOn.roofs[0].edges || []).some((e) => e.role === 'flashing'), '主屋根でも壁取り合い有→雨押え（壁が正）');
+const wallOff = reconcileRoofConfig({ elevations: specs, plan: { units: [{ role: 'lower', dir: 'east', wallAdjacent: false }] } });
+ok((wallOff.roofs[0].edges || []).some((e) => e.role === 'grip'), '下屋でも壁に当たらなければ→つかみ込み（壁が正）');
+
 if (fails.length) { console.error('❌ recognizer FAIL:\n' + fails.map((f) => '  - ' + f).join('\n')); process.exit(1); }
 console.log(`✅ Recognizer(STEP2 立面グルーピング) test: 全 ${pass} 件合格（勾配三角・軒の出を方位へ割当）`);
