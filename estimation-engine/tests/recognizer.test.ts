@@ -57,5 +57,16 @@ ok(uLower.role === 'lower' && uLower.name === '東下屋' && uLower.slope === 2,
 ok((uLower.edges || []).some((e) => e.role === 'eave' && e.dir === 'east' && e.overhang === 600), '東下屋の軒＝east600');
 ok((uLower.edges || []).some((e) => e.role === 'flashing'), '下屋の水上＝雨押え（壁有）');
 
+// ★器（Roof Unit）へ Observation を集約：寄棟主屋根が四方の立面を1つの器に集める。
+const hip = reconcileRoofConfig({ elevations: specs, hierarchy: [
+  { role: 'main', facing: ['east', 'west', 'north', 'south'], name: '寄棟主屋根' },
+] });
+ok(hip.roofs.length === 1, '寄棟主屋根＝1系統（器は1つ）');
+ok(hip.roofs[0].slope === 2, `四方を集約→代表勾配は最小2寸（実 ${hip.roofs[0].slope}）`);
+const he = hip.roofs[0].edges || [];
+ok(he.some((e) => e.role === 'eave' && e.dir === 'east' && e.overhang === 600)
+  && he.some((e) => e.role === 'eave' && e.dir === 'west' && e.overhang === 250), '寄棟の軒＝東600・西250を器へ集約');
+ok(!he.some((e) => e.role === 'grip' || e.role === 'flashing'), '多方向（寄棟）は水上納まりを付けない（頂部は棟＝Shape確定へ）');
+
 if (fails.length) { console.error('❌ recognizer FAIL:\n' + fails.map((f) => '  - ' + f).join('\n')); process.exit(1); }
 console.log(`✅ Recognizer(STEP2 立面グルーピング) test: 全 ${pass} 件合格（勾配三角・軒の出を方位へ割当）`);

@@ -80,50 +80,63 @@ export function readElevation(
     .map((d) => ({ dir: d, pitches: [...byDir.get(d)!.pitches].sort((a, b) => a - b), overhangs: [...byDir.get(d)!.overhangs].sort((a, b) => a - b), labels: [...byDir.get(d)!.labels] }));
 }
 
-// ── Reconciler（R-3）：複数の Observation を突き合わせて Roof Configuration を作る（割当ではなく統合） ──
-//   入力は Observation 群：Reader（立面）＋ Geometry（平面の面数）＋ 真北 ＋ 屋根系統（建物の階層構造）。
-//   ★確定の単位は「面」ではなく「系統（Roof Unit）」＝屋根屋が現場で数える単位（主屋根→東下屋→西下屋）。
-//     1系統は1面の片流れのことも、複数面の寄棟のこともある。この単位なら複雑な屋根も自然に拡張できる。
+// ── Reconciler（R-3）：Roof Unit（器）へ Observation を集約し、器ごとに確定する ──
+//   ★Roof Unit は Reconciler の「出力」ではなく「整合を行う単位（器）」。
+//     設計者が建物を考えた単位（主屋根・下屋・玄関下屋）が先に在り、そこへ各方位の Observation を集める。
+//     ＝雨漏りOS の Case←Evidence と同じ（Evidence から Case を作らない。Case に Evidence を集める）。
+//         Roof Unit └ Observations（East/West/North/South/Plan）→ Reconcile → 勾配/軒/水上/雨樋 を確定
+//     将来（太陽光・雪止め・天窓…）も「Unit に Observation が増えるだけ」。設計は変わらない。
 //   真北の優先：①平面の北矢印（最も信頼）②立面の名称（南/東立面）③不一致は確認カードで質問。
-//   推論の芯：屋根系統があれば「系統ごとに確定」。無ければ 面数（geometry優先→異勾配数）へフォールバック。
+//   系統（器）が観測できないときだけ、面数（geometry優先→異勾配数）から器を仮生成するフォールバックに落ちる。
 export interface RoofUnitObservation {
-  role: RoofUnitRole;   // 主屋根/下屋/玄関下屋（平面の階層構造から観測）
-  dir?: Dir;            // その系統が主に面する方位（立面の読みと突き合わせる鍵）
+  role: RoofUnitRole;   // 主屋根/下屋/玄関下屋（平面の階層構造＝設計者の単位）
+  facing?: Dir[];       // その系統が面する方位（複数可。寄棟は四方）。ここへ立面 Observation を集める鍵
+  dir?: Dir;            // 主に面する1方位（facing 省略時の後方互換）
   name?: string;        // 人が読む名（「東下屋」など）
 }
 export interface RoofObservations {
   elevations?: ElevationSpec[];       // Reader（立面ごとの読み取り＝Observation）
   faceCount?: number;                 // Geometry（平面の面数＝Observation）
   northDeg?: number;                  // 真北（方位整合＝Observation・優先①北矢印）
-  hierarchy?: RoofUnitObservation[];  // 屋根系統（建物の階層構造＝Observation。主屋根＋下屋…）
+  hierarchy?: RoofUnitObservation[];  // 屋根系統（建物の階層構造＝器の一覧。主屋根＋下屋…）
 }
+
+// 水上の納まり既定（WITHDOM＝片棟/軒 仕様）：主屋根＝つかみ込み（壁に当たらない片棟）／下屋・玄関下屋＝雨押え（壁有）。
+function topRole(role: RoofUnitRole): EdgeConfig['role'] { return role === 'main' ? 'grip' : 'flashing'; }
+
+// 器（1つの Roof Unit）へ集めた立面 Observation から、その系統の勾配・軒・水上を確定する。
+//   gathered＝この器に属する立面の読み。fallbackPitch＝器が方位を持たない/読めない時の代表勾配。
+function resolveUnit(u: RoofUnitObservation, id: string, gathered: ElevationSpec[], fallbackPitch?: number): RoofUnit {
+  const facing = u.facing?.length ? u.facing : (u.dir != null ? [u.dir] : []);
+  const pitches = gathered.flatMap((r) => r.pitches);
+  const slope = (pitches.length ? Math.min(...pitches) : undefined) ?? fallbackPitch;
+  const edges: EdgeConfig[] = [];
+  for (const d of facing) {
+    const r = gathered.find((g) => g.dir === d);
+    const ov = r && r.overhangs.length ? Math.min(...r.overhangs) : undefined;
+    edges.push({ role: 'eave', dir: d, ...(ov != null ? { overhang: ov } : {}) });
+  }
+  // 水上の納まり（つかみ込み/雨押え）は片流れ＝1方向の系統だけ。多方向（寄棟/切妻）の頂部は棟で、Shape 確定に委ねる。
+  if (facing.length <= 1) edges.push({ role: topRole(u.role) });
+  return { id, role: u.role, ...(u.name ? { name: u.name } : {}), ...(slope != null ? { slope } : {}), edges };
+}
+
 export function reconcileRoofConfig(obs: RoofObservations): RoofConfiguration {
   const readings = obs.elevations ?? [];
   const pitches = Array.from(new Set(readings.flatMap((r) => r.pitches))).sort((a, b) => a - b);
-  // 方位別の代表値（勾配は最初の読み・軒の出は最小＝軒寄り）。系統を立面へ突き合わせる索引。
-  const dirPitch = new Map<Dir, number>();
-  const dirOverhang = new Map<Dir, number>();
-  for (const r of readings) {
-    if (r.pitches.length && !dirPitch.has(r.dir)) dirPitch.set(r.dir, r.pitches[0]);
-    if (r.overhangs.length) dirOverhang.set(r.dir, Math.min(...r.overhangs));
-  }
-  // 水上の納まり既定（WITHDOM＝片棟/軒 仕様）：主屋根＝つかみ込み（壁に当たらない片棟）／下屋・玄関下屋＝雨押え（壁有）。
-  const topRole = (role: RoofUnitRole): EdgeConfig['role'] => (role === 'main' ? 'grip' : 'flashing');
 
-  // ★屋根系統があれば「系統（Roof Unit）ごとに確定」。これが本筋。
+  // ★本筋：屋根系統（器）が在れば、各器へ Observation を集めて確定する。
   if (obs.hierarchy && obs.hierarchy.length) {
     const mainPitch = pitches.length ? pitches[0] : undefined;
-    const units: RoofUnit[] = obs.hierarchy.map((h, i) => {
-      const slope = (h.dir != null ? dirPitch.get(h.dir) : undefined) ?? mainPitch;
-      const edges: EdgeConfig[] = [];
-      if (h.dir != null) { const ov = dirOverhang.get(h.dir); edges.push({ role: 'eave', dir: h.dir, ...(ov != null ? { overhang: ov } : {}) }); }
-      edges.push({ role: topRole(h.role) }); // 水上（軒の対辺）の納まり
-      return { id: `R${i + 1}`, role: h.role, ...(h.name ? { name: h.name } : {}), ...(slope != null ? { slope } : {}), edges };
+    const units = obs.hierarchy.map((u, i) => {
+      const facing = u.facing?.length ? u.facing : (u.dir != null ? [u.dir] : []);
+      const gathered = readings.filter((r) => facing.includes(r.dir)); // 器へ Observation を集約
+      return resolveUnit(u, `R${i + 1}`, gathered, mainPitch);
     });
     return buildRoofConfiguration(units);
   }
 
-  // フォールバック（系統未観測）：方位別の軒の出を eave 辺に、面数＝geometry優先→異勾配数。
+  // フォールバック（器が観測できない）：方位別の軒の出を eave 辺に、面数＝geometry優先→異勾配数で器を仮生成。
   const eaveEdges: EdgeConfig[] = readings
     .filter((r) => r.overhangs.length)
     .map((r) => ({ role: 'eave', dir: r.dir, overhang: Math.min(...r.overhangs) }));
