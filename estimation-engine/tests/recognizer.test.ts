@@ -44,5 +44,18 @@ ok(e0.some((e) => e.role === 'eave' && e.dir === 'west' && e.overhang === 250), 
 ok(reconcileRoofConfig({ elevations: specs, faceCount: 3 }).roofs.length === 3, 'faceCount優先→面3');
 ok(reconcileRoofConfig({}).roofs.length === 1, '観測なし→屋根1（フォールバック）');
 
+// ★屋根系統ごとに確定（Roof Unit）：主屋根(西4寸・つかみ込み) ＋ 東下屋(2寸・軒600・雨押え)。
+const uc = reconcileRoofConfig({ elevations: specs, hierarchy: [
+  { role: 'main', dir: 'west', name: '主屋根' },
+  { role: 'lower', dir: 'east', name: '東下屋' },
+] });
+ok(uc.roofs.length === 2, `系統2つ→Unit2つ（実 ${uc.roofs.length}）`);
+const uMain = uc.roofs[0], uLower = uc.roofs[1];
+ok(uMain.role === 'main' && uMain.slope === 4, `主屋根＝西4寸（実 role=${uMain.role} slope=${uMain.slope}）`);
+ok((uMain.edges || []).some((e) => e.role === 'grip'), '主屋根の水上＝つかみ込み（壁に当たらない片棟）');
+ok(uLower.role === 'lower' && uLower.name === '東下屋' && uLower.slope === 2, `東下屋＝2寸（実 slope=${uLower.slope}）`);
+ok((uLower.edges || []).some((e) => e.role === 'eave' && e.dir === 'east' && e.overhang === 600), '東下屋の軒＝east600');
+ok((uLower.edges || []).some((e) => e.role === 'flashing'), '下屋の水上＝雨押え（壁有）');
+
 if (fails.length) { console.error('❌ recognizer FAIL:\n' + fails.map((f) => '  - ' + f).join('\n')); process.exit(1); }
 console.log(`✅ Recognizer(STEP2 立面グルーピング) test: 全 ${pass} 件合格（勾配三角・軒の出を方位へ割当）`);

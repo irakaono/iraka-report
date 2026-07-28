@@ -742,20 +742,19 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
                     </select>
                     <span style={{ fontSize: 11, color: '#adb5bd', marginLeft: 8 }}>※形の自動判定は今後。ご確認ください</span>
                   </Row>
-                  <Row label="屋根面の数" ok={suggestedFaceCount > 1}>
+                  <Row label="屋根系統" ok={suggestedFaceCount > 1}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      <b style={{ fontSize: 14, color: '#1a2530' }}>{1 + reviewExtra} 面</b>
-                      <span style={{ fontSize: 12, color: '#868e96' }}>（主屋根＋下屋</span>
+                      <b style={{ fontSize: 14, color: '#1a2530' }}>主屋根 ＋ 下屋</b>
                       <button onClick={() => setReviewExtra((v) => Math.max(0, v - 1))}
                         style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #ced4da', background: '#fff', cursor: 'pointer', fontWeight: 800, color: '#495057' }}>−</button>
                       <b style={{ minWidth: 14, textAlign: 'center' }}>{reviewExtra}</b>
                       <button onClick={() => setReviewExtra((v) => Math.min(8, v + 1))}
                         style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid #ced4da', background: '#fff', cursor: 'pointer', fontWeight: 800, color: '#495057' }}>＋</button>
-                      <span style={{ fontSize: 12, color: '#868e96' }}>枚）</span>
+                      <span style={{ fontSize: 12, color: '#868e96' }}>系統（計 {1 + reviewExtra}）</span>
                     </span>
                     {suggestedFaceCount > 1
-                      ? <span style={{ fontSize: 11, color: '#e8590c', marginLeft: 8 }}>AIは勾配{suggestedFaceCount}種→<b>{suggestedFaceCount}面</b>と読みました</span>
-                      : <span style={{ fontSize: 11, color: '#adb5bd', marginLeft: 8 }}>片流れ2つ→2面／2階・3階の下屋はその分ふやす</span>}
+                      ? <span style={{ fontSize: 11, color: '#e8590c', marginLeft: 8 }}>AIは勾配{suggestedFaceCount}種→<b>{suggestedFaceCount}系統</b>と読みました</span>
+                      : <span style={{ fontSize: 11, color: '#adb5bd', marginLeft: 8 }}>片流れ2つ→2系統／2階・3階の下屋はその分ふやす</span>}
                   </Row>
                   <Row label="縮尺" ok={!!(scaleHint && scaleHint.pxPerMeter != null)}>
                     {scaleHint && scaleHint.pxPerMeter != null

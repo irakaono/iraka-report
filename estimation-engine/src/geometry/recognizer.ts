@@ -12,9 +12,9 @@
 //     ＝「割当」ではなく「統合」。雨漏りOSの Observation/Evidence/Reconcile と同じ思想。
 //   Reader は OCR/抽出が変わっても壊れない。Reconciler は屋根の建築知識で証拠を整合。契約＝roofConfig.ts。
 //   正の設計：claude/RECOGNIZER-ARCHITECTURE.md（R-1 契約 / R-2 Reader / R-3 Reconciler）。
-import type { Dir, RoofConfiguration, RoofUnit, EdgeConfig } from './roofConfig';
+import type { Dir, RoofConfiguration, RoofUnit, EdgeConfig, RoofUnitRole } from './roofConfig';
 import { buildRoofConfiguration } from './roofConfig';
-export type { Dir } from './roofConfig'; // 方位は Roof Configuration 契約が正（後方互換 re-export）
+export type { Dir, RoofUnitRole } from './roofConfig'; // 方位・系統は Roof Configuration 契約が正（後方互換 re-export）
 
 export const DIR_JP: Record<string, Dir> = { 南: 'south', 東: 'east', 北: 'north', 西: 'west' };
 
@@ -81,24 +81,52 @@ export function readElevation(
 }
 
 // ── Reconciler（R-3）：複数の Observation を突き合わせて Roof Configuration を作る（割当ではなく統合） ──
-//   入力は Observation 群：Reader（立面）＋ Geometry（平面の面数）＋ 真北。
-//   推論の芯：異なる勾配は異なる屋根面（東2寸+西4寸→面2つ）。同じ勾配なら同一面かもしれない。
-//   ★屋根面は整合の結果として確定する。★Geometry には触れない。返すのは Roof Configuration だけ。
-//   第一版（ドラフト）：面数＝geometry優先→無ければ異勾配数。勾配を面へ、方位別の軒の出を eave 辺に。
-//   軒辺と雨押え辺の厳密割当・真北整合は R-3 本実装で締める（今は人が確認＝確認ファースト）。
+//   入力は Observation 群：Reader（立面）＋ Geometry（平面の面数）＋ 真北 ＋ 屋根系統（建物の階層構造）。
+//   ★確定の単位は「面」ではなく「系統（Roof Unit）」＝屋根屋が現場で数える単位（主屋根→東下屋→西下屋）。
+//     1系統は1面の片流れのことも、複数面の寄棟のこともある。この単位なら複雑な屋根も自然に拡張できる。
+//   真北の優先：①平面の北矢印（最も信頼）②立面の名称（南/東立面）③不一致は確認カードで質問。
+//   推論の芯：屋根系統があれば「系統ごとに確定」。無ければ 面数（geometry優先→異勾配数）へフォールバック。
+export interface RoofUnitObservation {
+  role: RoofUnitRole;   // 主屋根/下屋/玄関下屋（平面の階層構造から観測）
+  dir?: Dir;            // その系統が主に面する方位（立面の読みと突き合わせる鍵）
+  name?: string;        // 人が読む名（「東下屋」など）
+}
 export interface RoofObservations {
-  elevations?: ElevationSpec[];   // Reader（立面ごとの読み取り＝Observation）
-  faceCount?: number;             // Geometry（平面の面数＝Observation）
-  northDeg?: number;              // 真北（方位整合＝Observation）
+  elevations?: ElevationSpec[];       // Reader（立面ごとの読み取り＝Observation）
+  faceCount?: number;                 // Geometry（平面の面数＝Observation）
+  northDeg?: number;                  // 真北（方位整合＝Observation・優先①北矢印）
+  hierarchy?: RoofUnitObservation[];  // 屋根系統（建物の階層構造＝Observation。主屋根＋下屋…）
 }
 export function reconcileRoofConfig(obs: RoofObservations): RoofConfiguration {
   const readings = obs.elevations ?? [];
   const pitches = Array.from(new Set(readings.flatMap((r) => r.pitches))).sort((a, b) => a - b);
-  // 方位別の代表軒の出（最小＝軒寄り）を eave 辺に。辺の厳密割当は R-3 本実装。
+  // 方位別の代表値（勾配は最初の読み・軒の出は最小＝軒寄り）。系統を立面へ突き合わせる索引。
+  const dirPitch = new Map<Dir, number>();
+  const dirOverhang = new Map<Dir, number>();
+  for (const r of readings) {
+    if (r.pitches.length && !dirPitch.has(r.dir)) dirPitch.set(r.dir, r.pitches[0]);
+    if (r.overhangs.length) dirOverhang.set(r.dir, Math.min(...r.overhangs));
+  }
+  // 水上の納まり既定（WITHDOM＝片棟/軒 仕様）：主屋根＝つかみ込み（壁に当たらない片棟）／下屋・玄関下屋＝雨押え（壁有）。
+  const topRole = (role: RoofUnitRole): EdgeConfig['role'] => (role === 'main' ? 'grip' : 'flashing');
+
+  // ★屋根系統があれば「系統（Roof Unit）ごとに確定」。これが本筋。
+  if (obs.hierarchy && obs.hierarchy.length) {
+    const mainPitch = pitches.length ? pitches[0] : undefined;
+    const units: RoofUnit[] = obs.hierarchy.map((h, i) => {
+      const slope = (h.dir != null ? dirPitch.get(h.dir) : undefined) ?? mainPitch;
+      const edges: EdgeConfig[] = [];
+      if (h.dir != null) { const ov = dirOverhang.get(h.dir); edges.push({ role: 'eave', dir: h.dir, ...(ov != null ? { overhang: ov } : {}) }); }
+      edges.push({ role: topRole(h.role) }); // 水上（軒の対辺）の納まり
+      return { id: `R${i + 1}`, role: h.role, ...(h.name ? { name: h.name } : {}), ...(slope != null ? { slope } : {}), edges };
+    });
+    return buildRoofConfiguration(units);
+  }
+
+  // フォールバック（系統未観測）：方位別の軒の出を eave 辺に、面数＝geometry優先→異勾配数。
   const eaveEdges: EdgeConfig[] = readings
     .filter((r) => r.overhangs.length)
     .map((r) => ({ role: 'eave', dir: r.dir, overhang: Math.min(...r.overhangs) }));
-  // 面数の整合：平面の面数があれば優先、無ければ「異なる勾配の数」を面数の証拠とする。
   const nRoofs = (obs.faceCount && obs.faceCount > 0) ? obs.faceCount : (pitches.length || 1);
   const units: RoofUnit[] = Array.from({ length: nRoofs }, (_, i) => ({
     id: `R${i + 1}`,

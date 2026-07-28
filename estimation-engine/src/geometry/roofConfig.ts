@@ -15,9 +15,16 @@ export interface DrainConfig { eaves?: Dir[] }                                  
 export interface MaterialConfig { type?: string }                                     // Roofing Material Compiler
 export interface SolarConfig { present?: boolean }                                    // Solar Compiler
 
-// 屋根1面/1系統。各フィールドが sub-Configuration（＝各 sub-Compiler の出力）。
+// 屋根系統上の位置（＝屋根屋が現場で数える単位）。建物の階層構造 Building→Roof(s) の Roof 側。
+//   ★甍AI は屋根専門なので Building は持たない（親＝小泉建設AI）。RoofUnit の集合がその建物の「屋根系統」。
+export type RoofUnitRole = 'main' | 'lower' | 'porch';  // 主屋根 / 下屋 / 玄関下屋（下屋の一種）
+export const ROOF_UNIT_JP: Record<RoofUnitRole, string> = { main: '主屋根', lower: '下屋', porch: '玄関下屋' };
+
+// 屋根1系統（＝Roof Unit。1面の片流れも、複数面の寄棟も、等しく1系統）。各フィールドが sub-Configuration。
 export interface RoofUnit {
   id: string;
+  role?: RoofUnitRole;                   // 系統上の位置（主屋根/下屋/玄関下屋）。屋根屋が数える単位
+  name?: string;                         // 人が読む名（「東下屋」など・確認カード表示用）
   shape?: string;                        // Roof Shape Compiler（片流れ/切妻/寄棟…）
   slope?: number;                        // Roof Slope Compiler（寸）
   edges?: EdgeConfig[];                  // Eave/Ridge/Valley/Flashing Compiler
