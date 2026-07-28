@@ -20,6 +20,9 @@ export interface VecReading {
 export type VectorReader<TInput> = (input: TInput) => VecReading;
 
 // ── Topology IR＝Topology Compiler の出力＝純粋トポロジ（屋根/建築を知らない・Geometry Runtime 契約）。 ──
+//   ★名称は暫定（Freeze 対象は責務境界＝Vector Reader/Topology Compiler/Analyzer/Reconciler）。
+//     IR 名は後段の Geometry Compiler→Geometry IR（屋根生成用）との「Geometry 二重」衝突回避のため将来調整余地あり
+//     （候補：Topology Core IR / Geometry Core IR）。挙動には無関係＝改名しても境界は不変。設計：RECOGNIZER-ARCHITECTURE.md §1.5。
 export type Side = 'top' | 'right' | 'bottom' | 'left'; // ★幾何スクリーン基準（北ではない）。方位変換は Analyzer。
 export interface Pt { x: number; y: number }
 export interface Loop { id: string; rect: { x0: number; y0: number; x1: number; y1: number }; area: number } // 閉ループ（第一版＝矩形）
