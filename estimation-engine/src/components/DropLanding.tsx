@@ -6,6 +6,11 @@ import { inferScale, type ScaleHint } from '../geometry/scaleInference';
 import { inferElevation, type ElevationHint } from '../geometry/elevationInference';
 import { readElevation, type ElevationSpec } from '../geometry/recognizer';
 import { coalesceTextItems, type RawGlyph } from '../geometry/pdfText';
+import { extractSegments, type PdfOps, type OperatorList } from '../geometry/vectorReader';
+import { wallFilter } from '../geometry/wallFilter';
+import { traceOutline } from '../geometry/contourTrace';
+import { wallCorners } from '../geometry/cornerSnap';
+import type { FootprintCandidate } from '../geometry/footprint';
 
 // pdf.js の textContent（グリフ単位のことがある）を語・数値トークンに結合して返す。
 async function pageTokens(doc: any, pageNum: number) {
@@ -25,6 +30,7 @@ export interface DrawingSet {
   scaleHint?: ScaleHint | null;      // 平面図から推定した縮尺（提案・人が確認して確定）
   elevHint?: ElevationHint | null;   // 立面図から推定した勾配・軒の出（集計候補）
   elevReadings?: ElevationSpec[];    // 立面ごとの Reader 結果（R-2.5 見える化用）
+  footprint?: FootprintCandidate | null; // 平面図から認識した Building Footprint Candidate（Phase E・下書きと角スナップの土台）
 }
 
 const RENDER_SCALE = 2; // renderDocPage の既定倍率と一致させる（pxPerMeter は画像px基準）
@@ -115,11 +121,41 @@ async function fileToImageSrc(file: File): Promise<string> {
   throw new Error('対応形式は PDF / 画像（PNG・JPG 等）です');
 }
 
-// 平面図：画像化＋縮尺推定をまとめて（PDFのみ縮尺を推定。画像は手動較正へ）。
-async function planWithHint(file: File): Promise<{ src: string; hint: ScaleHint | null }> {
+// pdfjs.OPS（コード表）を Vector Reader が要る形へ。pdfjs を import しない純関数へ渡すため（vectorReader.ts と同じ契約）。
+function opsOf(OPS: any): PdfOps {
+  return {
+    save: OPS.save, restore: OPS.restore, transform: OPS.transform, constructPath: OPS.constructPath,
+    moveTo: OPS.moveTo, lineTo: OPS.lineTo, curveTo: OPS.curveTo, curveTo2: OPS.curveTo2, curveTo3: OPS.curveTo3,
+    closePath: OPS.closePath, rectangle: OPS.rectangle,
+  };
+}
+
+// 平面図ページ → Building Footprint Candidate（認識・Phase E）。
+//   Recognizer 純関数（Vector Reader → wallFilter → traceOutline → wallCorners）を回し、
+//   外形 polygon と 認識した壁角 corners を「描画した平面図画像のピクセル座標」で返す（＝背景と同座標系）。
+//   ★壁が読めない/フォーマット非対応でも既存フローを壊さない：失敗は null（下書きは従来のプリセットになる）。
+async function extractFootprint(doc: any, pageNum: number): Promise<FootprintCandidate | null> {
+  try {
+    const pdfjs = await getPdfjs();
+    const page = await doc.getPage(pageNum);
+    const opList = (await page.getOperatorList()) as OperatorList;
+    const ex = extractSegments(opList, opsOf(pdfjs.OPS));
+    const walls = wallFilter(ex.segments);
+    const r = traceOutline(walls);
+    if (!r || r.polygon.length < 4) return null;
+    const corners = wallCorners(walls, r.polygon, { cluster: 12 });
+    // PDF ユーザ空間 → 描画画像px（renderDocPage と同じ viewport = RENDER_SCALE）。背景に重なる座標へ。
+    const viewport = page.getViewport({ scale: RENDER_SCALE });
+    const toPx = (p: { x: number; y: number }) => { const v = viewport.convertToViewportPoint(p.x, p.y); return { x: v[0], y: v[1] }; };
+    return { polygon: r.polygon.map(toPx), corners: corners.map(toPx), width: viewport.width, height: viewport.height, page: pageNum };
+  } catch { return null; }
+}
+
+// 平面図：画像化＋縮尺推定＋外形認識をまとめて（PDFのみ。画像は手動較正へ）。
+async function planWithHint(file: File): Promise<{ src: string; hint: ScaleHint | null; footprint: FootprintCandidate | null }> {
   const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-  if (isPdf) { const doc = await loadPdfDoc(file); const src = await renderDocPage(doc, 1); const hint = await extractScaleHint(doc, 1); return { src, hint }; }
-  return { src: await fileToImageSrc(file), hint: null };
+  if (isPdf) { const doc = await loadPdfDoc(file); const src = await renderDocPage(doc, 1); const hint = await extractScaleHint(doc, 1); const footprint = await extractFootprint(doc, 1); return { src, hint, footprint }; }
+  return { src: await fileToImageSrc(file), hint: null, footprint: null };
 }
 
 // 立面図ページのテキスト（座標つき）から勾配・軒の出を推定。取れなければ null。
@@ -200,6 +236,7 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
   const [planHint, setPlanHint] = useState<ScaleHint | null>(null); // 平面図から推定した縮尺（提案）
   const [elevHint, setElevHint] = useState<ElevationHint | null>(null); // 立面図から推定した勾配・軒の出（集計候補）
   const [elevReadings, setElevReadings] = useState<ElevationSpec[]>([]); // 立面ごとの Reader 結果（R-2.5）
+  const [planFootprint, setPlanFootprint] = useState<FootprintCandidate | null>(null); // 平面図から認識した外形（Phase E）
   const extractInputRef = useRef<HTMLInputElement>(null);
 
   // 指定ページを描画して 平面図/立面図 スロットへ。
@@ -208,7 +245,7 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
     try {
       const src = await renderDocPage(doc, page.n);
       const name = `${fileName} p${page.n}${page.title && page.title !== 'その他' ? '（' + page.title + '）' : ''}`;
-      if (which === 'plan') { setPlan({ src, name }); setPlanPage(page.n); setPlanHint(await extractScaleHint(doc, page.n)); }
+      if (which === 'plan') { setPlan({ src, name }); setPlanPage(page.n); setPlanHint(await extractScaleHint(doc, page.n)); setPlanFootprint(await extractFootprint(doc, page.n)); }
       else { setElev({ src, name }); setElevPage(page.n); const ev = await extractElev(doc, page.n); setElevHint(ev.hint); setElevReadings(ev.readings); }
     } catch {
       setErr((prev) => ({ ...prev, [which]: '該当ページの描画に失敗' }));
@@ -240,8 +277,8 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
     setErr((e) => ({ ...e, [which]: null }));
     try {
       if (which === 'plan') {
-        const { src, hint } = await planWithHint(file);
-        setPlan({ src, name: file.name }); setPlanHint(hint);
+        const { src, hint, footprint } = await planWithHint(file);
+        setPlan({ src, name: file.name }); setPlanHint(hint); setPlanFootprint(footprint);
       } else {
         const { src, hint, readings } = await elevWithHint(file);
         setElev({ src, name: file.name }); setElevHint(hint); setElevReadings(readings);
@@ -255,8 +292,8 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
   };
 
   const start = (withDrawings: boolean) => onStart(withDrawings
-    ? { planSrc: plan.src, planName: plan.name, elevationSrc: elev.src, elevationName: elev.name, scaleHint: planHint, elevHint, elevReadings }
-    : { planSrc: null, planName: null, elevationSrc: null, elevationName: null, scaleHint: null, elevHint: null, elevReadings: [] });
+    ? { planSrc: plan.src, planName: plan.name, elevationSrc: elev.src, elevationName: elev.name, scaleHint: planHint, elevHint, elevReadings, footprint: planFootprint }
+    : { planSrc: null, planName: null, elevationSrc: null, elevationName: null, scaleHint: null, elevHint: null, elevReadings: [], footprint: null });
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: '28px 20px', fontFamily: 'system-ui, sans-serif' }}>
@@ -267,7 +304,7 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
 
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
         <DropZone label="平面図" src={plan.src} name={plan.name} busy={busy.plan} error={err.plan}
-          onPick={(f) => pick('plan', f)} onClear={() => { setPlan({ src: null, name: null }); setErr((e) => ({ ...e, plan: null })); setPlanPage(null); setPlanHint(null); }} />
+          onPick={(f) => pick('plan', f)} onClear={() => { setPlan({ src: null, name: null }); setErr((e) => ({ ...e, plan: null })); setPlanPage(null); setPlanHint(null); setPlanFootprint(null); }} />
         <DropZone label="立面図" src={elev.src} name={elev.name} busy={busy.elev} error={err.elev}
           onPick={(f) => pick('elev', f)} onClear={() => { setElev({ src: null, name: null }); setErr((e) => ({ ...e, elev: null })); setElevPage(null); setElevHint(null); setElevReadings([]); }} />
       </div>
@@ -320,6 +357,13 @@ export default function DropLanding({ onStart }: { onStart: (d: DrawingSet) => v
           {planHint.noteD ? `1/${planHint.noteD}` : '寸法から推定'}
           {planHint.source === 'note+dimension' && planHint.agree === true ? '（縮尺表記と寸法が一致）' : planHint.source === 'note+dimension' && planHint.agree === false ? '（表記と寸法にズレあり・要確認）' : planHint.source === 'dimension' ? '（寸法チェーンから）' : ''}
           <span style={{ fontWeight: 500, color: '#495057' }}>　→ 積算開始後に「この縮尺で設定」で確定できます（手動2点も可）。</span>
+        </div>
+      )}
+
+      {planFootprint && (
+        <div style={{ marginTop: 12, padding: '8px 14px', background: '#e7f5ff', border: '1px solid #a5d8ff', borderRadius: 10, fontSize: 13, color: '#1971c2', fontWeight: 700 }}>
+          🏠 平面図から建物の外形を認識しました（{planFootprint.polygon.length}頂点）
+          <span style={{ fontWeight: 500, color: '#495057' }}>　→ 積算開始後、その形で下書きが置かれます。角をドラッグすると壁の角に吸着します。</span>
         </div>
       )}
 

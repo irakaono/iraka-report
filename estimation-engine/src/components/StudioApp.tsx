@@ -19,6 +19,7 @@ export default function StudioApp() {
       scaleHint={drawings.scaleHint ?? null}
       elevHint={drawings.elevHint ?? null}
       elevReadings={drawings.elevReadings ?? []}
+      footprint={drawings.footprint ?? null}
       onBackToDrawings={() => setPhase('landing')}
     />
   );

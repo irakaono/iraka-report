@@ -31,6 +31,9 @@ import { offsetPolygonOutward } from '../geometry/elevationInference';
 import type { ElevationHint } from '../geometry/elevationInference';
 import type { ElevationSpec } from '../geometry/recognizer';
 import { preset, buildDraftFaces, shedFace, suggestFaceCount } from '../geometry/draftFaces';
+import { placeFootprint } from '../geometry/footprint';
+import type { FootprintCandidate } from '../geometry/footprint';
+import { snapToCorner } from '../geometry/cornerSnap';
 import AcceptancePanel from './AcceptancePanel';
 import { buildEstimate } from '../geometry/estimateExport';
 import type { GutterProgram } from '../geometry/acceptance';
@@ -89,6 +92,7 @@ function estimationHost(): EstimationHost | undefined {
 }
 
 const W = 720, H = 560;
+const SNAP_PX = 12; // 角スナップのしきい値（キャンバスpx）。この距離内なら認識した壁角へ吸着。
 const ROLE_COLOR: Record<string, string> = { ridge: '#e03131', hip: '#e8590c', valley: '#1971c2', eave: '#2f9e44', gable: '#7048e8', wall_flashing: '#c2255c', shed_ridge: '#d6336c', grip: '#0ca678' };
 const ROLE_LABEL: Record<string, string> = { ridge: '棟', hip: '隅棟', valley: '谷', eave: '軒', gable: 'ケラバ', wall_flashing: '雨押え', shed_ridge: '片棟', grip: 'つかみ込み' };
 // 辺の種別を人が選ぶときの選択肢（自動＝幾何にまかせる）。水上納まりは片流れ等の水上辺に。
@@ -117,6 +121,7 @@ interface RoofStudioProps {
   scaleHint?: ScaleHint | null;   // 平面図から推定した縮尺（提案・人が確認して確定）
   elevHint?: ElevationHint | null; // 立面図から推定した勾配・軒の出（集計候補）
   elevReadings?: ElevationSpec[];  // 立面ごとの Reader 結果（R-2.5 見える化）
+  footprint?: FootprintCandidate | null; // 平面図から認識した Building Footprint Candidate（Phase E・下書きと角スナップ）
   onBackToDrawings?: () => void;  // 入口（図面ドロップ）へ戻る
 }
 
@@ -125,7 +130,7 @@ interface RoofStudioProps {
 //     以前は雨樋だけ History で、屋根編集は戻せなかった＝「触るのが怖い」UI。1コミット=1操作=1回のUndo。
 interface EditState { faces: FaceInput[]; roleOverrides: Record<string, EdgeRole>; drain: DrainModel }
 
-export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint, elevReadings, onBackToDrawings }: RoofStudioProps = {}) {
+export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint, elevReadings, footprint, onBackToDrawings }: RoofStudioProps = {}) {
   // ── 統合編集履歴（屋根＋雨樋を1本の Undo に）。faces/roleOverrides/drain はここから読む。 ──
   const [edit, setEdit] = useState<History<EditState>>(() => initHistory({ faces: preset('gable'), roleOverrides: {}, drain: emptyDrainModel('DR-1', 'RF-draft') }));
   const [liveFaces, setLiveFaces] = useState<FaceInput[] | null>(null); // ドラッグ中の一時表示（履歴に積まない・drag endで1コミット）
@@ -133,6 +138,9 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
   const roleOverrides = edit.present.roleOverrides; // 辺ID→人が指定した種別（軒/ケラバ/雨押え…）。空=自動
   const faces = liveFaces ?? committedFaces;         // 表示・計算はドラッグ中なら一時表示、通常は確定値
   const [draft, setDraft] = useState<Point[]>([]);
+  // ── Phase E：認識した壁角（キャンバス座標）＝ドラッグ時の吸着先。footprint シード時にセット。 ──
+  const [snapCorners, setSnapCorners] = useState<Point[]>([]);
+  const [keepFootprint, setKeepFootprint] = useState<boolean>(!!footprint); // 確認カード：認識外形を下書きに使う（おすすめ）
   // 統合コミット（変化なしなら積まない）。past に積み future を捨てる＝Command 履歴と同じ規律。
   const commitEdit = (next: EditState) => setEdit((h) => (next === h.present ? h : { past: [...h.past, h.present], present: next, future: [] }));
   // 既存の setFaces/setRoleOverrides 呼び出しをそのまま活かすシム（単発の屋根編集＝1コミット）。関数形も値形も可。
@@ -283,6 +291,29 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
     if (proposal.dropCount > 0) { setEdit((h) => initHistory({ ...h.present, drain: proposal.model })); idc.current = maxIdSuffix(proposal.model) + 1; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // ── Phase E：認識した Building Footprint Candidate を下書きに置く（＝「実建物形状で下書きが出る」）。 ──
+  //   平面図画像の読み込み後、背景と同じ contain＋中央寄せ変換でキャンバスへ写像し、初期 faces にする（プリセットを置換）。
+  //   認識した壁角は snapCorners（キャンバス座標）にして、角ドラッグの吸着先にする。★一度だけ（ref ガード）。
+  const footprintSeeded = useRef(false);
+  useEffect(() => {
+    if (footprintSeeded.current) return;
+    if (!footprint || !planImg) return;
+    footprintSeeded.current = true;
+    try {
+      const imgW = planImg.width || footprint.width, imgH = planImg.height || footprint.height;
+      const { vertices, corners } = placeFootprint(footprint.polygon, footprint.corners, imgW, imgH, W, H);
+      if (vertices.length < 3) return;
+      const face: FaceInput = { vertices, pitch: Number(reviewPitch) || 5, eaveEdgeIndex: bottomEdgeIndex(vertices) };
+      // 外形は「建物外周候補」＝まだ屋根面ではない。雨樋の自動提案は Phase F（屋根解釈）以降なので、ここでは空で置く。
+      const drain = emptyDrainModel('DR-1', 'RF-draft');
+      setEdit(initHistory({ faces: [face], roleOverrides: {}, drain }));
+      setLiveFaces(null);
+      idc.current = Math.max(idc.current, maxIdSuffix(drain) + 1);
+      setSnapCorners(corners);
+      setRoofFormChosen(true);
+    } catch { /* 認識の写像に失敗しても既存の下書き（プリセット）で続行 */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [footprint, planImg]);
   // 自動縮尺は表示倍率(bgScale)に追従＝図面をズーム/パンしても実寸(px/m)が保たれる。
   useEffect(() => {
     if (autoImagePPM == null) return;
@@ -437,14 +468,21 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
   const confirmReview = () => {
     const p = Number(reviewPitch) || 5;
     const mm = Number(reviewOverhang) || 0;
-    seedDraft(reviewForm, reviewExtra, p); // 形＋下屋の枚数＋勾配（面数を実際に合わせる）＋雨樋（片流れの水上は雨押え）
+    const usingFootprint = !!footprint && keepFootprint;
+    if (usingFootprint) {
+      // Phase E：認識した外形（シード済み faces）を保持し、勾配だけ反映。形テンプレで上書きしない。
+      setFaces((fs) => fs.map((f) => ({ ...f, pitch: p })));
+    } else {
+      seedDraft(reviewForm, reviewExtra, p); // 形＋下屋の枚数＋勾配（面数を実際に合わせる）＋雨樋（片流れの水上は雨押え）
+    }
     let effScale = scale;
     if (scaleHint?.pxPerMeter != null) { applyScaleHint(); effScale = scaleHint.pxPerMeter * bgScale; }
     if (mm > 0) applyOverhang(mm, effScale);
     setRoofFormChosen(true);
     setReviewOpen(false); setShowIntro(false);
-    // 縮尺が確定していれば数量まで出せる（⑤へ）。未確定なら縮尺合わせへ。
-    if (scaleHint?.pxPerMeter != null || calibration) { setRoofDone(true); setMode('gutter'); }
+    // 認識外形なら「角を合わせる」＝選択モードへ。テンプレなら従来どおり（縮尺確定で数量へ、未確定で縮尺合わせ）。
+    if (usingFootprint) { setMode('select'); if (scaleHint?.pxPerMeter != null || calibration) setRoofDone(true); }
+    else if (scaleHint?.pxPerMeter != null || calibration) { setRoofDone(true); setMode('gutter'); }
     else { setMode('calibrate'); }
   };
   const setPitch = (i: number, p: number) => setFaces((fs) => fs.map((f, j) => (j === i ? { ...f, pitch: p } : f)));
@@ -773,11 +811,24 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
               const selStyle = { fontSize: 14, padding: '5px 8px', borderRadius: 7, border: '1px solid #ced4da' } as const;
               return (
                 <div>
+                  {footprint && (
+                    <Row label="建物外形" ok={keepFootprint}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={keepFootprint} onChange={(e) => setKeepFootprint(e.target.checked)} />
+                        <span style={{ fontSize: 13, color: '#1a2530', fontWeight: 700 }}>この図面から認識した外形で下書き（おすすめ）</span>
+                      </label>
+                      <span style={{ fontSize: 11, color: '#1971c2', marginLeft: 8 }}>{footprint.polygon.length}頂点・角をドラッグで壁角へ吸着</span>
+                    </Row>
+                  )}
                   <Row label="屋根形状" ok>
-                    <select value={reviewForm} onChange={(e) => setReviewForm(e.target.value as 'shed' | 'gable' | 'hipped')} style={selStyle}>
+                    <select value={reviewForm} disabled={!!footprint && keepFootprint}
+                      onChange={(e) => setReviewForm(e.target.value as 'shed' | 'gable' | 'hipped')}
+                      style={{ ...selStyle, opacity: (footprint && keepFootprint) ? 0.5 : 1 }}>
                       <option value="shed">片流れ</option><option value="gable">切妻</option><option value="hipped">寄棟／方形</option>
                     </select>
-                    <span style={{ fontSize: 11, color: '#adb5bd', marginLeft: 8 }}>※形の自動判定は今後。ご確認ください</span>
+                    <span style={{ fontSize: 11, color: '#adb5bd', marginLeft: 8 }}>
+                      {footprint && keepFootprint ? '※認識した外形を使用中（テンプレは外形を使わないとき）' : '※形の自動判定は今後。ご確認ください'}
+                    </span>
                   </Row>
                   <Row label="屋根系統" ok={suggestedFaceCount > 1}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -854,7 +905,9 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
               </div>
             )}
             <div style={{ fontSize: 11, color: '#868e96', margin: '12px 0 14px' }}>
-              ※今は<b>屋根の外周だけ</b>、この後に図面へ合わせて角を動かします（他は設定済み）。外周の自動認識が入れば、それも確認だけになります。
+              {footprint && keepFootprint
+                ? <>※<b>建物の外形を図面から認識済み</b>。この後は青い角つまみをドラッグ＝壁の角に吸着して微調整するだけです（庇・下屋・出窓はご確認ください）。</>
+                : <>※今は<b>屋根の外周だけ</b>、この後に図面へ合わせて角を動かします（他は設定済み）。</>}
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button onClick={() => { setReviewOpen(false); setShowIntro(false); }}
@@ -1427,14 +1480,24 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
               {calibration && <Line points={[calibration.p1.x, calibration.p1.y, calibration.p2.x, calibration.p2.y]} stroke="#f08c00" strokeWidth={2} dash={[4, 4]} />}
               {model.edges.map((e) => { const role = edgeRole(model, e); if (!role) return null; const a = V.get(e.v[0]); const b2 = V.get(e.v[1]); if (!a || !b2) return null;
                 return <Text key={'t' + e.id} x={(a.x + b2.x) / 2 - 8} y={(a.y + b2.y) / 2 - 8} text={ROLE_LABEL[role]} fontSize={11} fill={ROLE_COLOR[role]} />; })}
+              {/* Phase E：認識した壁角（吸着先）を薄く表示＝どこに吸うかが見える確認支援。 */}
+              {mode === 'select' && !drawingFace && !bgAdjust && snapCorners.map((c, i) => (
+                <Circle key={'sc' + i} x={c.x} y={c.y} radius={2.5} fill="#1971c2" opacity={0.35} listening={false} />
+              ))}
               {/* 屋根の角つまみ（②の主操作＝ドラッグで図面に合わせる）。選択モードのみ・最前面・大きめで掴みやすく。 */}
+              {/*   ★Phase E：ドラッグ中は認識した壁角へ吸着（SNAP_PX 内）。つまみ位置も吸着点に合わせる。 */}
               {mode === 'select' && !drawingFace && !bgAdjust && vertexHandles.map((v, i) => (
                 <Circle key={'vh' + i} x={v.x} y={v.y} radius={9} fill="#fff" stroke="#1971c2" strokeWidth={2}
                   shadowColor="#1971c2" shadowBlur={4} shadowOpacity={0.5} hitStrokeWidth={16} draggable
                   onMouseEnter={(e) => { const s = e.target.getStage(); if (s) s.container().style.cursor = 'pointer'; }}
                   onMouseLeave={(e) => { const s = e.target.getStage(); if (s) s.container().style.cursor = 'default'; }}
                   onDragStart={() => onVertexDragStart(v.x, v.y)}
-                  onDragMove={(e) => onVertexDragMove(Math.round(e.target.x()), Math.round(e.target.y()))}
+                  onDragMove={(e) => {
+                    const raw = { x: Math.round(e.target.x()), y: Math.round(e.target.y()) };
+                    const s = snapCorners.length ? snapToCorner(raw, snapCorners, SNAP_PX) : raw;
+                    if (s.x !== raw.x || s.y !== raw.y) e.target.position({ x: s.x, y: s.y }); // つまみを吸着点へ
+                    onVertexDragMove(s.x, s.y);
+                  }}
                   onDragEnd={commitLiveFaces} />
               ))}
             </Layer>
