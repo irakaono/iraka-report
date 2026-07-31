@@ -140,8 +140,10 @@ async function extractFootprint(doc: any, pageNum: number): Promise<FootprintCan
     const page = await doc.getPage(pageNum);
     const opList = (await page.getOperatorList()) as OperatorList;
     const ex = extractSegments(opList, opsOf(pdfjs.OPS));
-    const walls = wallFilter(ex.segments);
-    const r = traceOutline(walls);
+    // ★実 確認申請PDF（伝法邸 Canonical）で検証した調律値を使う（ライブラリ既定値だと実図面で外形が荒れる/出ない）。
+    //   通り芯・寸法線を確実に落とす（minOverlap 20）・壁厚上限 11・微小段差は 24 でマージ。将来はPDF特性から適応化。
+    const walls = wallFilter(ex.segments, { wtMax: 11, minOverlap: 20 });
+    const r = traceOutline(walls, { cell: 2, dilate: 3, minStep: 24 });
     if (!r || r.polygon.length < 4) return null;
     const corners = wallCorners(walls, r.polygon, { cluster: 12 });
     // PDF ユーザ空間 → 描画画像px（renderDocPage と同じ viewport = RENDER_SCALE）。背景に重なる座標へ。
