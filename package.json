@@ -1,31 +1,17 @@
 {
   "name": "iraka-estimation-engine",
-  "private": true,
-  "version": "0.5.0",
+  "version": "3.1.0",
+  "description": "甍AI積算エンジン Ver.3.1 — 住宅板金積算OS",
   "type": "module",
-  "description": "甍AI Estimation Engine — Building Compiler / Domain Compiler（iraka-report の estimation.html を生成）",
+  "main": "src/index.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "build:estimation": "vite build --config vite.studio.config.ts && node scripts/build-estimation.mjs",
-    "verify:reader": "esbuild scripts/verify-vector-reader.ts --bundle --format=esm --platform=node --packages=external --outfile=scripts/.verify-vector-reader.mjs && node scripts/.verify-vector-reader.mjs",
-    "preview": "vite preview",
-    "typecheck": "tsc --noEmit",
-    "test": "esbuild tests/geometry.test.ts --bundle --platform=node --outfile=.geometry.test.cjs && node .geometry.test.cjs && esbuild tests/roofModel.test.ts --bundle --platform=node --outfile=.roofmodel.test.cjs && node .roofmodel.test.cjs && esbuild tests/roofEngine.test.ts --bundle --platform=node --outfile=.roofengine.test.cjs && node .roofengine.test.cjs && esbuild tests/roofQuantities.test.ts --bundle --platform=node --outfile=.roofquantities.test.cjs && node .roofquantities.test.cjs && esbuild tests/roofDrawing.test.ts --bundle --platform=node --outfile=.roofdrawing.test.cjs && node .roofdrawing.test.cjs && esbuild tests/drainModel.test.ts --bundle --platform=node --outfile=.drainmodel.test.cjs && node .drainmodel.test.cjs && esbuild tests/drainCommands.test.ts --bundle --platform=node --outfile=.draincommands.test.cjs && node .draincommands.test.cjs && esbuild tests/drainValidator.test.ts --bundle --platform=node --outfile=.drainvalidator.test.cjs && node .drainvalidator.test.cjs && esbuild tests/engineBoundary.test.ts --bundle --platform=node --outfile=.engineboundary.test.cjs && node .engineboundary.test.cjs && esbuild tests/persistence.test.ts --bundle --platform=node --outfile=.persistence.test.cjs && node .persistence.test.cjs && esbuild tests/materialAdapter.test.ts --bundle --platform=node --outfile=.materialadapter.test.cjs && node .materialadapter.test.cjs && esbuild tests/executionProjection.test.ts --bundle --platform=node --outfile=.executionprojection.test.cjs && node .executionprojection.test.cjs && esbuild tests/assemblySlice.test.ts --bundle --platform=node --outfile=.assemblyslice.test.cjs && node .assemblyslice.test.cjs && esbuild tests/costCompiler.test.ts --bundle --platform=node --outfile=.costcompiler.test.cjs && node .costcompiler.test.cjs && esbuild tests/presentationAdapter.test.ts --bundle --platform=node --outfile=.presentationadapter.test.cjs && node .presentationadapter.test.cjs && esbuild tests/scheduleCompiler.test.ts --bundle --platform=node --outfile=.schedulecompiler.test.cjs && node .schedulecompiler.test.cjs && esbuild tests/qaCarbonCompiler.test.ts --bundle --platform=node --outfile=.qacarboncompiler.test.cjs && node .qacarboncompiler.test.cjs && esbuild tests/resourceCompiler.test.ts --bundle --platform=node --outfile=.resourcecompiler.test.cjs && node .resourcecompiler.test.cjs && esbuild tests/acceptance.test.ts --bundle --platform=node --outfile=.acceptance.test.cjs && node .acceptance.test.cjs && esbuild tests/autoPropose.test.ts --bundle --platform=node --outfile=.autopropose.test.cjs && node .autopropose.test.cjs && esbuild tests/estimateExport.test.ts --bundle --platform=node --outfile=.estimateexport.test.cjs && node .estimateexport.test.cjs && esbuild tests/scaleInference.test.ts --bundle --platform=node --outfile=.scaleinference.test.cjs && node .scaleinference.test.cjs && esbuild tests/elevationInference.test.ts --bundle --platform=node --outfile=.elevationinference.test.cjs && node .elevationinference.test.cjs && esbuild tests/pdfText.test.ts --bundle --platform=node --outfile=.pdftext.test.cjs && node .pdftext.test.cjs && esbuild tests/recognizer.test.ts --bundle --platform=node --outfile=.recognizer.test.cjs && node .recognizer.test.cjs && esbuild tests/draftFaces.test.ts --bundle --platform=node --outfile=.draftfaces.test.cjs && node .draftfaces.test.cjs && esbuild tests/topology.test.ts --bundle --platform=node --outfile=.topology.test.cjs && node .topology.test.cjs && esbuild tests/vectorReader.test.ts --bundle --platform=node --outfile=.vectorreader.test.cjs && node .vectorreader.test.cjs"
+    "test": "node tests/testRunner.js && node tests/testValley.js && node tests/testValleyAssembly.js && node tests/testAssemblyFactory.js && node tests/testEvidence4Layer.js",
+    "test:main":     "node tests/testRunner.js",
+    "test:valley":   "node tests/testValley.js",
+    "test:assembly": "node tests/testValleyAssembly.js",
+    "test:factory":  "node tests/testAssemblyFactory.js",
+    "test:evidence": "node tests/testEvidence4Layer.js"
   },
-  "dependencies": {
-    "konva": "^9.3.16",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-konva": "^18.2.10"
-  },
-  "devDependencies": {
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.4",
-    "pdfjs-dist": "4.7.76",
-    "typescript": "^5.6.3",
-    "vite": "^5.4.11",
-    "vite-plugin-singlefile": "^2.3.3"
-  }
+  "keywords": ["積算","板金","雨樋","AI","Evidence"],
+  "author": "WITHDOM Saitama × 甍"
 }
