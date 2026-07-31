@@ -16,7 +16,7 @@ import { emptyDrainModel } from '../geometry/drainModel';
 import type { DrainModel, FlowDirection, DrainNodeKind } from '../geometry/drainModel';
 import { drainReducer } from '../geometry/drainCommands';
 import type { DrainCommand } from '../geometry/drainCommands';
-import { initHistory, dispatch as histDispatch, undo, redo, canUndo, canRedo } from '../geometry/history';
+import { initHistory, undo, redo, canUndo, canRedo } from '../geometry/history';
 import type { History } from '../geometry/history';
 import { drainQuantities } from '../geometry/drainQuantities';
 import { compileMaterials, compileExecution, bomProjection, costCompiler, scheduleCompile, qaCompile, carbonCompile, resourceCompile } from '../geometry/materialAdapter';
@@ -120,10 +120,26 @@ interface RoofStudioProps {
   onBackToDrawings?: () => void;  // 入口（図面ドロップ）へ戻る
 }
 
+// ── 統合編集状態：屋根(faces/roleOverrides)と雨樋(drain)を1つの History に載せる。 ──
+//   ★狙い：Undo/Redo を「人が触った操作すべて（頂点移動・形選択・回転・下屋・水上変更・雨樋）」で1本にする。
+//     以前は雨樋だけ History で、屋根編集は戻せなかった＝「触るのが怖い」UI。1コミット=1操作=1回のUndo。
+interface EditState { faces: FaceInput[]; roleOverrides: Record<string, EdgeRole>; drain: DrainModel }
+
 export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint, elevReadings, onBackToDrawings }: RoofStudioProps = {}) {
-  const [faces, setFaces] = useState<FaceInput[]>(() => preset('gable'));
-  const [roleOverrides, setRoleOverrides] = useState<Record<string, EdgeRole>>({}); // 辺ID→人が指定した種別（軒/ケラバ/雨押え…）。空=自動
+  // ── 統合編集履歴（屋根＋雨樋を1本の Undo に）。faces/roleOverrides/drain はここから読む。 ──
+  const [edit, setEdit] = useState<History<EditState>>(() => initHistory({ faces: preset('gable'), roleOverrides: {}, drain: emptyDrainModel('DR-1', 'RF-draft') }));
+  const [liveFaces, setLiveFaces] = useState<FaceInput[] | null>(null); // ドラッグ中の一時表示（履歴に積まない・drag endで1コミット）
+  const committedFaces = edit.present.faces;
+  const roleOverrides = edit.present.roleOverrides; // 辺ID→人が指定した種別（軒/ケラバ/雨押え…）。空=自動
+  const faces = liveFaces ?? committedFaces;         // 表示・計算はドラッグ中なら一時表示、通常は確定値
   const [draft, setDraft] = useState<Point[]>([]);
+  // 統合コミット（変化なしなら積まない）。past に積み future を捨てる＝Command 履歴と同じ規律。
+  const commitEdit = (next: EditState) => setEdit((h) => (next === h.present ? h : { past: [...h.past, h.present], present: next, future: [] }));
+  // 既存の setFaces/setRoleOverrides 呼び出しをそのまま活かすシム（単発の屋根編集＝1コミット）。関数形も値形も可。
+  const setFaces = (u: FaceInput[] | ((prev: FaceInput[]) => FaceInput[])) =>
+    setEdit((h) => { const nf = typeof u === 'function' ? (u as (p: FaceInput[]) => FaceInput[])(h.present.faces) : u; return nf === h.present.faces ? h : { past: [...h.past, h.present], present: { ...h.present, faces: nf }, future: [] }; });
+  const setRoleOverrides = (u: Record<string, EdgeRole> | ((prev: Record<string, EdgeRole>) => Record<string, EdgeRole>)) =>
+    setEdit((h) => { const nv = typeof u === 'function' ? (u as (p: Record<string, EdgeRole>) => Record<string, EdgeRole>)(h.present.roleOverrides) : u; return nv === h.present.roleOverrides ? h : { past: [...h.past, h.present], present: { ...h.present, roleOverrides: nv }, future: [] }; });
   const [drawingFace, setDrawingFace] = useState(false);
   const [hi, setHi] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<Mode>('select');
@@ -256,15 +272,15 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
   const fuzu = useMemo(() => roofDrawing(model), [model]);
   const V = useMemo(() => new Map(model.vertices.map((v) => [v.id, v])), [model]);
 
-  const [drain, setDrain] = useState<History<DrainModel>>(() => initHistory(emptyDrainModel('DR-1', model.id)));
   // ── 自動積算（初回のみ）：図面を入れて開くと、屋根プリセットの軒から雨樋を自動提案し、雨樋数量を即表示。
   //    人はこの下地を上からなぞって修正する（＝AIが下書き→人が確定）。手拾いで空にしたい場合は「経路クリア」。
+  //    ★初回提案は履歴の起点（initHistory）＝空の雨樋へは Undo で戻らない。
   const autoSeeded = useRef(false);
   useEffect(() => {
     if (autoSeeded.current) return;
     autoSeeded.current = true;
     const proposal = autoProposeGutter(model);
-    if (proposal.dropCount > 0) { setDrain(initHistory(proposal.model)); idc.current = maxIdSuffix(proposal.model) + 1; }
+    if (proposal.dropCount > 0) { setEdit((h) => initHistory({ ...h.present, drain: proposal.model })); idc.current = maxIdSuffix(proposal.model) + 1; }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // 自動縮尺は表示倍率(bgScale)に追従＝図面をズーム/パンしても実寸(px/m)が保たれる。
@@ -274,7 +290,7 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
     setScale(ppm);
     setCalibration((c) => (c && (c.method === 'pdf_note' || c.method === 'dimension_line') ? { ...c, pxPerMeter: ppm } : c));
   }, [autoImagePPM, bgScale]);
-  const dm = drain.present;
+  const dm = edit.present.drain;
   const dq = useMemo(() => drainQuantities(model, dm, scale), [model, dm, scale]);
   // STEP5 Material Adapter：数量→Material IR(Intent)→Product（Rule Engine）。evidence は数量から継承＝要素と双方向。
   const mats = useMemo(() => compileMaterials([...rq, ...dq], defaultIntentCatalog, defaultProductCatalog), [rq, dq]);
@@ -289,7 +305,11 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
   const yen = (n: number) => '¥' + Math.round(n).toLocaleString();
   const ddraw = useMemo(() => drainDrawing(model, dm), [model, dm]);
   const issues = useMemo(() => validateDrainModel(model, dm), [model, dm]);
-  const dispatchDrain = (cmd: DrainCommand) => setDrain((h) => histDispatch(h, drainReducer, cmd));
+  // 雨樋の Command も統合履歴へ（屋根と同じ1本の Undo に載る）。
+  const dispatchDrain = (cmd: DrainCommand) => setEdit((h) => {
+    const nd = drainReducer(h.present.drain, cmd);
+    return nd === h.present.drain ? h : { past: [...h.past, h.present], present: { ...h.present, drain: nd }, future: [] };
+  });
 
   const allDrops = dm.runs.flatMap((r) => r.drops.map((d) => ({ ...d, runId: r.id, eaveEdgeId: r.eaveEdgeId })));
 
@@ -311,12 +331,13 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
   };
   // 屋根の形が変わったら、その形の軒から雨樋を組み直す（形を選び直しても前の雨樋が残らない＝EaveNotFound防止）。
   //   overrides を反映してから提案するので、水上（雨押え等）には軒樋が付かない。
-  const reseedDrainFor = (newFaces: FaceInput[], overrides: Record<string, EdgeRole> = roleOverrides) => {
+  //   ★純関数化：DrainModel を返すだけ（setState しない）。呼び手が faces/roleOverrides/drain を1コミットにまとめる。
+  const reseedDrain = (newFaces: FaceInput[], overrides: Record<string, EdgeRole>): DrainModel => {
     const m = buildModel(newFaces, overrides);
     const proposal = autoProposeGutter(m);
     const dModel = proposal.dropCount > 0 ? proposal.model : emptyDrainModel('DR-1', m.id);
-    setDrain(initHistory(dModel));
     idc.current = Math.max(idc.current, maxIdSuffix(dModel) + 1);
+    return dModel;
   };
   // 片流れ（1面）の水上辺（＝軒＝水下 の反対）の辺IDを返す。
   const shedTopEdgeId = (newFaces: FaceInput[]): string | null => {
@@ -332,8 +353,8 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
     const nf = preset(name);
     let ov: Record<string, EdgeRole> = {};
     if (name === 'shed') { const top = shedTopEdgeId(nf); if (top) ov = { [top]: 'grip' }; }
-    setFaces(nf); setRoleOverrides(ov); reseedDrainFor(nf, ov);
-    setMode('select'); setDrawingFace(false); setDraft([]);
+    commitEdit({ faces: nf, roleOverrides: ov, drain: reseedDrain(nf, ov) }); // 形＋役割＋雨樋を1操作＝1Undo
+    setLiveFaces(null); setMode('select'); setDrawingFace(false); setDraft([]);
     setRoofFormChosen(true); setShowIntro(false); clearHi();
   };
   // 指定の面群の「水上辺（軒の対辺）」IDへ、指定の役割（つかみ込み/雨押え等）を付ける。
@@ -354,8 +375,8 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
   const seedDraft = (form: 'gable' | 'hipped' | 'shed', extra: number, pitch: number): FaceInput[] => {
     const { faces: nf, gripFaceIndices, flashingFaceIndices } = buildDraftFaces(form, extra, pitch);
     const ov = { ...topEdgeOverridesFor(nf, gripFaceIndices, 'grip'), ...topEdgeOverridesFor(nf, flashingFaceIndices, 'wall_flashing') };
-    setFaces(nf); setRoleOverrides(ov); reseedDrainFor(nf, ov);
-    setMode('select'); setDrawingFace(false); setDraft([]);
+    commitEdit({ faces: nf, roleOverrides: ov, drain: reseedDrain(nf, ov) });
+    setLiveFaces(null); setMode('select'); setDrawingFace(false); setDraft([]);
     setRoofFormChosen(true); setShowIntro(false); clearHi();
     return nf;
   };
@@ -364,7 +385,7 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
     const i = faces.length;
     const nf: FaceInput[] = [...faces, shedFace(180 + (i % 3) * 42, 190 + (i % 5) * 30, faces[0]?.pitch ?? 5)];
     const ov = { ...roleOverrides, ...topEdgeOverridesFor(nf, [nf.length - 1], 'wall_flashing') };
-    setFaces(nf); setRoleOverrides(ov); reseedDrainFor(nf, ov); clearHi();
+    commitEdit({ faces: nf, roleOverrides: ov, drain: reseedDrain(nf, ov) }); setLiveFaces(null); clearHi();
     flash('✓ 下屋（片流れ）を1面追加しました');
   };
   // 片流れの「水下＝軒」側を選ぶ。反対の水上を既定「つかみ込み（軒仕様）」にし、軒樋を水下だけに組み直す（水上には付けない）。
@@ -373,7 +394,17 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
     const nf: FaceInput[] = [{ ...faces[0], eaveEdgeIndex: edgeIndex }];
     const top = shedTopEdgeId(nf);
     const ov: Record<string, EdgeRole> = top ? { [top]: 'grip' } : {};
-    setFaces(nf); setRoleOverrides(ov); reseedDrainFor(nf, ov);
+    commitEdit({ faces: nf, roleOverrides: ov, drain: reseedDrain(nf, ov) }); setLiveFaces(null);
+  };
+  // 下書き全体を中心まわりに90°回転（0/90/180/270）。向き合わせを1クリックに（水下=軒がどの辺かの微調整は「辺」一覧で）。
+  //   ★eaveEdgeIndex（面内の辺番号）は不変＝軒も一緒に回る。roleOverrides の辺IDも位相不変なので有効。1コミット=1Undo。
+  const rotateDraft = () => {
+    const fs = faces; if (!fs.length) return;
+    let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+    for (const f of fs) for (const v of f.vertices) { minx = Math.min(minx, v.x); miny = Math.min(miny, v.y); maxx = Math.max(maxx, v.x); maxy = Math.max(maxy, v.y); }
+    const cx = (minx + maxx) / 2, cy = (miny + maxy) / 2;
+    const nf = fs.map((f) => ({ ...f, vertices: f.vertices.map((v) => ({ x: Math.round(cx + (cy - v.y)), y: Math.round(cy + (v.x - cx)) })) })); // 90° 時計回り
+    setFaces(nf); setLiveFaces(null); flash('↻ 90°回転しました');
   };
   // 辺ごとに種別を人が指定（自動＝空）。原則12：人の判断が創発より優先。
   const setEdgeRole = (edgeId: string, value: string) => {
@@ -429,11 +460,14 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
   };
   const onVertexDragMove = (nx: number, ny: number) => {
     const list = dragVerts.current; if (!list.length) return;
-    setFaces((fs) => fs.map((f, fi) => {
+    // ★ドラッグ中は一時表示のみ（履歴に積まない）。commit は drag end で1回＝Undoは1操作に対応。
+    setLiveFaces((prev) => (prev ?? committedFaces).map((f, fi) => {
       const hits = list.filter((l) => l.fi === fi); if (!hits.length) return f;
       return { ...f, vertices: f.vertices.map((v, vi) => (hits.some((h) => h.vi === vi) ? { x: nx, y: ny } : v)) };
     }));
   };
+  // ドラッグ終了：一時表示を確定＝1コミット（Undoで1回で戻せる）。副作用は updater の外で。
+  const commitLiveFaces = () => { if (liveFaces) commitEdit({ ...edit.present, faces: liveFaces }); setLiveFaces(null); dragVerts.current = []; };
   // 屋根の角（重複座標は1つに集約）＝ドラッグ用ハンドルの位置。
   const vertexHandles = useMemo(() => {
     const seen = new Set<string>(); const out: Point[] = [];
@@ -446,7 +480,7 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
   const onRoofGroupDragMove = (x: number, y: number) => {
     const p = roofDragRef.current; if (!p) return;
     const dx = x - p.x, dy = y - p.y; roofDragRef.current = { x, y };
-    setFaces((fs) => fs.map((f) => ({ ...f, vertices: f.vertices.map((v) => ({ x: v.x + dx, y: v.y + dy })) })));
+    setLiveFaces((prev) => (prev ?? committedFaces).map((f) => ({ ...f, vertices: f.vertices.map((v) => ({ x: v.x + dx, y: v.y + dy })) })));
   };
 
   // ── 幾何ヘルパー（表示用） ──
@@ -511,15 +545,18 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
     dispatchDrain({ type: 'AddNode', node: { id: nodeId, kind: 'drain', point: { x: dp.x, y: dp.y + 150 } } });
     dispatchDrain({ type: 'AddEdge', edge: { id: nid('e'), from: head, to: nodeId } });
   };
-  const resetDrain = () => { setDrain(initHistory(emptyDrainModel('DR-1', model.id))); setActiveRun(null); setSelDrop(null); setRouteHead(null); };
+  const resetDrain = () => { dispatchDrainReset(); setActiveRun(null); setSelDrop(null); setRouteHead(null); };
+  // 雨樋だけ空にする（Undoで戻せる＝1コミット）。屋根はそのまま。
+  const dispatchDrainReset = () => setEdit((h) => ({ past: [...h.past, h.present], present: { ...h.present, drain: emptyDrainModel('DR-1', model.id) }, future: [] }));
 
   // ── 保存・開く（Model だけを保存。ID は逐語保存＝Evidence が切れない） ──
   //   埋め込み時（iraka-report）は host（?projectId 連携）経由で案件へ保存/復元。無ければファイル（standalone）。
   const loadFromJson = (text: string): boolean => {
     try {
       const doc = parseDocument(text);
-      setFaces(doc.faces);
-      setDrain(initHistory(doc.drain));       // 復元＝新しい履歴の起点（ID逐語）
+      // 復元＝新しい履歴の起点（ID逐語）。roleOverrides は保存対象外なので {} に戻す（古い辺IDへの残留を防ぐ）。
+      setEdit(initHistory({ faces: doc.faces, roleOverrides: {}, drain: doc.drain }));
+      setLiveFaces(null);
       idc.current = maxIdSuffix(doc.drain) + 1; // 新規採番を既存 ID の次から続ける
       setActiveRun(null); setSelDrop(null); setRouteHead(null); clearHi();
       setSavedAt(doc.savedAt ?? null); setLoadError(null);
@@ -999,7 +1036,7 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
           body = '';
         } else if (cur === 3) {
           title = 'AIが数量を計算します';
-          body = '雨樋がまだ入っていません。「雨樋を描く」を押すと、AIが軒樋・集水器・縦樋を自動で提案します。';
+          body = '雨樋がまだ入っていません。「雨樋を描く」を押すと、AIが軒樋・集水器を自動で提案します（縦樋は立面で確定）。';
           actions.push({ label: '🌧 雨樋を描く', primary: true, onClick: () => { setMode('gutter'); } });
         } else if (cur === 4) {
           title = '最後に「見積書を作成」';
@@ -1147,7 +1184,7 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
       })()}
       {loadError && <div className="rs-loaderr">⚠ {loadError}<button onClick={() => setLoadError(null)}>×</button></div>}
       {showAcceptance && <AcceptancePanel quantities={dq} hasDrawing={!!(planImg || elevImg)} calibrated={!!calibration}
-        roofModel={model} scale={scale} onAdoptDrain={(d) => { setDrain(initHistory(d)); idc.current = maxIdSuffix(d) + 1; }}
+        roofModel={model} scale={scale} onAdoptDrain={(d) => { setEdit((h) => initHistory({ ...h.present, drain: d })); setLiveFaces(null); idc.current = maxIdSuffix(d) + 1; }}
         onClose={() => setShowAcceptance(false)} />}
 
       {/* 図面背景バー：図面が入っているときだけ。人が下地の図面を見ながら屋根・雨樋をトレースする。 */}
@@ -1190,10 +1227,14 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
           <button onClick={() => chooseForm('gable')}>切妻</button>
           <button onClick={() => chooseForm('hipped')}>方形</button>
           <button onClick={() => chooseForm('shed')} title="片流れ。水上は既定で「つかみ込み（軒仕様・壁に当たらない片棟）」">片流れ</button>
+          <button onClick={rotateDraft} disabled={!faces.length} title="下書き全体を90°回転（0/90/180/270）。向き合わせが1クリック。水下=軒の微調整は右の「辺」一覧で。">↻ 回転</button>
           <button onClick={addShedFace} title="2階・3階の下屋（別の屋根面）を1枚足す。下屋は壁に取り合う → 水上は既定で雨押え">＋下屋（片流れ）</button>
           <button className={drawingFace ? 'on' : ''} onClick={() => { setDrawingFace(true); setDraft([]); }}>＋屋根面を描く</button>
           <button onClick={confirmFace} disabled={draft.length < 3}>確定</button>
           <button onClick={() => setFaces([])}>屋根全消去</button>
+          <span className="rs-sp2" />
+          <button disabled={!canUndo(edit)} onClick={() => { setLiveFaces(null); setEdit(undo); }} title="直前の編集を戻す（頂点移動・形・回転・下屋・水上変更・雨樋）">↶ Undo</button>
+          <button disabled={!canRedo(edit)} onClick={() => { setLiveFaces(null); setEdit(redo); }}>↷ Redo</button>
         </>}
         {mode === 'gutter' && <>
           <span className="rs-lbl">流れ:</span>
@@ -1219,8 +1260,8 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
             <button onClick={endRoute}>経路を終える</button>
           </>}
           <span className="rs-sp2" />
-          <button disabled={!canUndo(drain)} onClick={() => setDrain(undo)}>↶ Undo</button>
-          <button disabled={!canRedo(drain)} onClick={() => setDrain(redo)}>↷ Redo</button>
+          <button disabled={!canUndo(edit)} onClick={() => { setLiveFaces(null); setEdit(undo); }}>↶ Undo</button>
+          <button disabled={!canRedo(edit)} onClick={() => { setLiveFaces(null); setEdit(redo); }}>↷ Redo</button>
           <button onClick={resetDrain}>雨樋全消去</button>
         </>}
         {mode === 'measure' && <span className="rs-lbl">計測は次の段階です。いまは「屋根を描く／雨樋を描く」をお使いください。</span>}
@@ -1278,12 +1319,15 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
 
         {/* 中央: キャンバス（Roof ＋ Drain オーバーレイ） */}
         <div className="rs-canvas" style={{ position: 'relative', cursor: mode === 'calibrate' ? 'crosshair' : undefined }}>
-          {/* 仮の下書きバッジ：確定前は「AIの下書き・図面認識ではない」と明示（誤認防止） */}
+          {/* 仮の下書きバナー：確定前は「AIのたたき台＝正確ではない・数秒で直す」を前面に。誤認防止＋「直せばいい」という構えを作る。 */}
           {!roofDone && (
             <div style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 5,
-              background: '#fff4e6', border: '1px solid #ffc078', color: '#d9480f', borderRadius: 999,
-              padding: '6px 16px', fontSize: 12.5, fontWeight: 700, boxShadow: '0 2px 8px rgba(0,0,0,.12)', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
-              🔖 これは仮の下書きです（AIの提案。図面を認識した結果ではありません）
+              background: '#fff4e6', border: '1.5px solid #ffa94d', color: '#d9480f', borderRadius: 12,
+              padding: '8px 16px', boxShadow: '0 3px 12px rgba(0,0,0,.15)', pointerEvents: 'none', textAlign: 'center', maxWidth: '92%' }}>
+              <div style={{ fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap' }}>🖊 AIの仮下書き — この状態は正確ではありません</div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#a8480f', marginTop: 3 }}>
+                図面に合わせて<b>3〜10秒で修正</b>してください：<b>①↻回転</b> → <b>②青い角を図面へドラッグ</b> → <b>③「これでOK（確定）」</b>
+              </div>
             </div>
           )}
           {/* 初回だけ中央に指示を重ねる。画面のどこかをクリックで閉じる（以後は上部AIナビが案内）。縮尺済みなら出さない。 */}
@@ -1330,7 +1374,7 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
                 onMouseLeave={(e) => { const s = e.target.getStage(); if (s) s.container().style.cursor = 'default'; }}
                 onDragStart={(e) => { const p = e.target.getStage()?.getPointerPosition(); if (p) onRoofGroupDragStart(p.x, p.y); }}
                 onDragMove={(e) => { const p = e.target.getStage()?.getPointerPosition(); if (p) onRoofGroupDragMove(p.x, p.y); e.target.position({ x: 0, y: 0 }); }}
-                onDragEnd={(e) => { e.target.position({ x: 0, y: 0 }); }} />; })}
+                onDragEnd={(e) => { e.target.position({ x: 0, y: 0 }); roofDragRef.current = null; commitLiveFaces(); }} />; })}
               {model.edges.map((e) => {
                 const role = edgeRole(model, e); const a = V.get(e.v[0]); const b2 = V.get(e.v[1]); if (!a || !b2) return null;
                 const on = hi.has(e.id);
@@ -1390,7 +1434,8 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
                   onMouseEnter={(e) => { const s = e.target.getStage(); if (s) s.container().style.cursor = 'pointer'; }}
                   onMouseLeave={(e) => { const s = e.target.getStage(); if (s) s.container().style.cursor = 'default'; }}
                   onDragStart={() => onVertexDragStart(v.x, v.y)}
-                  onDragMove={(e) => onVertexDragMove(Math.round(e.target.x()), Math.round(e.target.y()))} />
+                  onDragMove={(e) => onVertexDragMove(Math.round(e.target.x()), Math.round(e.target.y()))}
+                  onDragEnd={commitLiveFaces} />
               ))}
             </Layer>
           </Stage>
@@ -1419,6 +1464,11 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
               onMouseEnter={() => highlightQuantity(q.evidence)} onMouseLeave={clearHi}>
               <td>{q.label}</td><td className="rs-val">{q.value.toFixed(2)}<small> {q.unit}</small></td>
               <td className="rs-basis">{q.evidence[0]?.kind === 'segment' ? '区間' : q.evidence[0]?.kind === 'node' ? '節点' : q.evidence[0]?.kind === 'drop' ? '縦樋' : '経路'}×{q.evidence.length}</td></tr>)}
+            {/* ★縦樋長は「未確定」＝集水器はあるが縦樋(排水経路)がまだ描かれていないとき。0でも概算でもなく「立面で確定」と明示（決められないものは決めない）。 */}
+            {dm.runs.some((r) => r.drops.length > 0) && !dq.some((q) => q.key === 'downspoutLength') && (
+              <tr title="縦樋＝どこへ降りるか＝立面情報。立面で軒高・排水先を入れると確定します。">
+                <td>竪樋長</td><td className="rs-val" style={{ color: '#e8590c', fontWeight: 700 }}>未確定</td><td className="rs-basis">立面で確定</td></tr>
+            )}
           </tbody></table>
 
           <h4 className="rs-mt">部材 <small>（数量→施工意図→製品）</small></h4>
