@@ -14,6 +14,9 @@ dist-studio/
 # test build artifacts（esbuild が生成する一時 .cjs）
 .*.test.cjs
 
+# verify:reader ハーネスが生成する一時 .mjs（esbuild bundle）
+scripts/.verify-vector-reader.mjs
+
 # 注: roof.html（Engine Studio の単一HTML成果物）は配布物として意図的に追跡している。
 #     ビルドのたびに差分が出るのが嫌なら下行のコメントを外す。
 # roof.html
