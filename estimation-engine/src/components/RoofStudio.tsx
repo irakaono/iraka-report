@@ -31,6 +31,8 @@ import { offsetPolygonOutward } from '../geometry/elevationInference';
 import type { ElevationHint } from '../geometry/elevationInference';
 import type { ElevationSpec } from '../geometry/recognizer';
 import { preset, buildDraftFaces, shedFace, suggestFaceCount } from '../geometry/draftFaces';
+import { footprintToRoofOutline } from '../geometry/roofPipeline';
+import { roofFaceInputs } from '../geometry/roofFaces';
 import { placeFootprint } from '../geometry/footprint';
 import type { FootprintCandidate } from '../geometry/footprint';
 import { snapToCorner } from '../geometry/cornerSnap';
@@ -301,12 +303,17 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
     footprintSeeded.current = true;
     try {
       const imgW = planImg.width || footprint.width, imgH = planImg.height || footprint.height;
-      const { vertices, corners } = placeFootprint(footprint.polygon, footprint.corners, imgW, imgH, W, H);
+      // ── Phase F 配線：認識外形を屋根として解釈する（1面→分割面）。★F#6：Runtime は RoofModel が正。 ──
+      //   ① F-1→F-2→Resolver は認識由来なので画像座標で閉じる（閾値・canonical 回帰を壊さない）。
+      const outline = footprintToRoofOutline(footprint.polygon).polygon; // 確定屋根外形（ポーチ/出窓を除去・画像座標）
+      //   ② 確定 Outline と認識角だけをキャンバス座標へ写像（placeFootprint 相当・同一 fit 変換）。
+      const { vertices, corners } = placeFootprint(outline, footprint.corners, imgW, imgH, W, H);
       if (vertices.length < 3) return;
-      const face: FaceInput = { vertices, pitch: Number(reviewPitch) || 5, eaveEdgeIndex: bottomEdgeIndex(vertices) };
+      //   ③ F-3：Outline(キャンバス座標) → 屋根面（各面が軒を指す・役割は roofEngine が創発）。preset の1面を置換。
+      const faces = roofFaceInputs(vertices, elevReadings, { pitch: Number(reviewPitch) || 5 });
       // 外形は「建物外周候補」＝まだ屋根面ではない。雨樋の自動提案は Phase F（屋根解釈）以降なので、ここでは空で置く。
       const drain = emptyDrainModel('DR-1', 'RF-draft');
-      setEdit(initHistory({ faces: [face], roleOverrides: {}, drain }));
+      setEdit(initHistory({ faces, roleOverrides: {}, drain }));
       setLiveFaces(null);
       idc.current = Math.max(idc.current, maxIdSuffix(drain) + 1);
       setSnapCorners(corners);
