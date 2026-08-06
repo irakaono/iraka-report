@@ -1,20 +1,24 @@
-// 甍AI Phase F / F-3 Roof Face Generator（Ver0）— Roof Outline → 既存 RoofModel（屋根面を置く）。
+// 甍AI Phase F / F-3 Roof Face Generator（Ver1-1）— Roof Outline → 既存 RoofModel（屋根面を置く）。
 //   ★責務（PHASE-F-ROOF-ANALYZER.md §8）：屋根外形を面へ分割し、各面が自分の軒辺を指すところまで。
 //     - **新 IR を定義しない。** 出力は既存 `RoofModel`（`buildRoofModelFromFaces` 経由の共有辺グラフ）。
 //       面ごとに polygon を持たない（`Face.boundary` = 辺ID列）。棟/谷は「2面が共有する1本の辺」。
 //     - **EdgeRole を格納しない。** ridge/hip/valley/eave/gable は `roofEngine.edgeRole()` が創発する。
 //       F-3 は「面を置く＋勾配を割る＋各面の軒を指す（`slope.downhill.toEdgeId`）」まで。
 //   ★入力＝Roof Outline（Resolver の確定 polygon）＋ ElevationSpec[]（recognizer R-2a・方位別勾配）。
-//   ★Ver0 は最小実装：外形の bbox に **切妻を1本**置く（ridge＝長辺方向・上下/左右2面・各外側辺＝軒）。
-//     - pitch は単一 fallback（ElevationSpec の最頻値／無ければ既定）。★面ごと方位別 pitch は Ver1
-//       （面の下り方位 ↔ ElevationSpec.dir を北矢印基準で結ぶ）。
-//     - 外形なりの分割（L 字・谷・寄棟・下屋）も Ver1 以降。Ver0 の受入基準は「屋根タイプを当てる」ではなく
-//       「各面が正しい軒を指し、共有辺グラフ上で edgeRole が創発できる」こと（§8.2）。
-//   ★純関数・UI 非依存。preset（`draftFaces.ts` の固定テンプレ）を外形駆動へ置き換える最小刻み。
+//
+//   ★Ver1-1（外形忠実度だけを上げる刻み）：bbox 近似をやめ、**Resolver Outline を長辺方向の棟線でクリップして
+//     Outline-following な2面**を作る（棟＝長辺方向・上下/左右2面・各外側辺＝軒）。凹み（reflex）は外周ジョグとして
+//     保持し、`eave/gable` の創発に委ねる。★**valley（谷）はまだ作らない**——谷は「2面が共有する内部辺」として
+//     Ver1-3 で意図的に生成する（Ver1-1 と Ver1-3 の責務を混ぜない＝回帰と原因追跡をきれいに保つ）。
+//   ★受入基準は「伝法邸を当てる」ではなく「Resolver Outline を**欠損・重複なく2面の共有辺グラフへ写像**できる」こと。
+//     一次の正＝**面積保存（Σ 面 planar 面積 = Outline 面積）**。伝法邸はその最初の Canonical Evidence。
+//   ★安全弁：クリップ結果が次を満たさない場合だけ Ver0 bbox 切妻へフォールバック（退化しない）：
+//       (1) 面がちょうど2つ  (2) 各面が有効な単純（矩形整合）ポリゴン  (3) 両面が同じ棟辺を1本共有  (4) 面積保存が許容差内。
+//   ★pitch は単一 fallback（ElevationSpec の最頻値／無ければ既定）。★面ごと方位別 pitch は Ver1-2。純関数・UI 非依存。
 
 import type { Pt } from './contourTrace';
 import type { Point, RoofModel, FaceAttrs } from './roofModel';
-import { buildRoofModelFromFaces } from './roofModel';
+import { buildRoofModelFromFaces, edgeFaceCount } from './roofModel';
 import type { ElevationSpec } from './recognizer';
 
 export interface RoofFacesOptions {
@@ -27,9 +31,10 @@ export interface RoofFacesOptions {
 
 const DEFAULT_PITCH = 5;                                        // 寸（preset と同じ既定）。
 const DEFAULT_ATTRS: FaceAttrs = { trade: '屋根工事', item: 'roof_field' };
+const EPS = 1e-6;
 
 // ElevationSpec[] から単一 pitch を拾う（Ver0 fallback＝最頻値／同数なら小さい方）。
-//   ★方位別割当（面の下り方位 ↔ dir）は Ver1。Ver0 は全面同一 pitch。
+//   ★方位別割当（面の下り方位 ↔ dir）は Ver1-2。Ver1-1 は全面同一 pitch。
 export function pickPitch(elevation?: ElevationSpec[], fallback: number = DEFAULT_PITCH): number {
   const all = (elevation ?? []).flatMap((e) => e.pitches).filter((p) => p > 0);
   if (!all.length) return fallback;
@@ -44,33 +49,174 @@ function bboxOf(poly: Pt[]): { x0: number; y0: number; x1: number; y1: number } 
   return { x0, y0, x1, y1 };
 }
 
-// F-3 core：Roof Outline → 屋根面の入力列（vertices/pitch/eave）。★役割は付けない・各面が自分の軒を指す。
-//   Ver0＝外形 bbox に切妻を1本（ridge＝長辺方向・上下/左右2面・各外側辺＝軒）。★配線の接続点：
-//   Studio はこの列を編集状態（faces）に持ち、buildRoofModelFromFaces で RoofModel を組む（既存 Runtime へ）。
-//   attrs（trade/item＝costing）はここでは付けない（幾何の関心事ではない）。generateRoofFaces / Studio が付ける。
+// F-3 の面入力（vertices/pitch/eave）。★役割は付けない・各面が自分の軒を指す。
 export interface RoofFaceInput { vertices: Point[]; pitch: number; eaveEdgeIndex: number }
 
-export function roofFaceInputs(outline: Pt[], elevation?: ElevationSpec[], opts: { pitch?: number } = {}): RoofFaceInput[] {
-  const pitch = opts.pitch ?? pickPitch(elevation);
+// ───────────────────────── 幾何ヘルパ（純関数） ─────────────────────────
+
+function polyArea(poly: Pt[]): number {
+  let a = 0;
+  for (let i = 0; i < poly.length; i++) { const p = poly[i], q = poly[(i + 1) % poly.length]; a += p.x * q.y - q.x * p.y; }
+  return Math.abs(a) / 2;
+}
+
+// Sutherland–Hodgman：単純ポリゴンを半平面（axis>=mid / axis<=mid）でクリップ。rectilinear 入力では交点は整数。
+function clipHalf(poly: Pt[], axis: 'x' | 'y', mid: number, side: 1 | -1): Pt[] {
+  const inside = (p: Pt) => (side === 1 ? p[axis] >= mid - EPS : p[axis] <= mid + EPS);
+  const cut = (a: Pt, b: Pt): Pt => {
+    const t = (mid - a[axis]) / (b[axis] - a[axis]);
+    return { x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) };
+  };
+  const out: Pt[] = [];
+  const n = poly.length;
+  for (let i = 0; i < n; i++) {
+    const cur = poly[i], nxt = poly[(i + 1) % n];
+    const ci = inside(cur), ni = inside(nxt);
+    if (ci) out.push({ x: cur.x, y: cur.y });
+    if (ci !== ni) out.push(cut(cur, nxt));
+  }
+  return out;
+}
+
+// 連続重複点の除去。
+function dedupeRing(poly: Pt[]): Pt[] {
+  const out: Pt[] = [];
+  const n = poly.length;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n];
+    if (Math.abs(a.x - b.x) < 1e-4 && Math.abs(a.y - b.y) < 1e-4) continue;
+    out.push({ x: a.x, y: a.y });
+  }
+  return out;
+}
+
+// 共線3点の中点を落とす（棟境界の中間点を畳んで「棟辺1本」にする／ジョグ=L字は残す）。
+function mergeCollinear(poly: Pt[]): Pt[] {
+  let pts = poly.slice();
+  let changed = true;
+  while (changed && pts.length > 3) {
+    changed = false;
+    const out: Pt[] = [];
+    const n = pts.length;
+    for (let i = 0; i < n; i++) {
+      const a = pts[(i - 1 + n) % n], b = pts[i], c = pts[(i + 1) % n];
+      const crossp = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+      const len = Math.hypot(c.x - a.x, c.y - a.y);
+      if (len > EPS && Math.abs(crossp) < 1e-3 * Math.max(1, len)) { changed = true; continue; }
+      out.push(b);
+    }
+    if (out.length >= 3) pts = out; else break;
+  }
+  return pts;
+}
+
+const cleanRing = (poly: Pt[]): Pt[] => mergeCollinear(dedupeRing(poly));
+
+// 全辺が軸平行（斜辺なし）かつ零長辺なし＝矩形整合な単純ポリゴンの必要条件。
+function isRectilinear(poly: Pt[]): boolean {
+  const n = poly.length;
+  if (n < 4) return false;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n];
+    const dx = Math.abs(a.x - b.x), dy = Math.abs(a.y - b.y);
+    if (dx > 1e-3 && dy > 1e-3) return false; // 斜辺
+    if (dx < 1e-3 && dy < 1e-3) return false; // 零長
+  }
+  return true;
+}
+
+// 外側の軒辺 index：軒＝流れに直交する辺（split 軸で一定な辺）。extreme 側（min/max）を選ぶ＝確実に外周。
+function outerEaveIndex(poly: Pt[], axis: 'x' | 'y', outer: 'min' | 'max'): number {
+  let idx = -1, best = outer === 'min' ? Infinity : -Infinity;
+  const n = poly.length;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n];
+    if (Math.abs(a[axis] - b[axis]) > 1e-3) continue;     // 軸方向に変化する辺は軒ではない
+    const v = a[axis];
+    if (outer === 'min' ? v < best : v > best) { best = v; idx = i; }
+  }
+  return idx;
+}
+
+const roundPts = (poly: Pt[]): Point[] => poly.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }));
+
+// Ver1-1 本体：Outline を長辺方向の棟線でクリップ→2面。安全弁を通らなければ null（=呼び出し側が bbox へ）。
+function outlineFaceInputs(outline: Pt[], pitch: number): RoofFaceInput[] | null {
+  if (!outline || outline.length < 4) return null;
+  const { x0, y0, x1, y1 } = bboxOf(outline);
+  const w = x1 - x0, h = y1 - y0;
+  if (w < EPS || h < EPS) return null;
+  const vertical = h > w;                                  // 棟は長辺方向。縦長→棟は縦（split 軸 = x）。
+  const axis: 'x' | 'y' = vertical ? 'x' : 'y';
+  const mid = Math.round(vertical ? (x0 + x1) / 2 : (y0 + y1) / 2);
+
+  // (安全弁) 棟線が外形境界をまたぐのはちょうど2箇所か（=左右/上下が単連結に割れる）。
+  let crossings = 0;
+  for (let i = 0; i < outline.length; i++) {
+    const a = outline[i], b = outline[(i + 1) % outline.length];
+    if ((a[axis] - mid) * (b[axis] - mid) < -EPS) crossings++;
+  }
+  if (crossings !== 2) return null;
+
+  const A = cleanRing(clipHalf(outline, axis, mid, -1));   // axis<=mid（左／上）
+  const B = cleanRing(clipHalf(outline, axis, mid, +1));   // axis>=mid（右／下）
+  // (安全弁) 各面が単純（矩形整合）ポリゴンか。
+  if (!isRectilinear(A) || !isRectilinear(B)) return null;
+  // (安全弁) 面積保存：Σ 面 = Outline（欠損・重複を機械検知）。
+  const total = polyArea(outline);
+  if (Math.abs(polyArea(A) + polyArea(B) - total) > Math.max(1, total * 1e-3)) return null;
+
+  const eaveA = outerEaveIndex(A, axis, 'min');
+  const eaveB = outerEaveIndex(B, axis, 'max');
+  if (eaveA < 0 || eaveB < 0) return null;
+
+  const faces: RoofFaceInput[] = [
+    { vertices: roundPts(A), pitch, eaveEdgeIndex: eaveA },
+    { vertices: roundPts(B), pitch, eaveEdgeIndex: eaveB },
+  ];
+
+  // (安全弁) 共有辺グラフ上で棟辺がちょうど1本・斜辺なし。
+  const m = buildRoofModelFromFaces(
+    faces.map((f) => ({ vertices: f.vertices, pitch: f.pitch, attrs: DEFAULT_ATTRS, eaveEdgeIndex: f.eaveEdgeIndex })),
+    { scale: 1 },
+  );
+  if (m.faces.length !== 2) return null;
+  if ([...edgeFaceCount(m).values()].filter((c) => c >= 2).length !== 1) return null;
+  const V = new Map(m.vertices.map((v) => [v.id, v]));
+  for (const e of m.edges) {
+    const a = V.get(e.v[0]), b = V.get(e.v[1]);
+    if (!a || !b) return null;
+    if (Math.abs(a.x - b.x) > 1e-3 && Math.abs(a.y - b.y) > 1e-3) return null; // 斜辺
+  }
+  return faces;
+}
+
+// Ver0 fallback：外形 bbox に切妻を1本（ridge＝長辺方向・上下/左右2面・各外側辺＝軒＝eaveEdgeIndex 0）。
+function bboxFaceInputs(outline: Pt[], pitch: number): RoofFaceInput[] {
   const { x0, y0, x1, y1 } = bboxOf(outline);
   const w = x1 - x0, h = y1 - y0;
   if (w >= h) {
-    // ridge 水平（長辺＝x方向）。上下2面・各外側水平辺＝軒（eaveEdgeIndex=0）。共有辺（中央 y=midY）＝棟の素。
     const midY = (y0 + y1) / 2;
     return [
-      { vertices: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: midY }, { x: x0, y: midY }], pitch, eaveEdgeIndex: 0 }, // 上：軒＝上辺
-      { vertices: [{ x: x1, y: y1 }, { x: x0, y: y1 }, { x: x0, y: midY }, { x: x1, y: midY }], pitch, eaveEdgeIndex: 0 }, // 下：軒＝下辺
+      { vertices: [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: midY }, { x: x0, y: midY }], pitch, eaveEdgeIndex: 0 },
+      { vertices: [{ x: x1, y: y1 }, { x: x0, y: y1 }, { x: x0, y: midY }, { x: x1, y: midY }], pitch, eaveEdgeIndex: 0 },
     ];
   }
-  // ridge 垂直（長辺＝y方向）。左右2面・各外側垂直辺＝軒（eaveEdgeIndex=0）。共有辺（中央 x=midX）＝棟の素。
   const midX = (x0 + x1) / 2;
   return [
-    { vertices: [{ x: x0, y: y1 }, { x: x0, y: y0 }, { x: midX, y: y0 }, { x: midX, y: y1 }], pitch, eaveEdgeIndex: 0 }, // 左：軒＝左辺
-    { vertices: [{ x: x1, y: y0 }, { x: x1, y: y1 }, { x: midX, y: y1 }, { x: midX, y: y0 }], pitch, eaveEdgeIndex: 0 }, // 右：軒＝右辺
+    { vertices: [{ x: x0, y: y1 }, { x: x0, y: y0 }, { x: midX, y: y0 }, { x: midX, y: y1 }], pitch, eaveEdgeIndex: 0 },
+    { vertices: [{ x: x1, y: y0 }, { x: x1, y: y1 }, { x: midX, y: y1 }, { x: midX, y: y0 }], pitch, eaveEdgeIndex: 0 },
   ];
 }
 
-// Roof Outline → RoofModel（F-3 Ver0）。roofFaceInputs に attrs（costing）を足して共有辺グラフを組む。★役割は付けない（創発）。
+// F-3 core：Roof Outline → 屋根面の入力列（Ver1-1＝外形なり2面／不成立時のみ Ver0 bbox）。
+//   ★配線の接続点：Studio はこの列を編集状態（faces）に持ち、buildRoofModelFromFaces で RoofModel を組む。
+export function roofFaceInputs(outline: Pt[], elevation?: ElevationSpec[], opts: { pitch?: number } = {}): RoofFaceInput[] {
+  const pitch = opts.pitch ?? pickPitch(elevation);
+  return outlineFaceInputs(outline, pitch) ?? bboxFaceInputs(outline, pitch);
+}
+
+// Roof Outline → RoofModel（F-3）。roofFaceInputs に attrs（costing）を足して共有辺グラフを組む。★役割は付けない（創発）。
 export function generateRoofFaces(outline: Pt[], elevation?: ElevationSpec[], opts: RoofFacesOptions = {}): RoofModel {
   const scale = opts.scale ?? 1;
   const attrs = opts.attrs ?? DEFAULT_ATTRS;

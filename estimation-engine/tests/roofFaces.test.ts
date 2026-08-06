@@ -8,7 +8,7 @@
 //   ③伝法邸 Canonical：Facts→Candidate→Resolver→F-3 の一本を通し、辺ロールが創発することを固定。
 import { generateRoofFaces, pickPitch } from '../src/geometry/roofFaces';
 import { roleCounts, roofType, faceDownhill } from '../src/geometry/roofEngine';
-import { edgeFaceCount, isSharedEdge } from '../src/geometry/roofModel';
+import { edgeFaceCount, isSharedEdge, faceArea } from '../src/geometry/roofModel';
 import { geometryFeatures } from '../src/geometry/footprintFeatures';
 import { analyzeRoof } from '../src/geometry/roofAnalyzer';
 import { resolveRoofOutline } from '../src/geometry/roofResolver';
@@ -26,6 +26,7 @@ const eq = (got: Record<string, number>, exp: Record<string, number>) =>
   JSON.stringify(Object.fromEntries(Object.entries(got).sort())) ===
   JSON.stringify(Object.fromEntries(Object.entries(exp).sort()));
 const GABLE = { ridge: 1, eave: 2, gable: 4 };
+const polyAreaOf = (P: Pt[]) => { let a = 0; for (let i = 0; i < P.length; i++) { const p = P[i], q = P[(i + 1) % P.length]; a += p.x * q.y - q.x * p.y; } return Math.abs(a / 2); };
 
 // 各 Face の軒（downhill.toEdgeId）が「外周辺（面1枚が使う辺）」を指しているか＝正しく軒を指している。
 const eaveIsOuter = (m: ReturnType<typeof generateRoofFaces>) =>
@@ -73,15 +74,24 @@ const cfg: any = fix.canonical;
 const F = geometryFeatures(traceOutline(wallFilter(segs, cfg.wallFilter), cfg.contourTrace)!.polygon);
 const outline = resolveRoofOutline(F, analyzeRoof(F)).polygon; // Resolver 確定外形（26頂点）
 const M = generateRoofFaces(outline, undefined, { scale: 1, name: '伝法邸' });
+const outlineArea = polyAreaOf(outline);
+const planarSum = M.faces.reduce((s, f) => s + faceArea(M, f), 0);
+const Vm = new Map(M.vertices.map((v) => [v.id, v] as const));
+const noDiagonal = M.edges.every((e) => { const a = Vm.get(e.v[0])!, b = Vm.get(e.v[1])!; return Math.abs(a.x - b.x) < 1e-6 || Math.abs(a.y - b.y) < 1e-6; });
+const rcM = roleCounts(M);
 
-ok(outline.length === 26 && M.faces.length === 2, `伝法邸：外形26頂点→2面（実 ${outline.length}→${M.faces.length}）`);
-ok(M.vertices.length === 6 && M.edges.length === 7, `dedup：頂点6・辺7（実 ${M.vertices.length}/${M.edges.length}）`);
-// ★受入基準：各面が正しく軒を指し、共有辺グラフ上で役割が創発する。
-ok(eq(roleCounts(M), GABLE), `伝法邸：ridge1/eave2/gable4 が創発（実 ${JSON.stringify(roleCounts(M))}）`);
+// ★Ver1-1 受入基準：Resolver Outline を欠損・重複なく2面の共有辺グラフへ写像する。
+//   固定＝面積保存/2面/共有棟辺1本/斜辺なし/ロール格納なし。更新＝頂点/辺数（bbox 6/7 → 外形なり）。
+ok(outline.length === 26, `伝法邸 Outline 26頂点（実 ${outline.length}）`);
+ok(M.faces.length === 2, `2面（実 ${M.faces.length}）`);
+ok(Math.abs(planarSum - outlineArea) <= 1, `★面積保存：Σ面 planar = Outline（${Math.round(outlineArea)}px²・実 ${Math.round(planarSum)}）`);
+ok([...edgeFaceCount(M).values()].filter((c) => c >= 2).length === 1, '共有棟辺はちょうど1本');
+ok(noDiagonal, '斜辺なし（全辺 軸平行）');
+ok(rcM.ridge === 1 && (rcM.eave ?? 0) > 0 && (rcM.gable ?? 0) > 0 && !rcM.valley && !rcM.hip, `棟1・軒/ケラバ創発・谷なし（Ver1-1）実 ${JSON.stringify(rcM)}`);
 ok(roofType(M) === 'gable', '伝法邸：roofType=gable（創発・格納しない）');
-ok(M.faces.every((f) => !!faceDownhill(M, f)) && eaveIsOuter(M), '伝法邸：各面が外側の軒を指す');
-ok([...edgeFaceCount(M).values()].filter((c) => c === 2).length === 1, '伝法邸：共有辺（棟）はちょうど1本');
+ok(M.faces.every((f) => !!faceDownhill(M, f)) && eaveIsOuter(M), '各面が外側の軒を指す（bbox より外形忠実）');
+ok(M.vertices.length === 27 && M.edges.length === 29, `外形なり：頂点27・辺29（bbox の6/7 から更新・実 ${M.vertices.length}/${M.edges.length}）`);
 ok(M.edges.every((e) => e.roleOverride == null), '伝法邸：F-3 は辺ロールを格納しない（創発）');
 
 if (fails.length) { console.error('❌ Roof Face Generator FAIL:\n' + fails.map((f) => '  - ' + f).join('\n')); process.exit(1); }
-console.log(`✅ Roof Face Generator (F-3 Ver0) test: 全 ${pass} 件合格（外形→切妻2面・各面が軒を指す・ridge1/eave2/gable4 と gable が創発・ロールは格納しない＋伝法邸で一本通し）`);
+console.log(`✅ Roof Face Generator (F-3 Ver1-1) test: 全 ${pass} 件合格（矩形は Ver0 と一致・伝法邸は外形なり2面へ写像＝面積保存/棟辺1本/斜辺なし・谷は作らない）`);

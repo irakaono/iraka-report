@@ -6,7 +6,7 @@
 //   ★Runtime は RoofModel が正（F#6）。RoofConfiguration(F-4) はこの経路に入れない（消費者ができるまで凍結）。
 import { footprintToRoofOutline } from '../src/geometry/roofPipeline';
 import { roofFaceInputs } from '../src/geometry/roofFaces';
-import { buildRoofModelFromFaces } from '../src/geometry/roofModel';
+import { buildRoofModelFromFaces, faceArea, edgeFaceCount } from '../src/geometry/roofModel';
 import { roofQuantities } from '../src/geometry/roofQuantities';
 import { roleCounts } from '../src/geometry/roofEngine';
 import { wallFilter } from '../src/geometry/wallFilter';
@@ -37,12 +37,20 @@ const rq = roofQuantities(model, scale);                                    // �
 ok(footprint.length === 38, `Footprint（認識外形）38頂点（実 ${footprint.length}）`);
 ok(outline.length === 26, `Outline（Resolver 確定）26頂点＝ポーチ/出窓除去（実 ${outline.length}）`);
 ok(faces.length === 2, `DraftFace[]＝2面（1面→分割・実 ${faces.length}）`);
-ok(model.faces.length === 2 && model.vertices.length === 6 && model.edges.length === 7, `RoofModel 面2/頂点6/辺7（実 ${model.faces.length}/${model.vertices.length}/${model.edges.length}）`);
+ok(model.faces.length === 2, `RoofModel 2面（実 ${model.faces.length}）`);
+ok(model.vertices.length === 27 && model.edges.length === 29, `外形なり 頂点27/辺29（Ver0 bbox 6/7 から更新・実 ${model.vertices.length}/${model.edges.length}）`);
 
-// ★受入基準：Geometry Pipeline が Runtime（数量）に届いた。屋根面積＋役割別長さ（棟/軒/ケラバ）が出る。
-ok(qval(rq, 'roofArea') > 0, `Runtime：実屋根面積 > 0（実 ${qval(rq, 'roofArea').toFixed(2)}㎡）`);
-ok(qval(rq, 'ridgeLength') > 0, `Runtime：棟長 > 0（辺ロール創発が数量に届く・実 ${qval(rq, 'ridgeLength').toFixed(2)}m）`);
-ok(qval(rq, 'eaveLength') > 0, `Runtime：軒長 > 0（実 ${qval(rq, 'eaveLength').toFixed(2)}m）`);
+// ★Ver1-1 一次の正＝面積保存：Σ面 planar = Outline（欠損・重複なく2面へ写像）。
+const outlineArea = (() => { let a = 0; for (let i = 0; i < outline.length; i++) { const p = outline[i], q = outline[(i + 1) % outline.length]; a += p.x * q.y - q.x * p.y; } return Math.abs(a / 2); })();
+const planarSum = model.faces.reduce((s, f) => s + faceArea(model, f), 0);
+ok(Math.abs(planarSum - outlineArea) <= 1, `★面積保存：Σ面 planar = Outline（${Math.round(outlineArea)}px²・実 ${Math.round(planarSum)}）`);
+ok([...edgeFaceCount(model).values()].filter((c) => c >= 2).length === 1, '共有棟辺はちょうど1本');
+
+// ★受入基準：Geometry Pipeline が Runtime（数量）に届いた。実屋根面積は現行 pitch(5寸) での期待値±許容差。
+const expArea = outlineArea / (scale * scale) * Math.sqrt(1 + 0.25);
+ok(qval(rq, 'roofArea') > 0 && Math.abs(qval(rq, 'roofArea') - expArea) <= 0.1, `Runtime：実屋根面積 ${qval(rq, 'roofArea').toFixed(2)}㎡ ≈ 期待 ${expArea.toFixed(2)}（外形×5寸）`);
+ok(qval(rq, 'ridgeLength') > 0 && qval(rq, 'eaveLength') > 0 && qval(rq, 'gableLength') > 0, `Runtime：棟/軒/ケラバ 有限・正値（棟 ${qval(rq, 'ridgeLength').toFixed(2)} / 軒 ${qval(rq, 'eaveLength').toFixed(2)} / ケラバ ${qval(rq, 'gableLength').toFixed(2)}）`);
+ok(qval(rq, 'valleyLength') === 0, 'Ver1-1 は谷を作らない（valley 0）');
 
 // ★一本を1回だけログ（Footprint→…→Runtime が Studio 経路で通った証拠）。
 const roles = roleCounts(model);
