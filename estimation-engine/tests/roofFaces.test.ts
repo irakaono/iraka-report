@@ -92,6 +92,11 @@ ok(roofType(M) === 'gable', '伝法邸：roofType=gable（創発・格納しな�
 ok(M.faces.every((f) => !!faceDownhill(M, f)) && eaveIsOuter(M), '各面が外側の軒を指す（bbox より外形忠実）');
 ok(M.vertices.length === 27 && M.edges.length === 29, `外形なり：頂点27・辺29（bbox の6/7 から更新・実 ${M.vertices.length}/${M.edges.length}）`);
 ok(M.edges.every((e) => e.roleOverride == null), '伝法邸：F-3 は辺ロールを格納しない（創発）');
+// ★実機回帰：placeFootprint 相当の非整数スケール+オフセット後でも「棟が中央に1本」創発する（丸めで辺が潰れても棟が消えない）。
+const scaledOutline = outline.map((p) => ({ x: p.x * 0.7137 + 13.2, y: p.y * 0.7137 + 9.8 }));
+const Ms = generateRoofFaces(scaledOutline, undefined, { scale: 1 });
+const rcS = roleCounts(Ms);
+ok(Ms.faces.length === 2 && rcS.ridge === 1 && !rcS.valley && !rcS.hip, `実機回帰：非整数配置でも 2面・棟1本・谷なし（実 faces ${Ms.faces.length} ${JSON.stringify(rcS)}）`);
 
 if (fails.length) { console.error('❌ Roof Face Generator FAIL:\n' + fails.map((f) => '  - ' + f).join('\n')); process.exit(1); }
 console.log(`✅ Roof Face Generator (F-3 Ver1-1) test: 全 ${pass} 件合格（矩形は Ver0 と一致・伝法邸は外形なり2面へ写像＝面積保存/棟辺1本/斜辺なし・谷は作らない）`);

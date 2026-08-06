@@ -19,6 +19,7 @@
 import type { Pt } from './contourTrace';
 import type { Point, RoofModel, FaceAttrs } from './roofModel';
 import { buildRoofModelFromFaces, edgeFaceCount } from './roofModel';
+import { roleCounts } from './roofEngine';
 import type { ElevationSpec } from './recognizer';
 
 export interface RoofFacesOptions {
@@ -158,24 +159,27 @@ function outlineFaceInputs(outline: Pt[], pitch: number): RoofFaceInput[] | null
   }
   if (crossings !== 2) return null;
 
-  const A = cleanRing(clipHalf(outline, axis, mid, -1));   // axis<=mid（左／上）
-  const B = cleanRing(clipHalf(outline, axis, mid, +1));   // axis>=mid（右／下）
+  // clip → clean(float) → round → clean(int)：整数リングを確定してから軒 index を取る。
+  //   ★丸めで辺が1本潰れても buildRoofModelFromFaces の boundary と index がズレない（棟ロールが壊れない）。
+  const A = cleanRing(roundPts(cleanRing(clipHalf(outline, axis, mid, -1))));   // axis<=mid（左／上）
+  const B = cleanRing(roundPts(cleanRing(clipHalf(outline, axis, mid, +1))));   // axis>=mid（右／下）
   // (安全弁) 各面が単純（矩形整合）ポリゴンか。
+  if (A.length < 4 || B.length < 4) return null;
   if (!isRectilinear(A) || !isRectilinear(B)) return null;
-  // (安全弁) 面積保存：Σ 面 = Outline（欠損・重複を機械検知）。
+  // (安全弁) 面積保存：Σ 面 = Outline（欠損・重複を機械検知。整数丸め分の許容差）。
   const total = polyArea(outline);
-  if (Math.abs(polyArea(A) + polyArea(B) - total) > Math.max(1, total * 1e-3)) return null;
+  if (Math.abs(polyArea(A) + polyArea(B) - total) > Math.max(2, total * 2e-3)) return null;
 
   const eaveA = outerEaveIndex(A, axis, 'min');
   const eaveB = outerEaveIndex(B, axis, 'max');
   if (eaveA < 0 || eaveB < 0) return null;
 
   const faces: RoofFaceInput[] = [
-    { vertices: roundPts(A), pitch, eaveEdgeIndex: eaveA },
-    { vertices: roundPts(B), pitch, eaveEdgeIndex: eaveB },
+    { vertices: A as Point[], pitch, eaveEdgeIndex: eaveA },
+    { vertices: B as Point[], pitch, eaveEdgeIndex: eaveB },
   ];
 
-  // (安全弁) 共有辺グラフ上で棟辺がちょうど1本・斜辺なし。
+  // (安全弁) 共有辺グラフで検証：2面・棟辺1本・斜辺なし。
   const m = buildRoofModelFromFaces(
     faces.map((f) => ({ vertices: f.vertices, pitch: f.pitch, attrs: DEFAULT_ATTRS, eaveEdgeIndex: f.eaveEdgeIndex })),
     { scale: 1 },
@@ -188,6 +192,10 @@ function outlineFaceInputs(outline: Pt[], pitch: number): RoofFaceInput[] | null
     if (!a || !b) return null;
     if (Math.abs(a.x - b.x) > 1e-3 && Math.abs(a.y - b.y) > 1e-3) return null; // 斜辺
   }
+  // (安全弁・★核心) 役割が **clean gable** で創発するか：棟ちょうど1本・谷/隅棟なし・軒/ケラバあり。
+  //   ＝「中央に棟1本」を code で保証。満たさなければ bbox 切妻へフォールバック（bbox は必ず棟が出る）。
+  const rc = roleCounts(m);
+  if (rc.ridge !== 1 || (rc.valley ?? 0) !== 0 || (rc.hip ?? 0) !== 0 || (rc.eave ?? 0) < 1 || (rc.gable ?? 0) < 1) return null;
   return faces;
 }
 
