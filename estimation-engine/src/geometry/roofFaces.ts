@@ -20,6 +20,7 @@ import type { Pt } from './contourTrace';
 import type { Point, RoofModel, FaceAttrs } from './roofModel';
 import { buildRoofModelFromFaces, edgeFaceCount } from './roofModel';
 import { roleCounts } from './roofEngine';
+import { offsetPolygonOutward } from './elevationInference';
 import type { ElevationSpec } from './recognizer';
 
 export interface RoofFacesOptions {
@@ -222,6 +223,28 @@ function bboxFaceInputs(outline: Pt[], pitch: number): RoofFaceInput[] {
 export function roofFaceInputs(outline: Pt[], elevation?: ElevationSpec[], opts: { pitch?: number } = {}): RoofFaceInput[] {
   const pitch = opts.pitch ?? pickPitch(elevation);
   return outlineFaceInputs(outline, pitch) ?? bboxFaceInputs(outline, pitch);
+}
+
+// 軒の出（overhang）を屋根面へ反映する：各面を外側へ dpx 平行拡張する。
+//   ★共有辺グラフを壊さない：**2面が共有する頂点（棟・谷の内部辺）は動かさない**。
+//     軒の出で外へ出るのは軒/ケラバ端だけで、棟（建物中央の稜線）は動かないのが物理的にも正しい。
+//     面ごとに素朴に offsetPolygonOutward すると共有頂点が各面バラバラに動き、棟が「共有でなくなって消える」ため必須。
+//   ★純関数。faces は {vertices} を持つ任意型（RoofFaceInput / Studio FaceInput）を受けて同型を返す。
+export function offsetRoofFacesOutward<T extends { vertices: Point[] }>(faces: T[], dpx: number): T[] {
+  if (!dpx || faces.length === 0) return faces;
+  const key = (p: Point) => `${Math.round(p.x)},${Math.round(p.y)}`;
+  const count = new Map<string, number>();
+  for (const f of faces) for (const v of f.vertices) count.set(key(v), (count.get(key(v)) ?? 0) + 1);
+  const shared = new Set([...count.entries()].filter(([, c]) => c > 1).map(([k]) => k)); // 2面以上が共有＝内部辺（棟/谷）の頂点
+  return faces.map((f) => {
+    const moved = offsetPolygonOutward(f.vertices, dpx);
+    const vertices: Point[] = moved.map((p, i) =>
+      shared.has(key(f.vertices[i]))
+        ? { x: f.vertices[i].x, y: f.vertices[i].y }          // 共有頂点は固定（棟を動かさない）
+        : { x: Math.round(p.x), y: Math.round(p.y) },         // 外周（軒/ケラバ）だけ外へ
+    );
+    return { ...f, vertices };
+  });
 }
 
 // Roof Outline → RoofModel（F-3）。roofFaceInputs に attrs（costing）を足して共有辺グラフを組む。★役割は付けない（創発）。

@@ -27,12 +27,11 @@ import { serializeDocument, parseDocument, maxIdSuffix } from '../geometry/persi
 import { calibrateFrom2Points, calibrationFromPxPerMeter, DEV_PX_PER_METER } from '../geometry/calibration';
 import type { Calibration } from '../geometry/calibration';
 import type { ScaleHint } from '../geometry/scaleInference';
-import { offsetPolygonOutward } from '../geometry/elevationInference';
 import type { ElevationHint } from '../geometry/elevationInference';
 import type { ElevationSpec } from '../geometry/recognizer';
 import { preset, buildDraftFaces, shedFace, suggestFaceCount } from '../geometry/draftFaces';
 import { footprintToRoofOutline } from '../geometry/roofPipeline';
-import { roofFaceInputs } from '../geometry/roofFaces';
+import { roofFaceInputs, offsetRoofFacesOutward } from '../geometry/roofFaces';
 import { placeFootprint } from '../geometry/footprint';
 import type { FootprintCandidate } from '../geometry/footprint';
 import { snapToCorner } from '../geometry/cornerSnap';
@@ -458,7 +457,7 @@ export default function RoofStudio({ planSrc, elevationSrc, scaleHint, elevHint,
     const delta = mm - overhangMm;
     if (delta !== 0 && s > 0) {
       const dpx = (delta / 1000) * s;
-      setFaces((fs) => fs.map((f) => ({ ...f, vertices: offsetPolygonOutward(f.vertices, dpx) })));
+      setFaces((fs) => offsetRoofFacesOutward(fs, dpx)); // ★共有頂点（棟/谷）を固定して外へ＝棟を壊さない
     }
     setOverhangMm(mm);
     flash(`✓ 軒の出 ${mm}mm を反映`);

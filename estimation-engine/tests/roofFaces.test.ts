@@ -6,9 +6,9 @@
 //   ②規律：F-3 は新IRを作らず既存 RoofModel を返す・面は boundary(辺ID列)で polygon を持たない・
 //          EdgeRole を格納しない（roleOverride 全 undefined＝創発）・各面 slope.downhill.toEdgeId が設定される。
 //   ③伝法邸 Canonical：Facts→Candidate→Resolver→F-3 の一本を通し、辺ロールが創発することを固定。
-import { generateRoofFaces, pickPitch } from '../src/geometry/roofFaces';
+import { generateRoofFaces, pickPitch, roofFaceInputs, offsetRoofFacesOutward } from '../src/geometry/roofFaces';
 import { roleCounts, roofType, faceDownhill } from '../src/geometry/roofEngine';
-import { edgeFaceCount, isSharedEdge, faceArea } from '../src/geometry/roofModel';
+import { edgeFaceCount, isSharedEdge, faceArea, buildRoofModelFromFaces } from '../src/geometry/roofModel';
 import { geometryFeatures } from '../src/geometry/footprintFeatures';
 import { analyzeRoof } from '../src/geometry/roofAnalyzer';
 import { resolveRoofOutline } from '../src/geometry/roofResolver';
@@ -97,6 +97,18 @@ const scaledOutline = outline.map((p) => ({ x: p.x * 0.7137 + 13.2, y: p.y * 0.7
 const Ms = generateRoofFaces(scaledOutline, undefined, { scale: 1 });
 const rcS = roleCounts(Ms);
 ok(Ms.faces.length === 2 && rcS.ridge === 1 && !rcS.valley && !rcS.hip, `実機回帰：非整数配置でも 2面・棟1本・谷なし（実 faces ${Ms.faces.length} ${JSON.stringify(rcS)}）`);
+
+// ★実機回帰②：軒の出（overhang）を面へ反映しても「棟」が壊れないこと。
+//   naive な面ごと offsetPolygonOutward だと共有頂点が各面バラバラに動き棟が消える（実機不具合）。
+//   offsetRoofFacesOutward は共有頂点（棟）を固定して外周だけ外へ拡張する。
+const oFaces = roofFaceInputs(outline, undefined, { pitch: 5 });
+const oAttrs = { trade: '屋根工事', item: 'roof_field' };
+const buildO = (fs: typeof oFaces) => buildRoofModelFromFaces(fs.map((f) => ({ vertices: f.vertices, pitch: f.pitch, attrs: oAttrs, eaveEdgeIndex: f.eaveEdgeIndex })), { scale: 50 });
+const rcBefore = roleCounts(buildO(oFaces));
+const rcAfter = roleCounts(buildO(offsetRoofFacesOutward(oFaces, 12.5))); // 250mm @ 50px/m 相当
+ok(rcBefore.ridge === 1, `overhang 前：棟1本（実 ${JSON.stringify(rcBefore)}）`);
+ok(rcAfter.ridge === 1 && (rcAfter.eave ?? 0) > 0 && (rcAfter.gable ?? 0) > 0 && !rcAfter.valley, `★軒の出反映後も 棟1本維持（共有頂点固定）（実 ${JSON.stringify(rcAfter)}）`);
+ok(offsetRoofFacesOutward(oFaces, 0) === oFaces, 'overhang 0 は無変換（同一参照）');
 
 if (fails.length) { console.error('❌ Roof Face Generator FAIL:\n' + fails.map((f) => '  - ' + f).join('\n')); process.exit(1); }
 console.log(`✅ Roof Face Generator (F-3 Ver1-1) test: 全 ${pass} 件合格（矩形は Ver0 と一致・伝法邸は外形なり2面へ写像＝面積保存/棟辺1本/斜辺なし・谷は作らない）`);
