@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>端末診断 | 甍AI Field</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--ink:#1f2430;--sub:#6b7280;--line:#e5e7eb;
+        --brand:#1f2b45;--ok:#1a7f37;--ng:#b42318;--warn:#8a4b12;--warnbg:#fff7ed;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+       background:var(--bg);color:var(--ink);line-height:1.6;padding-bottom:40px;}
+  .app{max-width:720px;margin:0 auto;}
+  header{background:var(--brand);color:#fff;padding:calc(env(safe-area-inset-top) + 14px) 16px 14px;}
+  header h1{font-size:17px;margin:0;font-weight:700;}
+  header p{font-size:12px;margin:4px 0 0;opacity:.8;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+        margin:14px;padding:16px;box-shadow:0 1px 3px rgba(16,24,40,.06);}
+  .card h2{font-size:14px;margin:0 0 10px;}
+  .note{background:var(--warnbg);border:1px solid #f4c48a;color:var(--warn);
+        font-size:13px;margin:14px;padding:12px 14px;border-radius:12px;}
+  .row{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid #f0f1f4;font-size:13px;}
+  .row:last-child{border-bottom:0;}
+  .row .k{color:var(--sub);flex:0 0 42%;}
+  .row .v{flex:1;word-break:break-all;font-family:ui-monospace,monospace;font-size:12px;}
+  .ok{color:var(--ok);font-weight:700;} .ng{color:var(--ng);font-weight:700;}
+  button{font-size:16px;font-weight:700;padding:16px;border-radius:12px;border:0;
+         cursor:pointer;background:var(--brand);color:#fff;width:100%;margin-top:4px;}
+  button:active{filter:brightness(1.25);}
+  .big{font-size:15px;text-align:center;padding:14px;border-radius:12px;
+       background:#eef0f3;color:var(--sub);margin-top:10px;font-weight:700;}
+  .big.ok{background:#eefaf1;color:var(--ok);}
+  .log{background:#0f1420;color:#d7e0ea;padding:12px;border-radius:10px;
+       font:11.5px/1.7 ui-monospace,monospace;max-height:220px;overflow:auto;
+       white-space:pre-wrap;word-break:break-all;margin-top:10px;}
+  .copy{background:#eef0f3;color:var(--ink);}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>🩺 端末診断</h1>
+    <p>この端末でJavaScriptとタップが正常に動くかを確認します。データには一切触れません。</p>
+  </header>
+
+  <div class="note">
+    このページは<b>読み取りだけ</b>です。下書き・写真を消したり書き換えたりしません。
+    いつも報告書を開いているのと<b>同じ方法・同じ場所</b>で開いてください。
+  </div>
+
+  <!-- ① タップが届くか -->
+  <div class="card">
+    <h2>① タップは届いていますか</h2>
+    <button id="tapBtn">ここを3回タップしてください</button>
+    <div class="big" id="tapResult">まだ押されていません</div>
+    <div style="font-size:12px;color:var(--sub);margin-top:8px">
+      ここが反応しないなら、報告書だけの問題ではありません。
+    </div>
+  </div>
+
+  <!-- ② 端末情報 -->
+  <div class="card">
+    <h2>② 端末情報</h2>
+    <div id="env"></div>
+  </div>
+
+  <!-- ③ 保存領域 -->
+  <div class="card">
+    <h2>③ 保存領域の空き</h2>
+    <div id="storage">確認中…</div>
+    <div style="font-size:12px;color:var(--sub);margin-top:8px">
+      空きが少ないと、iOSがJavaScriptを止めたりデータを消したりします。
+    </div>
+  </div>
+
+  <!-- ④ 機能チェック -->
+  <div class="card">
+    <h2>④ 報告書が使う機能</h2>
+    <div id="feat"></div>
+  </div>
+
+  <!-- ⑤ エラー -->
+  <div class="card">
+    <h2>⑤ このページで起きたエラー</h2>
+    <div class="log" id="log">（まだありません）</div>
+    <button class="copy" id="copyBtn">📋 診断結果をコピー</button>
+    <div style="font-size:12px;color:var(--sub);margin-top:8px" id="copyMsg"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var errors = [];
+  var logEl = document.getElementById('log');
+  function pushErr(s){
+    errors.push(s);
+    logEl.textContent = errors.join('\n');
+  }
+  window.addEventListener('error', function(e){
+    pushErr('ERROR: ' + (e.message||'') + ' @ ' + (e.filename||'') + ':' + (e.lineno||''));
+  }, true);
+  window.addEventListener('unhandledrejection', function(e){
+    pushErr('PROMISE: ' + ((e.reason && (e.reason.message||e.reason)) || ''));
+  });
+
+  function row(k, v, cls){
+    return '<div class="row"><div class="k">' + k + '</div>' +
+           '<div class="v' + (cls ? ' ' + cls : '') + '">' + v + '</div></div>';
+  }
+  function yn(b){ return b ? '<span class="ok">OK</span>' : '<span class="ng">NG</span>'; }
+
+  /* ---- ① タップ ---- */
+  var taps = 0;
+  var btn = document.getElementById('tapBtn');
+  var res = document.getElementById('tapResult');
+  function onTap(){
+    taps++;
+    res.textContent = taps + ' 回 反応しました';
+    if (taps >= 3) {
+      res.textContent = '✅ ' + taps + ' 回 — タップは正常に届いています';
+      res.className = 'big ok';
+    }
+  }
+  // click と touchend の両方で拾う（どちらが効くかも判定材料になる）
+  btn.addEventListener('click', onTap);
+  btn.addEventListener('touchend', function(){ /* click が来ない端末の保険 */ }, {passive:true});
+
+  /* ---- ② 端末情報 ---- */
+  var ua = navigator.userAgent;
+  var m = ua.match(/OS (\d+)[_.](\d+)/);
+  var osver = m ? (m[1] + '.' + m[2]) : '不明';
+  var standalone = (window.navigator.standalone === true) ||
+                   (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  document.getElementById('env').innerHTML =
+    row('OS バージョン', osver) +
+    row('開き方', standalone ? 'ホーム画面アプリ' : 'ブラウザ') +
+    row('画面', window.innerWidth + ' × ' + window.innerHeight) +
+    row('CPUコア数', navigator.hardwareConcurrency || '不明') +
+    row('メモリ目安', (navigator.deviceMemory ? navigator.deviceMemory + ' GB' : '取得不可')) +
+    row('URL', location.origin + location.pathname) +
+    row('UA', ua);
+
+  /* ---- ③ 保存領域 ---- */
+  var stEl = document.getElementById('storage');
+  function fmt(n){
+    if (n == null) return '不明';
+    if (n < 1024*1024) return (n/1024).toFixed(0) + ' KB';
+    if (n < 1024*1024*1024) return (n/1024/1024).toFixed(1) + ' MB';
+    return (n/1024/1024/1024).toFixed(2) + ' GB';
+  }
+  if (navigator.storage && navigator.storage.estimate) {
+    navigator.storage.estimate().then(function(e){
+      var used = e.usage, quota = e.quota;
+      var pct = (used != null && quota) ? Math.round(used / quota * 100) : null;
+      var tight = pct != null && pct >= 80;
+      stEl.innerHTML =
+        row('使用中', fmt(used)) +
+        row('上限', fmt(quota)) +
+        row('使用率', pct != null ? pct + ' %' : '不明', tight ? 'ng' : 'ok') +
+        (tight ? row('判定', '<span class="ng">空きが少ない。原因の可能性あり</span>')
+               : row('判定', '<span class="ok">余裕あり</span>'));
+    }).catch(function(err){
+      stEl.innerHTML = row('取得', '<span class="ng">失敗: ' + (err && err.message) + '</span>');
+    });
+  } else {
+    stEl.innerHTML = row('取得', 'この端末では取得できません');
+  }
+
+  /* ---- ④ 機能チェック ---- */
+  var feat = [];
+  // localStorage
+  var lsOk = false, lsErr = '';
+  try {
+    localStorage.setItem('__iraka_check__', '1');
+    localStorage.removeItem('__iraka_check__');
+    lsOk = true;
+  } catch (e) { lsErr = e.name + ': ' + e.message; }
+  feat.push(row('localStorage 書き込み', yn(lsOk) + (lsErr ? ' ' + lsErr : '')));
+
+  // 下書きの有無（読むだけ）
+  var draftCount = '読めません';
+  try {
+    var raw = localStorage.getItem('iraka_report_drafts_v1');
+    draftCount = raw ? (Object.keys(JSON.parse(raw)).length + ' 件') : '0 件';
+  } catch (e) { draftCount = 'エラー: ' + e.message; }
+  feat.push(row('保存されている下書き', draftCount));
+
+  feat.push(row('IndexedDB', yn(!!window.indexedDB)));
+  feat.push(row('印刷機能', yn(typeof window.print === 'function')));
+  feat.push(row('画像の遅延読み込み', yn('IntersectionObserver' in window)));
+  feat.push(row('Service Worker', yn('serviceWorker' in navigator)));
+  document.getElementById('feat').innerHTML = feat.join('');
+
+  // Service Worker の状態
+  if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+    navigator.serviceWorker.getRegistrations().then(function(rs){
+      var html = '';
+      if (!rs.length) { html = row('SW 登録', '<span class="ng">なし</span>'); }
+      else {
+        rs.forEach(function(r, i){
+          html += row('SW ' + (i+1), (r.active ? '稼働中' : '未稼働') + ' / ' + (r.scope||''));
+        });
+      }
+      document.getElementById('feat').innerHTML += html;
+    }).catch(function(){});
+  }
+
+  // IndexedDB を実際に開いてみる（読み取りのみ）
+  if (window.indexedDB) {
+    try {
+      var req = indexedDB.open('iraka_media_db');
+      req.onsuccess = function(){
+        var db = req.result;
+        var n = db.objectStoreNames.length;
+        db.close();
+        document.getElementById('feat').innerHTML +=
+          row('写真DB を開く', '<span class="ok">OK</span>（ストア ' + n + '）');
+      };
+      req.onerror = function(){
+        document.getElementById('feat').innerHTML +=
+          row('写真DB を開く', '<span class="ng">失敗</span>');
+      };
+      req.onblocked = function(){
+        document.getElementById('feat').innerHTML +=
+          row('写真DB を開く', '<span class="ng">ブロック（他のタブが開いている）</span>');
+      };
+    } catch (e) { pushErr('IDB: ' + e.message); }
+  }
+
+  /* ---- ⑤ コピー ---- */
+  document.getElementById('copyBtn').addEventListener('click', function(){
+    var text = [
+      '甍AI 端末診断  ' + new Date().toLocaleString('ja-JP'),
+      'OS: ' + osver,
+      '開き方: ' + (standalone ? 'ホーム画面アプリ' : 'ブラウザ'),
+      'URL: ' + location.href,
+      'タップ反応: ' + taps + ' 回',
+      'localStorage: ' + (lsOk ? 'OK' : 'NG ' + lsErr),
+      '下書き: ' + draftCount,
+      'UA: ' + ua,
+      '--- 本文 ---',
+      document.querySelector('.app').innerText,
+      '--- エラー ---',
+      (errors.length ? errors.join('\n') : 'なし')
+    ].join('\n');
+    var msg = document.getElementById('copyMsg');
+    function done(){ msg.textContent = '✓ コピーしました。チャットに貼り付けてください。'; }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function(){ fb(text, msg); });
+    } else { fb(text, msg); }
+  });
+  function fb(t, msg){
+    var ta = document.createElement('textarea');
+    ta.value = t; ta.style.cssText='position:fixed;top:0;left:0;opacity:0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); msg.textContent = '✓ コピーしました。'; }
+    catch (e) { msg.textContent = 'コピーできませんでした。画面を撮って送ってください。'; }
+    document.body.removeChild(ta);
+  }
+})();
+</script>
+</body>
+</html>
