@@ -250,21 +250,67 @@
   // 印刷直前に、[data-photo-key-full]を持つ要素をまとめて指定品質へ差し替える。
   // 差し替え前の状態は data-print-swap-url / data-print-full-url に退避され、
   // restorePrintQuality() で元に戻せる。
-  function applyPrintQuality(targets, qualityKey) {
+  // 印刷前に「src を差し替えた要素が実際に描けるようになるまで」待つ。
+  // これを待たずに window.print() すると、デコードが間に合わない画像が
+  // 空白で印刷される（どれが間に合わないかは毎回変わる＝ランダムに抜ける）。
+  function _awaitPaint(el) {
+    return new Promise(resolve => {
+      let done = false;
+      const fin = () => { if (!done) { done = true; resolve(); } };
+      setTimeout(fin, 8000);                 // 保険：1枚のために印刷全体を止めない
+
+      if (el.tagName === 'IFRAME') { el.addEventListener('load', fin, { once: true }); return; }
+      if (typeof el.decode === 'function') {
+        // decode() は「描ける状態になった」ことを保証する。
+        // src が再度差し替わると reject するので、その場合も続行。
+        el.decode().then(fin, fin);
+        return;
+      }
+      if (el.complete && el.naturalWidth > 0) { fin(); return; }
+      el.addEventListener('load', fin, { once: true });
+      el.addEventListener('error', fin, { once: true });
+    });
+  }
+
+  // 同時実行数を絞って順番に処理する（スマホのメモリ対策）。
+  function _mapLimited(items, limit, fn) {
+    let i = 0, done = 0;
+    return new Promise(resolve => {
+      if (!items.length) { resolve(0); return; }
+      const next = () => {
+        if (i >= items.length) { if (done === items.length) resolve(done); return; }
+        const item = items[i++];
+        Promise.resolve(fn(item)).then(() => {}, () => {}).then(() => {
+          done++;
+          if (done === items.length) resolve(done); else next();
+        });
+      };
+      for (let k = 0; k < Math.min(limit, items.length); k++) next();
+    });
+  }
+
+  // onProgress(done, total) を渡すと進捗を受け取れる（任意）。
+  // 戻り値は { ready, total } ＝「描ける状態まで到達した枚数」。
+  function applyPrintQuality(targets, qualityKey, onProgress) {
     const preset = QUALITY_PRESETS[qualityKey] || QUALITY_PRESETS.standard;
-    return Promise.all(targets.map(el => {
-      const fullKey = el.dataset.photoKeyFull;
-      if (!fullKey) return Promise.resolve();
-      return idbGet(fullKey).then(fullBlob => {
+    const list = targets.filter(el => el.dataset.photoKeyFull);
+    const total = list.length;
+    let ready = 0, done = 0;
+    return _mapLimited(list, 4, (el) => {       // 4枚ずつ。同時に全部やらない
+      return idbGet(el.dataset.photoKeyFull).then(fullBlob => {
         if (!fullBlob) return;
         return resizeBlobToBlob(fullBlob, preset.maxDim, preset.quality).then(blob => {
           const url = trackObjectURL(global.URL.createObjectURL(blob));
           el.dataset.printSwapUrl = el.getAttribute('src') || '';
           el.dataset.printFullUrl = url;
           el.setAttribute('src', url);
+          return _awaitPaint(el).then(() => { ready++; });   // 描けるまで待つ
         });
-      }).catch(() => {});
-    }));
+      }).catch(() => {}).then(() => {
+        done++;
+        if (typeof onProgress === 'function') { try { onProgress(done, total); } catch (e) {} }
+      });
+    }).then(() => ({ ready: ready, total: total }));
   }
   function restorePrintQuality() {
     document.querySelectorAll('[data-print-full-url]').forEach(el => {
