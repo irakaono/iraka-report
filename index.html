@@ -1018,16 +1018,52 @@ function printReport(){
   openPrintQualityModal(count, (qualityKey)=>{
     lastPrintQuality = qualityKey;
     updateMediaStatus();
-    showStatus('画像を準備中...');
-    MediaManager.applyPrintQuality(targets, qualityKey).then(()=>{
-      document.getElementById('saveStatus').style.display='none';
-      window.print();
-    });
+    showStatus('画像を準備中...（0/' + count + '）');
+
+    // 画面外でまだ読み込んでいない写真を先に起こす（遅延読込の取りこぼし対策）
+    const lazy = Array.from(document.querySelectorAll('[data-photo-key]'))
+      .filter(el => !el.getAttribute('src'));
+
+    Promise.all(lazy.map(el => MediaManager.loadLazyPhoto(el)))
+      .then(()=> MediaManager.applyPrintQuality(targets, qualityKey, (d,t)=>{
+        showStatus('画像を準備中...（' + d + '/' + t + '）');
+      }))
+      .then((r)=> _settleThenPrint(r))
+      .catch(e => showStatus('印刷の準備に失敗しました: ' + (e && e.message), true));
   });
 }
+
+// 描画が落ち着いてから印刷する。
+// rAF は画面が消えると止まるので、setTimeout と「早い方」で進める（印刷が始まらない事故を防ぐ）。
+function _settleThenPrint(r){
+  return new Promise(resolve => {
+    let fired = false;
+    const go = () => { if (!fired) { fired = true; resolve(); } };
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => requestAnimationFrame(go));
+    }
+    setTimeout(go, 400);
+  }).then(()=>{
+    document.getElementById('saveStatus').style.display='none';
+    if (r && r.total && r.ready < r.total) {
+      // 準備できなかった写真がある＝抜ける可能性が高い。黙って印刷しない。
+      const ng = r.total - r.ready;
+      if (!confirm('写真 ' + ng + ' 枚が準備できませんでした。\nこのまま印刷すると、その写真は空白になります。\n\n続けますか？')) {
+        showStatus('印刷を中止しました。通信状況を確認してやり直してください。', true);
+        return;
+      }
+    }
+    window.print();
+  });
+}
+
+// Android/iOS では「PDFに保存」の描画が終わる前に afterprint が飛ぶことがある。
+// 即座に Blob URL を破棄すると後半ページが白くなるため、少し置いてから戻す。
 window.addEventListener('afterprint', ()=>{
-  MediaManager.restorePrintQuality();
-  updateMediaStatus();
+  setTimeout(()=>{
+    MediaManager.restorePrintQuality();
+    updateMediaStatus();
+  }, 10000);
 });
 
 /* ===== 印刷改善①/②：まとめページの textarea を全文表示（固定高でのクリップ防止） =====
